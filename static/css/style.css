@@ -1,0 +1,310 @@
+/* ============================================================
+   1. 基础样式与变量
+   ============================================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    min-height: 100vh;
+    transition: all 0.5s ease;
+    overflow-x: hidden;
+    position: relative;
+}
+
+/* 天气背景效果 */
+#weather-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* ============================================================
+   2. 天气模式（晴天/雨天）
+   ============================================================ */
+/* 晴天模式 */
+.sunny-mode {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    color: #2c3e50;
+}
+
+.sunny-mode .container {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+}
+
+.sunny-mode .primary-btn {
+    background: #3498db;
+    color: white;
+}
+
+/* 雨天模式 */
+.rainy-mode {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: #ecf0f1;
+}
+
+.rainy-mode .container {
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+}
+
+.rainy-mode .primary-btn {
+    background: #2980b9;
+    color: white;
+}
+
+/* ============================================================
+   3. 布局与组件
+   ============================================================ */
+.container {
+    max-width: 800px;
+    margin: 50px auto;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+header h1 {
+    font-size: 2.5rem;
+    font-weight: 300;
+    margin-bottom: 10px;
+}
+
+.form-group textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 15px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    font-size: 16px;
+    background: rgba(255,255,255,0.1);
+    color: inherit;
+    resize: vertical;
+}
+
+.primary-btn, .secondary-btn {
+    padding: 12px 30px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.primary-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+
+/* ============================================================
+   4. 消息列表
+   ============================================================ */
+.message-item {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 20px;
+    margin-bottom: 15px;
+    border-radius: 10px;
+    border-left: 4px solid #3498db;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.message-meta {
+    margin-top: 10px;
+    font-size: 12px;
+    opacity: 0.6;
+    display: flex;
+    justify-content: space-between;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   5. 存票弹窗样式 (核心优化部分)
+   ============================================================ */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+/* 存票主体 - 模拟复古纸质票据 */
+#share-card {
+    background: #ffffff;
+    color: #333;
+    width: 360px;
+    padding: 30px;
+    border-radius: 2px;
+    position: relative;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    font-family: "Courier New", Courier, monospace; /* 等宽字体 */
+}
+
+/* 票据装饰：顶部锯齿感 */
+#share-card::before {
+    content: "";
+    position: absolute;
+    top: -10px;
+    left: 0;
+    width: 100%;
+    height: 10px;
+    background: linear-gradient(-45deg, #ffffff 5px, transparent 0), 
+                linear-gradient(45deg, #ffffff 5px, transparent 0);
+    background-size: 10px 10px;
+}
+
+.ticket-header {
+    border-bottom: 2px solid #333;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.ticket-header h3 {
+    font-size: 18px;
+    font-weight: bold;
+    color: #000;
+}
+
+.ticket-no { font-size: 14px; font-weight: bold; }
+
+.ticket-body p {
+    font-size: 13px;
+    margin: 8px 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.ticket-body p span:first-child { color: #888; text-transform: uppercase; }
+.ticket-body p span:last-child { color: #000; font-weight: bold; }
+
+/* 票据打孔虚线 */
+.ticket-divider {
+    margin: 20px 0;
+    border-top: 2px dashed #ddd;
+    position: relative;
+}
+
+/* 虚线两端的半圆孔效果 */
+.ticket-divider::before, .ticket-divider::after {
+    content: "";
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: #1a1a2e; /* 对应弹窗背景色，造成打孔假象 */
+    border-radius: 50%;
+    top: -10px;
+}
+.ticket-divider::before { left: -41px; }
+.ticket-divider::after { right: -41px; }
+
+/* 二维码区域 */
+.qr-section {
+    text-align: center;
+}
+
+#qr-code-container {
+    background: #fff;
+    padding: 10px;
+    display: inline-block;
+    border: 1px solid #eee;
+}
+
+#qr-code-container img {
+    max-width: 130px;
+    height: auto;
+}
+
+.qr-hint {
+    font-size: 10px;
+    color: #bbb;
+    margin-top: 10px;
+    letter-spacing: 2px;
+}
+
+/* 水印效果 */
+.watermark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-30deg);
+    font-size: 40px;
+    font-weight: bold;
+    color: rgba(0,0,0,0.03);
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 0;
+}
+
+/* 弹窗按钮组 */
+.modal-actions {
+    margin-top: 25px;
+    width: 340px;
+    display: flex;
+    gap: 12px;
+}
+
+.modal-actions button {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: bold;
+}
+
+/* ============================================================
+   6. 截图优化 (针对 html2canvas)
+   ============================================================ */
+.print-version {
+    box-shadow: none !important;
+    border: none !important;
+}
+
+/* 确保在截图时背景保持白色 */
+#share-card.print-version {
+    background: #ffffff !important;
+}
+
+/* 隐藏打印版中不需要的打孔阴影 */
+#share-card.print-version .ticket-divider::before,
+#share-card.print-version .ticket-divider::after {
+    background: #ffffff !important;
+}
+
+/* ============================================================
+   7. 其他
+   ============================================================ */
+.loading {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    font-style: italic;
+    opacity: 0.7;
+}
+
+@media (max-width: 480px) {
+    #share-card { width: 90%; }
+    .modal-actions { width: 90%; }
+}
