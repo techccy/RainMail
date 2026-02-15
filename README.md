@@ -204,12 +204,8 @@ GET /api/health
 
 ## 📄 许可证
 
-MIT License - 详见 LICENSE 文件
+MIT License
 
-
-## 📞 支持联系
-
-如有问题请提交 Issue 或联系开发团队。
 
 ---
 
