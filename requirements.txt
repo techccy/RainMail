@@ -1,0 +1,5 @@
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.5
+requests==2.31.0
+pyyaml==6.0.1
+html2canvas==0.0.1  # 用于前端，这里只是占位符，实际在前端实现

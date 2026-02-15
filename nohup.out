@@ -1,0 +1,78 @@
+==================================================
+雨天信箱启动程序
+==================================================
+✓ 所有依赖已安装
+✓ 数据库初始化完成
+✓ 启动Flask应用...
+访问地址: http://localhost:5001
+按 Ctrl+C 停止服务
+==================================================
+ * Serving Flask app 'app'
+ * Debug mode: on
+INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://198.18.0.1:5001
+INFO:werkzeug:[33mPress CTRL+C to quit[0m
+INFO:werkzeug: * Restarting with watchdog (fsevents)
+WARNING:werkzeug: * Debugger is active!
+INFO:werkzeug: * Debugger PIN: 161-766-621
+==================================================
+雨天信箱启动程序
+==================================================
+✓ 所有依赖已安装
+✓ 数据库初始化完成
+✓ 启动Flask应用...
+访问地址: http://localhost:5001
+按 Ctrl+C 停止服务
+==================================================
+ * Serving Flask app 'app'
+ * Debug mode: on
+Address already in use
+Port 5001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+/Users/ccy/miniconda3/lib/python3.13/multiprocessing/resource_tracker.py:400: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-qv_ws530'}
+  warnings.warn(
+/Users/ccy/miniconda3/lib/python3.13/multiprocessing/resource_tracker.py:400: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-ah1181xp'}
+  warnings.warn(
+==================================================
+雨天信箱启动程序
+==================================================
+✓ 所有依赖已安装
+✓ 数据库初始化完成
+✓ 启动Flask应用...
+访问地址: http://localhost:5001
+按 Ctrl+C 停止服务
+==================================================
+ * Serving Flask app 'app'
+ * Debug mode: on
+INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://198.18.0.1:5001
+INFO:werkzeug:[33mPress CTRL+C to quit[0m
+INFO:werkzeug: * Restarting with watchdog (fsevents)
+WARNING:werkzeug: * Debugger is active!
+INFO:werkzeug: * Debugger PIN: 161-766-621
+==================================================
+雨天信箱启动程序
+==================================================
+✓ 所有依赖已安装
+✓ 数据库初始化完成
+✓ 启动Flask应用...
+访问地址: http://localhost:5024
+按 Ctrl+C 停止服务
+==================================================
+ * Serving Flask app 'app'
+ * Debug mode: on
+INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5024
+ * Running on http://198.18.0.1:5024
+INFO:werkzeug:[33mPress CTRL+C to quit[0m
+INFO:werkzeug: * Restarting with watchdog (fsevents)
+WARNING:werkzeug: * Debugger is active!
+INFO:werkzeug: * Debugger PIN: 161-766-621
+/Users/ccy/miniconda3/lib/python3.13/multiprocessing/resource_tracker.py:400: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-1no5hg8v'}
+  warnings.warn(
+/Users/ccy/miniconda3/lib/python3.13/multiprocessing/resource_tracker.py:400: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-9wp0og4q'}
+  warnings.warn(
