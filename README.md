@@ -205,13 +205,6 @@ GET /api/health
 
 MIT License - 详见 LICENSE 文件
 
-## 🤝 贡献指南
-
-1. Fork 项目
-2. 创建特性分支
-3. 提交更改
-4. 推送到分支
-5. 创建Pull Request
 
 ## 📞 支持联系
 
