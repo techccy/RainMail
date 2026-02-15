@@ -181,7 +181,7 @@ GET /api/health
 - 错误状态缓存机制
 
 
-## 📄 许可证
+## 许可证
 
 MIT License
 
