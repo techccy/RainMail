@@ -82,7 +82,7 @@ times: 3                        # 天气检查间隔（分钟）
 1. 访问 [和风天气开发者平台](https://dev.qweather.com/)
 2. 注册账号并创建应用
 3. 获取API Key并配置到config.yaml
-4. 如需更改城市，请更改[app.py](app.py)第98行 ``        url = f"https://devapi.qweather.com/v7/weather/now?location=101240310&key={config['API_KEY']}"``中的location，位置代码参考［官方的位置代码仓库］(https://github.com/qwd/LocationList)
+4. 如需更改城市，请更改[app.py](app.py)第98行 ``url = f"https://devapi.qweather.com/v7/weather/now?location=101240310&key={config['API_KEY']}"``中的location，位置代码参考［官方的位置代码仓库］(https://github.com/qwd/LocationList)
 
 ## 外网访问
 
