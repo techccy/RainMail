@@ -18,7 +18,6 @@ class RainMailApp {
         });
 
         document.getElementById('rainy-message-input').addEventListener('input', (e) => {
-           // 修复点：极狐 -> this
            this.updateCharCount(e.target);
         });
 
@@ -98,7 +97,6 @@ class RainMailApp {
         container.innerHTML = '<div class="loading">加载中...</div>';
 
         try {
-            // 修复点：/极狐/ -> /api/
             const response = await fetch('/api/messages');
             const data = await response.json();
 
@@ -109,7 +107,6 @@ class RainMailApp {
             }
         } catch (error) {
             console.error('加载消息错误:', error);
-            // 修复点：<极狐 -> <div
             container.innerHTML = '<div class="error">网络错误，请重试</div>';
         }
     }
@@ -157,7 +154,6 @@ class RainMailApp {
     updateWeatherDisplay() {
         const display = document.getElementById('current-weather');
         if (display) {
-            // 修复点：display极狐textContent -> display.textContent
             display.textContent = this.currentWeather === 'rainy' ? '🌧️ 雨天模式' : '🌤️ 晴天模式';
         }
     }
@@ -174,7 +170,6 @@ class RainMailApp {
             rainyInterface.style.display = 'none';
         } else {
             sunnyInterface.style.display = 'none';
-            // 修复点：'极狐' -> 'block'
             rainyInterface.style.display = 'block';
             this.loadMessages();
         }
@@ -209,7 +204,6 @@ class RainMailApp {
         const qrContainer = document.getElementById('qr-code-container');
         qrContainer.innerHTML = '';
         
-        // 修复点：qr极狐 -> qrUrl
         const qrUrl = `${window.location.origin}/#message-${messageId}`;
         
         // 使用QRCode.js生成二维码
