@@ -52,7 +52,7 @@ class RainMailApp {
     async submitMessage(inputId) {
         const textarea = document.getElementById(inputId);
         const content = textarea.value.trim();
-        
+
         if (!content) {
             alert('请先写下你的信件');
             return;
@@ -63,13 +63,35 @@ class RainMailApp {
             return;
         }
 
+        const turnstileWidget = document.querySelector('.cf-turnstile iframe[src*="challenges.cloudflare.com"]'); // 更精确地选择 Widget iframe
+        let cfToken = '';
+        if (turnstileWidget && typeof turnstile !== 'undefined' && turnstile.getResponse) {
+            // 如果 Turnstile JS SDK 可用，使用其 API
+            cfToken = turnstile.getResponse(turnstileWidget.closest('.cf-turnstile').id); // 如果 Widget 有 ID
+            if (!cfToken) { // 如果没有 ID 或者没找到，尝试获取第一个 Widget 的响应
+                cfToken = turnstile.getResponse(); // 获取第一个 Widget 的响应
+            }
+        } else {
+            // 如果 SDK 不可用，尝试从隐藏的 input 获取 (这是 Cloudflare 的标准做法)
+            const hiddenInput = document.querySelector('input[name="cf-turnstile-response"]');
+            cfToken = hiddenInput ? hiddenInput.value : '';
+        }
+
+        if (!cfToken) {
+            alert('请先完成人机验证');
+            return;
+        }
+
         try {
             const response = await fetch('/api/messages', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ content })
+                body: JSON.stringify({
+                    content: content,
+                    cf_token: cfToken // <-- 添加 cf_token 到 JSON body
+                })
             });
 
             const data = await response.json();
@@ -78,7 +100,7 @@ class RainMailApp {
                 this.showSuccessModal(data.share_data);
                 textarea.value = '';
                 this.updateCharCount(textarea);
-                
+
                 // 如果是雨天模式，重新加载消息
                 if (this.currentWeather === 'rainy') {
                     this.loadMessages();
@@ -113,7 +135,7 @@ class RainMailApp {
 
     renderMessages(messages) {
         const container = document.getElementById('messages-container');
-        
+
         if (!messages || messages.length === 0) {
             container.innerHTML = '<div class="empty-state">还没有信件，成为第一个分享的人吧！</div>';
             return;
@@ -134,17 +156,17 @@ class RainMailApp {
         try {
             const response = await fetch('/api/weather');
             const data = await response.json();
-            
+
             if (this.currentWeather !== data.weather_status) {
                 this.currentWeather = data.weather_status;
                 this.updateInterface();
-                
+
                 // 如果是雨天模式，自动加载消息
                 if (this.currentWeather === 'rainy') {
                     this.loadMessages();
                 }
             }
-            
+
             this.updateWeatherDisplay();
         } catch (error) {
             console.error('天气检查错误:', error);
@@ -161,10 +183,10 @@ class RainMailApp {
     updateInterface() {
         const sunnyInterface = document.getElementById('sunny-interface');
         const rainyInterface = document.getElementById('rainy-interface');
-        
+
         // 更新body的class
         document.body.className = `${this.currentWeather}-mode`;
-        
+
         if (this.currentWeather === 'sunny') {
             sunnyInterface.style.display = 'block';
             rainyInterface.style.display = 'none';
@@ -173,7 +195,7 @@ class RainMailApp {
             rainyInterface.style.display = 'block';
             this.loadMessages();
         }
-        
+
         this.updateWeatherDisplay();
     }
 
@@ -182,7 +204,7 @@ class RainMailApp {
         this.weatherCheckInterval = setInterval(() => {
             this.checkWeather();
         }, 300000);
-        
+
         // 立即检查一次
         this.checkWeather();
     }
@@ -193,19 +215,19 @@ class RainMailApp {
         document.getElementById('card-weather-status').textContent = 
             shareData.weather_status === 'rainy' ? '雨天模式' : '晴天模式';
         document.getElementById('card-total-messages').textContent = shareData.total_messages;
-        
+
         // 生成二维码
         this.generateQRCode(shareData.message_id);
-        
+
         document.getElementById('success-modal').style.display = 'flex';
     }
 
     generateQRCode(messageId) {
         const qrContainer = document.getElementById('qr-code-container');
         qrContainer.innerHTML = '';
-        
+
         const qrUrl = `${window.location.origin}/#message-${messageId}`;
-        
+
         // 使用QRCode.js生成二维码
         const qrcode = new QRCode(qrContainer, {
             text: qrUrl,
@@ -224,24 +246,24 @@ class RainMailApp {
     async saveShareCard() {
         try {
             const cardElement = document.getElementById('share-card');
-            
+
             // 创建离屏元素进行截图
             const tempContainer = document.createElement('div');
             tempContainer.style.position = 'absolute';
             tempContainer.style.left = '-9999px';
             tempContainer.style.top = '-9999px';
             document.body.appendChild(tempContainer);
-            
+
             // 克隆存票卡片
             const clonedCard = cardElement.cloneNode(true);
             tempContainer.appendChild(clonedCard);
-            
+
             // 添加打印样式
             clonedCard.className = clonedCard.className + ' print-version';
-            
+
             // 等待渲染完成
             await new Promise(resolve => setTimeout(resolve, 200));
-            
+
             const canvas = await html2canvas(clonedCard, {
                 backgroundColor: '#ffffff',
                 scale: 2, // 适中的分辨率
@@ -251,16 +273,16 @@ class RainMailApp {
                 width: clonedCard.offsetWidth,
                 height: clonedCard.offsetHeight
             });
-            
+
             // 清理临时元素
             document.body.removeChild(tempContainer);
-            
+
             // 创建下载链接
             const link = document.createElement('a');
             const messageId = document.getElementById('card-message-id').textContent;
             link.download = `雨天信箱存票_#${messageId}.png`;
             link.href = canvas.toDataURL('image/png');
-            
+
             // 移动端兼容性处理
             if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
                 // 移动端使用新窗口打开图片
@@ -311,7 +333,7 @@ class RainMailApp {
                 document.body.removeChild(link);
                 alert('存票已保存！');
             }
-            
+
         } catch (error) {
             console.error('保存存票错误:', error);
             alert('保存失败，请重试: ' + error.message);
