@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📮</text></svg>">
 </head>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <body class="sunny-mode">
     <div id="weather-background"></div>
     
@@ -20,18 +21,21 @@
         <!-- 晴天界面 -->
         <div id="sunny-interface">
             <div class="message-form">
-                <h2>✉️ 写下你的秘密</h2>
+                <h2>✉️ 写下你的想法</h2>
                 <div class="form-group">
-                    <label for="message-input">你的秘密（最多500字）</label>
+                    <label for="message-input">你的想法（最多500字）</label>
                     <textarea id="message-input" placeholder="在这里写下你想说的话..." maxlength="500"></textarea>
                     <div class="char-counter">已输入 <span class="char-count">0</span>/500 字</div>
+                    {% if turnstile_site_key %}
+                        <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
+                    {% endif %}
                 </div>
-                <button id="submit-btn" class="primary-btn">投递秘密</button>
+                <button id="submit-btn" class="primary-btn">投递想法</button>
             </div>
             
             <div class="weather-info">
                 <p>🌤️ 当前天气晴朗，信箱封存中</p>
-                <p>🌧️ 等到下雨时，所有秘密将会公开</p>
+                <p>🌧️ 等到下雨时，所有想法将会公开</p>
             </div>
         </div>
 
@@ -40,15 +44,18 @@
             <div class="message-form">
                 <h2>🌧️ 雨中分享</h2>
                 <div class="form-group">
-                    <label for="rainy-message-input">你的秘密（最多500字）</label>
+                    <label for="rainy-message-input">你的想法（最多500字）</label>
                     <textarea id="rainy-message-input" placeholder="雨声中写下你的心声..." maxlength="500"></textarea>
                     <div class="char-counter">已输入 <span class="char-count">0</span>/500 字</div>
+                    {% if turnstile_site_key %}
+                        <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
+                    {% endif %}
                 </div>
-                <button id="rainy-submit-btn" class="primary-btn">投递秘密</button>
+                <button id="rainy-submit-btn" class="primary-btn">投递想法</button>
             </div>
 
             <div class="messages-list">
-                <h2>📜 公开的秘密</h2>
+                <h2>📜 公开的想法</h2>
                 <div id="messages-container">
                     <div class="loading">加载中...</div>
                 </div>
