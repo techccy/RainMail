@@ -15,11 +15,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+# --- 新增：加载配置文件 ---
+config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+if os.path.exists(config_path):
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+        app.config.update(config)
+else:
+    print("警告: config.yaml 文件未找到！")
 app.secret_key = 'rainmail_secret_key_2024'
+# TURNSTILE_SECRET_KEY = config.get('TURNSTILE_SECRET_KEY')
+TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
+TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
 
 # 读取配置文件
-with open('config.yaml', 'r') as f:
-    config = yaml.safe_load(f)
+# with open('config.yaml', 'r') as f:
+#     config = yaml.safe_load(f)
 
 # 数据库配置
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rainmail.db'
@@ -65,6 +76,44 @@ def sanitize_input(text):
     text = text.replace('"', '"').replace("'", '&#39;')
     text = text.replace('<', '<').replace('>', '>')
     return text.strip()
+
+def validate_turnstile(turnstile_response, user_ip):
+    """
+    验证 Cloudflare Turnstile Token
+    """
+    secret_key = app.config.get('TURNSTILE_SECRET_KEY')
+    if not secret_key:
+        app.logger.error("TURNSTILE_SECRET_KEY 未在 config.yaml 中配置！")
+        return False
+
+    payload = {
+        'secret': secret_key,
+        'response': turnstile_response,
+        'remoteip': user_ip
+    }
+    try:
+        response = requests.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', data=payload, timeout=10)
+        result = response.json()
+        return result.get('success', False)
+    except requests.RequestException as e:
+        app.logger.error(f"Turnstile 验证请求失败: {e}")
+        return False
+    except ValueError as e: # JSON 解析错误
+        app.logger.error(f"Turnstile 验证响应解析失败: {e}")
+        return False
+
+def validate_turnstile(turnstile_response, user_ip):
+    """
+    验证 Cloudflare Turnstile Token
+    """
+    payload = {
+        'secret': TURNSTILE_SECRET_KEY,
+        'response': turnstile_response,
+        'remoteip': user_ip
+    }
+    response = requests.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', data=payload)
+    result = response.json()
+    return result.get('success', False)
 
 def get_cpu_temperature():
     """获取CPU温度（macOS）"""
@@ -153,7 +202,9 @@ def admin_required(f):
 def index():
     """首页路由"""
     dashboard_data = get_dashboard_data()
-    return render_template('index.html', **dashboard_data)
+    site_key = app.config.get('TURNSTILE_SITE_KEY', '')
+    return render_template('index.html', **dashboard_data, turnstile_site_key=site_key)
+    # return render_template('index.html', **dashboard_data)
 
 @app.route('/api/messages', methods=['GET', 'POST'])
 def handle_messages():
@@ -167,6 +218,26 @@ def handle_messages():
             if not content:
                 return jsonify({'error': '内容不能为空'}), 400
             
+            turnstile_token = request.json.get('cf_token') # 注意这里的字段名要与前端一致
+            user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
+            
+            if not turnstile_token:
+                return jsonify({"error": "请完成人机验证"}), 400
+                
+            if not validate_turnstile(turnstile_token, user_ip):
+                return jsonify({"error": "人机验证失败，请刷新网页"}), 400
+
+
+            # --- 新增：敏感词过滤 ---
+            # 你可以将 SENSITIVE_WORDS 放到 config.yaml 中，更灵活
+            SENSITIVE_WORDS = ['习近平', '共产党', '色情', '赌博', '发票']
+            for word in SENSITIVE_WORDS:
+                if word in content:
+                    app.logger.warning(f"API 敏感词拦截: [{word}] 内容: {content[:50]}...")
+                    # 返回模糊错误信息，避免暴露具体规则
+                    return jsonify({"error": "内容包含不合适的词汇，已被系统拦截。", "blocked": True}), 400
+
+
             # 过滤XSS
             content = sanitize_input(content)
             
@@ -221,6 +292,27 @@ def health_check():
 def admin_login():
     """管理员登录"""
     if request.method == 'POST':
+        # --- 新增：管理员登录人机验证 ---
+        turnstile_token = request.form.get('cf-turnstile-response')
+        user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr) # 获取真实 IP
+
+        if not turnstile_token:
+            # --- 修改：不再返回 JSON，而是渲染模板 ---
+            site_key = app.config.get('TURNSTILE_SITE_KEY', '')
+            return render_template('admin_login.html', error='请完成人机验证', turnstile_site_key=site_key)
+            # return jsonify({"error": "请完成人机验证"}), 400
+            # site_key = app.config.get('TURNSTILE_SITE_KEY', '')
+            # return render_template('admin_login.html', error='请完成人机验证。', turnstile_site_key=site_key)
+            # return redirect(url_for('admin_login'))
+
+        if not validate_turnstile(turnstile_token, user_ip):
+            site_key = app.config.get('TURNSTILE_SITE_KEY', '')
+            return render_template('admin_login.html', error='人机验证失败，请刷新网页', turnstile_site_key=site_key)
+            # return jsonify({"error": "人机验证失败，请刷新网页"}), 400
+            # site_key = app.config.get('TURNSTILE_SITE_KEY', '')
+            # return render_template('admin_login.html', error='人机验证失败，请刷新页面重试。', turnstile_site_key=site_key)
+            # return redirect(url_for('admin_login'))
+        # --- 结束新增 ---
         username = request.form.get('username')
         password = request.form.get('password')
         
@@ -229,10 +321,13 @@ def admin_login():
             password == config.get('admin_password')):
             session['admin_logged_in'] = True
             return redirect(url_for('admin_dashboard'))
+        else:
+            site_key = app.config.get('TURNSTILE_SITE_KEY', '')
+            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key)
+            # return render_template('admin_login.html', error='用户名或密码错误')
         
-        return render_template('admin_login.html', error='用户名或密码错误')
-    
-    return render_template('admin_login.html')
+    site_key = app.config.get('TURNSTILE_SITE_KEY', '')
+    return render_template('admin_login.html', turnstile_site_key=site_key)
 
 @app.route('/admin/dashboard')
 @admin_required
