@@ -1,5 +1,4 @@
 API_KEY: xxxxxx #和风天气API --- IGNORE ---
-times: 3 #3分钟请求一次
 
 # 管理员配置
 admin_username: techccy
