@@ -34,7 +34,7 @@
    ```
 
 3. **访问应用**
-   打开浏览器访问: http://localhost:5000
+   打开浏览器访问: http://localhost:5024
 
 ### 使用Docker运行
 
@@ -43,7 +43,7 @@
 docker build -t rainmail .
 
 # 运行容器
-docker run -p 5000:5000 rainmail
+docker run -p 5024:5000 rainmail
 ```
 
 ## 📁 项目结构
@@ -72,7 +72,7 @@ rainmail/
 
 ```yaml
 API_KEY: your_qweather_api_key  # 和风天气API密钥
-times: 2                        # 天气检查间隔（分钟）
+times: 3                        # 天气检查间隔（分钟）
 ```
 
 ### 获取天气API密钥
