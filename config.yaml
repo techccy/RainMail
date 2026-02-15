@@ -1,6 +1,8 @@
-API_KEY: xxxxxx #和风天气API --- IGNORE ---
-
+API_KEY: ***
+times: 3 #3分钟一次
+TURNSTILE_SECRET_KEY: "***"  # 替换为你的 Cloudflare Turnstile Secret Key
+TURNSTILE_SITE_KEY: "***" # 替换成你自己的 Site Key
 # 管理员配置
-admin_username: techccy
-admin_password: "123456789" # 这里是管理员密码，实际使用中请设置一个强密码
+admin_username: "***"
+admin_password: "***"
 force_rain_duration: 10   # 强制降雨持续时间（分钟）
