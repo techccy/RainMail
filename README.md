@@ -80,6 +80,7 @@ times: 3                        # 天气检查间隔（分钟）
 1. 访问 [和风天气开发者平台](https://dev.qweather.com/)
 2. 注册账号并创建应用
 3. 获取API Key并配置到config.yaml
+4. 如需更改城市，请更改[app.py](app.py)第98行
 
 ## 🌐 外网访问
 
