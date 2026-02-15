@@ -43,8 +43,15 @@
         <h2>管理员登录</h2>
         
         {% if error %}
-        <div class="error">{{ error }}</div>
+            <div class="alert alert-error">{{ error }}</div>
         {% endif %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
         
         <form method="POST">
             <div class="form-group">
@@ -56,9 +63,14 @@
                 <label for="password">密码</label>
                 <input type="password" id="password" name="password" required>
             </div>
-            
+            {% if turnstile_site_key %}
+            <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
+            {% endif %}
             <button type="submit" class="primary-btn" style="width: 100%">登录</button>
         </form>
     </div>
+
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
 </body>
 </html>
