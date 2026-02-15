@@ -1,5 +1,7 @@
 # 雨天信箱 - The RainMail
 
+体验项目--->https://dropbox.techccy.dpdns.org
+
 一个基于天气状态的匿名社交树洞应用，当广州城市下雨时解锁所有秘密。
 
 ## 特性
@@ -183,3 +185,6 @@ MIT License
 ---
 
 *让雨水滋润秘密的生长，让阳光守护内心的宁静。*
+
+
+!［logo］(logo.png)
