@@ -63,6 +63,12 @@
                 <label for="password">密码</label>
                 <input type="password" id="password" name="password" required>
             </div>
+            <!-- 新增: TOTP 输入框 -->
+            <div class="form-group">
+                <label for="totp_code">双重认证验证码 (TOTP)</label>
+                <input type="text" id="totp_code" name="totp_code" maxlength="6" placeholder="输入6位验证码" required>
+            </div>
+            <!-- End of TOTP Input -->
             {% if turnstile_site_key %}
             <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
             {% endif %}

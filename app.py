@@ -1,3 +1,4 @@
+from curses import flash
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 import requests
@@ -10,6 +11,15 @@ import psutil
 import os
 import hashlib
 import csv
+import pyotp
+import secrets
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import base64
+import json
+import qrcode
+from PIL import Image
 
 SENSITIVE_WORDS_SET = set()
 
@@ -40,14 +50,135 @@ def load_sensitive_words_from_csv(file_path):
         print(f"错误：CSV 文件 {file_path} 中缺少必要的列: {e}")
         SENSITIVE_WORDS_SET = set()
 
+def generate_totp_secret():
+    """生成一个新的 TOTP 密钥"""
+    return pyotp.random_base32()
+
+def derive_key_from_password(password: str, salt: bytes) -> bytes:
+    """从用户密码派生加密/解密密钥"""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    return key
+
+def encrypt_secret(secret: str, password: str) -> dict:
+    """使用用户密码加密 TOTP 密钥"""
+    salt = os.urandom(16)  # 生成随机盐
+    key = derive_key_from_password(password, salt)
+    fernet = Fernet(key)
+    encrypted_secret = fernet.encrypt(secret.encode())
+    # 返回加密后的密钥和盐，以便解密
+    return {"encrypted_secret": base64.b64encode(encrypted_secret).decode(), "salt": base64.b64encode(salt).decode()}
+
+def decrypt_secret(encrypted_data: dict, password: str) -> str:
+    """使用用户密码解密 TOTP 密钥"""
+    try:
+        salt = base64.b64decode(encrypted_data["salt"])
+        encrypted_secret_bytes = base64.b64decode(encrypted_data["encrypted_secret"])
+        key = derive_key_from_password(password, salt)
+        fernet = Fernet(key)
+        decrypted_secret = fernet.decrypt(encrypted_secret_bytes)
+        return decrypted_secret.decode()
+    except Exception as e:
+        print(f"解密失败: {e}")
+        raise ValueError("密码错误或加密数据损坏")
+
+def save_encrypted_secret(encrypted_data: dict, filepath: str):
+    """将加密的密钥数据保存到文件"""
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(encrypted_data, f)
+
+def load_encrypted_secret(filepath: str) -> dict:
+    """从文件加载加密的密钥数据"""
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def initialize_totp_secret():
+    """初始化 TOTP 密钥，处理首次运行和后续运行的逻辑"""
+    secret_file_path = os.path.join(os.path.dirname(__file__), 'totp_secret.json')
+    qr_file_path = os.path.join(os.path.dirname(__file__), 'totp_setup_qr.png') # 定义二维码图片路径
+
+    if os.path.exists(secret_file_path):
+        print("\n[INFO] 检测到已存在的加密 TOTP 密钥。")
+        choice = input("是否使用现有的密钥？(y/n，默认为 y): ").lower().strip() or 'y'
+
+        if choice == 'y':
+            try:
+                encrypted_data = load_encrypted_secret(secret_file_path)
+                # 循环直到密码正确或用户放弃
+                while True:
+                    password = input("\n请输入用于解密 TOTP 密钥的密码: ")
+                    try:
+                        totp_secret = decrypt_secret(encrypted_data, password)
+                        print("\n[SUCCESS] TOTP 密钥解密成功！")
+                        return totp_secret
+                    except ValueError: # 捕获密码错误等预期异常
+                        print("\n[ERROR] 密码错误，请重试。")
+                        retry_choice = input("是否重新输入密码？(y/n): ").lower().strip()
+                        if retry_choice != 'y':
+                            print("\n[INFO] 放弃使用现有密钥，将生成新的密钥。")
+                            break # 跳出 while 循环，继续生成新密钥
+                    except Exception as e: # 捕获其他未预期的异常
+                        print(f"\n[ERROR] 解密过程中发生未知错误: {e}")
+                        return None # 或者采取其他措施，这里选择返回None
+
+            except FileNotFoundError:
+                print(f"\n[ERROR] 加密密钥文件 {secret_file_path} 丢失。")
+                return None
+            except KeyError as e:
+                print(f"\n[ERROR] 加密密钥文件格式错误，缺少必要键: {e}")
+                return None
+            except Exception as e: # 捕获 load_encrypted_secret 可能抛出的其他异常
+                print(f"\n[ERROR] 加载加密密钥文件时发生未知错误: {e}")
+                return None
+
+
+    # 如果文件不存在，或用户选择不使用旧密钥，或解密失败后选择生成新密钥
+    print("\n[INFO] 未找到现有密钥或选择生成新密钥，正在创建新的 TOTP 密钥...")
+    new_secret = generate_totp_secret()
+    issuer_name = "RainMail_Admin"
+    account_name = "admin"
+    totp_uri = pyotp.totp.TOTP(new_secret).provisioning_uri(account_name, issuer_name=issuer_name)
+
+    print("\n--- 设置 TOTP 双重认证 ---")
+    print(f"TOTP 密钥: {new_secret}")
+
+    # --- 新增: 生成并保存二维码图片 ---
+    try:
+        qr_img = qrcode.make(totp_uri)
+        qr_img.save(qr_file_path)
+        print(f"\n[SUCCESS] 二维码已生成并保存至: {qr_file_path}")
+        print("请扫描此图片文件以在您的认证器 APP 中添加账户。")
+    except Exception as e:
+        print(f"\n[WARNING] 生成二维码图片时出错: {e}")
+        print("请手动输入上方的 TOTP 密钥到您的认证器 APP。")
+    # --- End of Addition ---
+
+    while True:
+        password = input("\n请设置一个密码来加密此 TOTP 密钥: ")
+        confirm_password = input("请再次输入密码以确认: ")
+        if password == confirm_password:
+            break
+        else:
+            print("\n[ERROR] 两次输入的密码不一致，请重试。")
+
+    encrypted_data = encrypt_secret(new_secret, password)
+    save_encrypted_secret(encrypted_data, secret_file_path)
+    print(f"\n[SUCCESS] 新的 TOTP 密钥已生成并使用密码加密，保存至 '{secret_file_path}'。")
+    return new_secret
 
 def is_sensitive(message):
+    """检查消息是否包含敏感词，并返回命中的第一个敏感词"""
     # 遍历敏感词集合，检查消息是否包含任何一个词
     for word in SENSITIVE_WORDS_SET:
         # 使用 'in' 操作符进行子串匹配
         if word in message:
-            return True
-    return False
+            return word # 返回命中的敏感词
+    return None # 如果没有命中任何词，返回 None
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -97,6 +228,14 @@ with app.app_context():
 
 sensitive_words_csv_file = os.path.join(os.path.dirname(__file__), 'resources', 'all.csv')
 load_sensitive_words_from_csv(sensitive_words_csv_file)
+
+# 全局变量存储 TOTP 密钥
+ADMIN_TOTP_SECRET = initialize_totp_secret()
+if ADMIN_TOTP_SECRET:
+    print("\n[INFO] TOTP 双重认证已配置。管理员登录需要验证码。")
+else:
+    print("\n[ERROR] TOTP 双重认证配置失败，可能影响管理员登录。")
+    ADMIN_TOTP_SECRET = None # 确保变量被定义
 
 # 全局状态变量
 current_weather_state = 'sunny'  # 默认晴天状态
@@ -269,9 +408,10 @@ def handle_messages():
             if not validate_turnstile(turnstile_token, user_ip):
                 return jsonify({"error": "人机验证失败，请刷新网页"}), 400
 
-            # 调用 is_sensitive 函数检查内容
-            if is_sensitive(content):
-                app.logger.warning(f"API 敏感词拦截: 内容: {content[:50]}...") # 记录日志
+            # --- 修改: 调用 is_sensitive 函数并获取命中的词 ---
+            hit_word = is_sensitive(content) # 接收命中的词
+            if hit_word: # 如果命中，hit_word 不为 None
+                app.logger.warning(f"API 敏感词拦截: 内容: {content[:50]}..., 触发规则: [{hit_word}]") # 记录日志，显示命中的词
                 # 返回模糊错误信息，避免暴露具体规则
                 return jsonify({"error": "内容包含不合适的词汇，已被系统拦截。", "blocked": True}), 400
 
@@ -332,37 +472,45 @@ def admin_login():
         # --- 新增：管理员登录人机验证 ---
         turnstile_token = request.form.get('cf-turnstile-response')
         user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr) # 获取真实 IP
+        username = request.form.get('username')
+        password = request.form.get('password')
+        totp_code = request.form.get('totp_code') # 获取前端提交的 TOTP 码
 
         if not turnstile_token:
             # --- 修改：不再返回 JSON，而是渲染模板 ---
             site_key = app.config.get('TURNSTILE_SITE_KEY', '')
             return render_template('admin_login.html', error='请完成人机验证', turnstile_site_key=site_key)
-            # return jsonify({"error": "请完成人机验证"}), 400
-            # site_key = app.config.get('TURNSTILE_SITE_KEY', '')
-            # return render_template('admin_login.html', error='请完成人机验证。', turnstile_site_key=site_key)
-            # return redirect(url_for('admin_login'))
 
         if not validate_turnstile(turnstile_token, user_ip):
             site_key = app.config.get('TURNSTILE_SITE_KEY', '')
             return render_template('admin_login.html', error='人机验证失败，请刷新网页', turnstile_site_key=site_key)
-            # return jsonify({"error": "人机验证失败，请刷新网页"}), 400
-            # site_key = app.config.get('TURNSTILE_SITE_KEY', '')
-            # return render_template('admin_login.html', error='人机验证失败，请刷新页面重试。', turnstile_site_key=site_key)
-            # return redirect(url_for('admin_login'))
         # --- 结束新增 ---
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        # 验证管理员凭据
-        if (username == config.get('admin_username') and 
-            password == config.get('admin_password')):
+
+        # 验证 TOTP (如果密钥存在)
+        totp_valid = True # 默认为真，以防 TOTP 未正确初始化
+        if ADMIN_TOTP_SECRET:
+             if not totp_code:
+                 flash('请输入双重认证验证码')
+                 return render_template('admin_login.html')
+             totp = pyotp.TOTP(ADMIN_TOTP_SECRET)
+             totp_valid = totp.verify(totp_code, valid_window=1) # 允许前后偏移1个时间窗口
+
+        # --- 修正：统一从 config 获取管理员凭据 ---
+        admin_username_from_config = app.config.get('admin_username')
+        admin_password_from_config = app.config.get('admin_password')
+
+        # 验证用户名、密码和 TOTP
+        if (username == admin_username_from_config and
+            password == admin_password_from_config and
+            totp_valid):
             session['admin_logged_in'] = True
             return redirect(url_for('admin_dashboard'))
         else:
+            # 提供更模糊的错误信息以增强安全性
+            flash('登录凭据无效或双重认证失败')
             site_key = app.config.get('TURNSTILE_SITE_KEY', '')
             return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key)
-            # return render_template('admin_login.html', error='用户名或密码错误')
-        
+
     site_key = app.config.get('TURNSTILE_SITE_KEY', '')
     return render_template('admin_login.html', turnstile_site_key=site_key)
 
@@ -424,6 +572,48 @@ def admin_logout():
     """管理员登出"""
     session.pop('admin_logged_in', None)
     return redirect(url_for('admin_login'))
+
+# 管理员登录页二次验证器密钥显示路由（仅用于测试和配置验证，生产环境应谨慎使用）
+# --- 修正后的: 临时 QR 码展示路由 ---
+@app.route('/show_totp_qr')
+def show_totp_qr():
+    """临时路由：展示 TOTP 设置二维码"""
+    qr_uri_to_show = globals().get('TEMP_QR_URI_TO_SHOW', None)
+    if not qr_uri_to_show:
+        return "<h1>QR 码已过期或尚未生成。</h1><p>请重新启动应用以进行初始化。</p>", 404
+
+    # 构建包含动态 URI 的 JavaScript 代码字符串
+    js_code = f"""
+        // 使用 qrcode.js 库生成二维码
+        const uri = "{qr_uri_to_show}";
+        QRCode.toCanvas(document.getElementById('qrcode-container'), uri, function (error) {{
+            if (error) console.error(error);
+            console.log('二维码生成成功!');
+        }});
+    """
+
+    # 将 JS 代码嵌入 HTML
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <title>设置双重认证</title>
+        <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    </head>
+    <body>
+        <h1>请扫描二维码设置双重认证</h1>
+        <p>请使用您的认证器 APP (如 Google Authenticator, Authy) 扫描下方二维码。</p>
+        <div id="qrcode-container" style="width: 200px; height: 200px; margin: auto;"></div>
+        <p>如果扫描失败，也可以手动输入密钥: <strong>{qr_uri_to_show.split('secret=')[1].split('&')[0]}</strong></p>
+        <script>
+{js_code}
+        </script>
+    </body>
+    </html>
+    """
+    return html_content
+# --- End of QR Route ---
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5024, debug=False)

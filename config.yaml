@@ -1,4 +1,4 @@
-API_KEY: ***
+API_KEY: "***"
 times: 3 #3分钟一次
 TURNSTILE_SECRET_KEY: "***"  # 替换为你的 Cloudflare Turnstile Secret Key
 TURNSTILE_SITE_KEY: "***" # 替换成你自己的 Site Key
