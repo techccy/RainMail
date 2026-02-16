@@ -17,6 +17,12 @@
             <p>The Raindrop Box</p>
             <div class="status-indicator status-sunny" id="current-weather">🌤️ 晴天模式</div>
         </header>
+            <!-- 新增：天气元信息显示区 -->
+        <div id="weather-meta" style="text-align: center; margin: 11px 0; font-size: 15px; color: #555;">
+        📍 <span id="weather-location">加载中...</span> | 
+        🌦️ <span id="weather-text">--</span> |
+        🕒 <span id="next-refresh">--</span> 秒后刷新
+        </div>
 
         <!-- 晴天界面 -->
         <div id="sunny-interface">
@@ -89,3 +95,36 @@
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
+<script>
+// 等待页面加载完成
+document.addEventListener('DOMContentLoaded', function() {
+    const locationElem = document.getElementById('weather-location');
+    const textElem = document.getElementById('weather-text');
+    const refreshElem = document.getElementById('next-refresh');
+
+    // 如果元素存在，才执行
+    if (locationElem && textElem && refreshElem) {
+        fetchWeatherMeta();
+        setInterval(fetchWeatherMeta, 1000); // 每秒更新倒计时
+    }
+});
+
+let lastRefreshTime = null;
+
+function fetchWeatherMeta() {
+    fetch('/api/weather/meta')
+        .then(response => response.json())
+        .then(data => {
+            // 更新 DOM
+            document.getElementById('weather-location').textContent = data.location;
+            document.getElementById('weather-text').textContent = data.weather_text;
+            document.getElementById('next-refresh').textContent = data.next_refresh_in_seconds;
+
+            // 记录上次成功获取时间（用于调试）
+            lastRefreshTime = new Date();
+        })
+        .catch(err => {
+            console.error('Failed to fetch weather meta:', err);
+        });
+}
+</script>
