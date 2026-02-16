@@ -169,7 +169,7 @@ else:
 app.secret_key = 'rainmail_secret_key_2024'
 TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
 TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
-ASK_TIMES = app.config.get('TIMES', 60) # 请求频率
+ASK_TIMES = app.config.get('TIMES', 40) # 请求频率
 LOCATION_ID = app.config.get('LOCATION_ID', 101280101)  # 广东广州的和风天气位置ID
 SENSITIVE_WORDS_SET = set()
 
@@ -610,7 +610,7 @@ def admin_force_rain():
     """强制降雨"""
     global force_rain_until, current_weather_state
     
-    duration = config.get('force_rain_duration', 60)
+    duration = config.get('force_rain_duration', 40)
     force_rain_until = datetime.now() + timedelta(minutes=duration)
     current_weather_state = 'rainy'
     
