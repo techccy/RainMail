@@ -1,8 +1,11 @@
-API_KEY: "***"
-times: 3 #3分钟一次
-TURNSTILE_SECRET_KEY: "***"  # 替换为你的 Cloudflare Turnstile Secret Key
-TURNSTILE_SITE_KEY: "***" # 替换成你自己的 Site Key
+HEFENG_HOST: "a"  # 替换为你的和风天气API主机地址
+HEFENG_KEY: "APIKEY"
+times: 120 #请求频率，单位为秒
+TURNSTILE_SECRET_KEY: "0x"  # 替换为你的 Cloudflare Turnstile Secret Key
+TURNSTILE_SITE_KEY: "" # 替换成你自己的 Site Key
+LOCATION_NAME: "广州"  # 替换为服务器所在地，用于前端展示
 # 管理员配置
-admin_username: "***"
-admin_password: "***"
+admin_username: techccy
+admin_password: ""
 force_rain_duration: 10   # 强制降雨持续时间（分钟）
+totp_decrypt_password: "password"
