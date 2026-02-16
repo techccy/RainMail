@@ -26,11 +26,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p /data && chmod 777 /data
 
 # 暴露端口
-EXPOSE 5000
+EXPOSE 5024
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/api/health || exit 1
+    CMD curl -f http://localhost:5024/api/health || exit 1
 
 # 启动应用
 CMD ["python", "run.py"]

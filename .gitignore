@@ -2,3 +2,4 @@ __pycache__/
 config.yaml
 totp_secret.json
 .DS_Store
+static/.DS_Store
