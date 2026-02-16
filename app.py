@@ -21,6 +21,8 @@ import json
 import qrcode
 from PIL import Image
 
+
+LOCATION_ID = "101280101"  # 广东广州的和风天气位置ID
 SENSITIVE_WORDS_SET = set()
 
 def load_sensitive_words_from_csv(file_path):
@@ -98,77 +100,47 @@ def load_encrypted_secret(filepath: str) -> dict:
         return json.load(f)
 
 def initialize_totp_secret():
-    """初始化 TOTP 密钥，处理首次运行和后续运行的逻辑"""
+    """初始化 TOTP 密钥 - 支持静默自动解密"""
     secret_file_path = os.path.join(os.path.dirname(__file__), 'totp_secret.json')
-    qr_file_path = os.path.join(os.path.dirname(__file__), 'totp_setup_qr.png') # 定义二维码图片路径
+    qr_file_path = os.path.join(os.path.dirname(__file__), 'totp_setup_qr.png')
+    
+    # 从配置中获取解密密码
+    decrypt_password = app.config.get('totp_decrypt_password')
+    if not decrypt_password:
+        print("\n[ERROR] config.yaml 中缺少 'totp_decrypt_password'，无法自动解密 TOTP 密钥！")
+        return None
 
+    # 情况1: 存在加密文件 → 尝试自动解密
     if os.path.exists(secret_file_path):
-        print("\n[INFO] 检测到已存在的加密 TOTP 密钥。")
-        choice = input("是否使用现有的密钥？(y/n，默认为 y): ").lower().strip() or 'y'
+        try:
+            encrypted_data = load_encrypted_secret(secret_file_path)
+            totp_secret = decrypt_secret(encrypted_data, decrypt_password)
+            print(f"\n[SUCCESS] 自动解密 TOTP 密钥成功！(来自 {secret_file_path})")
+            return totp_secret
+        except Exception as e:
+            print(f"\n[ERROR] 自动解密失败: {e}")
+            print("[INFO] 将生成新的 TOTP 密钥...")
 
-        if choice == 'y':
-            try:
-                encrypted_data = load_encrypted_secret(secret_file_path)
-                # 循环直到密码正确或用户放弃
-                while True:
-                    password = input("\n请输入用于解密 TOTP 密钥的密码: ")
-                    try:
-                        totp_secret = decrypt_secret(encrypted_data, password)
-                        print("\n[SUCCESS] TOTP 密钥解密成功！")
-                        return totp_secret
-                    except ValueError: # 捕获密码错误等预期异常
-                        print("\n[ERROR] 密码错误，请重试。")
-                        retry_choice = input("是否重新输入密码？(y/n): ").lower().strip()
-                        if retry_choice != 'y':
-                            print("\n[INFO] 放弃使用现有密钥，将生成新的密钥。")
-                            break # 跳出 while 循环，继续生成新密钥
-                    except Exception as e: # 捕获其他未预期的异常
-                        print(f"\n[ERROR] 解密过程中发生未知错误: {e}")
-                        return None # 或者采取其他措施，这里选择返回None
-
-            except FileNotFoundError:
-                print(f"\n[ERROR] 加密密钥文件 {secret_file_path} 丢失。")
-                return None
-            except KeyError as e:
-                print(f"\n[ERROR] 加密密钥文件格式错误，缺少必要键: {e}")
-                return None
-            except Exception as e: # 捕获 load_encrypted_secret 可能抛出的其他异常
-                print(f"\n[ERROR] 加载加密密钥文件时发生未知错误: {e}")
-                return None
-
-
-    # 如果文件不存在，或用户选择不使用旧密钥，或解密失败后选择生成新密钥
-    print("\n[INFO] 未找到现有密钥或选择生成新密钥，正在创建新的 TOTP 密钥...")
+    # 情况2: 文件不存在 或 解密失败 → 自动生成新密钥并加密保存
+    print("\n[INFO] 正在生成新的 TOTP 密钥（静默模式）...")
     new_secret = generate_totp_secret()
-    issuer_name = "RainMail_Admin"
-    account_name = "admin"
-    totp_uri = pyotp.totp.TOTP(new_secret).provisioning_uri(account_name, issuer_name=issuer_name)
-
-    print("\n--- 设置 TOTP 双重认证 ---")
-    print(f"TOTP 密钥: {new_secret}")
-
-    # --- 新增: 生成并保存二维码图片 ---
+    
+    # 生成二维码（可选，后台运行时可能不需要）
     try:
+        issuer_name = "RainMail_Admin"
+        account_name = "admin"
+        totp_uri = pyotp.totp.TOTP(new_secret).provisioning_uri(account_name, issuer_name=issuer_name)
         qr_img = qrcode.make(totp_uri)
         qr_img.save(qr_file_path)
-        print(f"\n[SUCCESS] 二维码已生成并保存至: {qr_file_path}")
-        print("请扫描此图片文件以在您的认证器 APP 中添加账户。")
+        print(f"[SUCCESS] TOTP 二维码已保存至: {qr_file_path}")
     except Exception as e:
-        print(f"\n[WARNING] 生成二维码图片时出错: {e}")
-        print("请手动输入上方的 TOTP 密钥到您的认证器 APP。")
-    # --- End of Addition ---
+        print(f"[WARNING] 生成二维码失败: {e}")
 
-    while True:
-        password = input("\n请设置一个密码来加密此 TOTP 密钥: ")
-        confirm_password = input("请再次输入密码以确认: ")
-        if password == confirm_password:
-            break
-        else:
-            print("\n[ERROR] 两次输入的密码不一致，请重试。")
-
-    encrypted_data = encrypt_secret(new_secret, password)
+    # 用配置中的密码加密并保存
+    encrypted_data = encrypt_secret(new_secret, decrypt_password)
     save_encrypted_secret(encrypted_data, secret_file_path)
-    print(f"\n[SUCCESS] 新的 TOTP 密钥已生成并使用密码加密，保存至 '{secret_file_path}'。")
+    print(f"[SUCCESS] 新 TOTP 密钥已加密保存至 '{secret_file_path}'")
+    
     return new_secret
 
 def is_sensitive(message):
@@ -197,6 +169,7 @@ app.secret_key = 'rainmail_secret_key_2024'
 # TURNSTILE_SECRET_KEY = config.get('TURNSTILE_SECRET_KEY')
 TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
 TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
+ASK_TIMES = app.config.get('times', 120) # 请求频率
 
 # 读取配置文件
 # with open('config.yaml', 'r') as f:
@@ -240,7 +213,7 @@ else:
 # 全局状态变量
 current_weather_state = 'sunny'  # 默认晴天状态
 last_weather_check = 0
-weather_cache_time = 120  # 2分钟缓存
+weather_cache_time = ASK_TIMES  # 缓存
 force_rain_until = None  # 强制降雨结束时间
 last_weather_data = {}  # 存储最后一次天气数据
 
@@ -310,7 +283,7 @@ def get_cpu_temperature():
 
 def get_weather_status():
     """获取广州天气状态和详细数据"""
-    global current_weather_state, last_weather_check, last_weather_data
+    global current_weather_state, last_weather_check, last_weather_data, force_rain_until
     
     current_time = time.time()
     
@@ -318,36 +291,59 @@ def get_weather_status():
     if force_rain_until and datetime.now() < force_rain_until:
         current_weather_state = 'rainy'
         return current_weather_state
-    
+
     # 检查缓存是否过期
     if current_time - last_weather_check < weather_cache_time:
         return current_weather_state
-    
+
     try:
-        # 和风天气API调用
-        url = f"https://devapi.qweather.com/v7/weather/now?location=101240310&key={config['API_KEY']}"
-        response = requests.get(url, timeout=10)
-        data = response.json()
+        # 从配置中获取和风天气的 Host 和 Key
+        hefeng_host = app.config.get('HEFENG_HOST')
+        api_key = app.config.get('HEFENG_KEY')
         
-        if data['code'] == '200':
-            icon_code = data['now']['icon']
-            # 检查天气图标代码是否以3开头（雨/雪/阵雨）
-            if icon_code.startswith('3'):
-                current_weather_state = 'rainy'
-            else:
-                current_weather_state = 'sunny'
+        if not hefeng_host or not api_key:
+            logger.error("HEFENG_HOST 或 HEFENG_KEY 未在 config.yaml 中配置！")
+            return current_weather_state  # 保持上次状态
+
+        # 构建正确的 API URL
+        url = f"https://{hefeng_host}/v7/weather/now"
+        params = {
+            'location': LOCATION_ID,
+            'key': api_key
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()  # 检查 HTTP 状态码
+        data = response.json()
+
+        # 检查和风天气的业务状态码
+        if data.get('code') == '200':
+            now_data = data['now']
+            weather_text = now_data.get('text', '')
+            icon_code = now_data.get('icon', '')
+
+            # 判断是否为雨天：检查文本或图标
+            is_rainy = ('雨' in weather_text) or (icon_code.startswith('3'))
             
+            current_weather_state = 'rainy' if is_rainy else 'sunny'
             last_weather_check = current_time
-            last_weather_data = data['now']
-            logger.info(f"Weather status updated: {current_weather_state}, icon: {icon_code}")
+            last_weather_data = now_data
             
+            logger.info(f"广州天气更新: {weather_text} (图标: {icon_code}), 状态: {current_weather_state}")
         else:
-            logger.warning(f"Weather API error: {data['code']} - {data.get('message', 'Unknown error')}")
-            
+            # 记录和风天气返回的错误信息
+            error_msg = data.get('message', 'Unknown error')
+            logger.warning(f"和风天气 API 业务错误: code={data.get('code')}, message={error_msg}")
+
+    except requests.exceptions.Timeout:
+        logger.error("和风天气 API 请求超时")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"和风天气 API 网络错误: {str(e)}")
+    except ValueError as e:
+        logger.error(f"和风天气 API 返回非JSON数据: {str(e)}")
     except Exception as e:
-        logger.error(f"Weather API request failed: {str(e)}")
-        # 保持上一次的有效状态
-    
+        logger.error(f"获取天气时发生未知错误: {str(e)}")
+
     return current_weather_state
 
 def get_dashboard_data():
@@ -573,47 +569,27 @@ def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('admin_login'))
 
-# 管理员登录页二次验证器密钥显示路由（仅用于测试和配置验证，生产环境应谨慎使用）
-# --- 修正后的: 临时 QR 码展示路由 ---
-@app.route('/show_totp_qr')
-def show_totp_qr():
-    """临时路由：展示 TOTP 设置二维码"""
-    qr_uri_to_show = globals().get('TEMP_QR_URI_TO_SHOW', None)
-    if not qr_uri_to_show:
-        return "<h1>QR 码已过期或尚未生成。</h1><p>请重新启动应用以进行初始化。</p>", 404
-
-    # 构建包含动态 URI 的 JavaScript 代码字符串
-    js_code = f"""
-        // 使用 qrcode.js 库生成二维码
-        const uri = "{qr_uri_to_show}";
-        QRCode.toCanvas(document.getElementById('qrcode-container'), uri, function (error) {{
-            if (error) console.error(error);
-            console.log('二维码生成成功!');
-        }});
-    """
-
-    # 将 JS 代码嵌入 HTML
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="zh-CN">
-    <head>
-        <meta charset="UTF-8">
-        <title>设置双重认证</title>
-        <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-    </head>
-    <body>
-        <h1>请扫描二维码设置双重认证</h1>
-        <p>请使用您的认证器 APP (如 Google Authenticator, Authy) 扫描下方二维码。</p>
-        <div id="qrcode-container" style="width: 200px; height: 200px; margin: auto;"></div>
-        <p>如果扫描失败，也可以手动输入密钥: <strong>{qr_uri_to_show.split('secret=')[1].split('&')[0]}</strong></p>
-        <script>
-{js_code}
-        </script>
-    </body>
-    </html>
-    """
-    return html_content
-# --- End of QR Route ---
+@app.route('/api/weather/meta')
+def weather_meta():
+    """返回天气元信息：上次更新时间、地点、天气文本、倒计时等"""
+    from datetime import datetime
+    global last_weather_check, last_weather_data, current_weather_state
+    
+    now = time.time()
+    elapsed = now - last_weather_check
+    remaining = max(0, weather_cache_time - elapsed)
+    
+    # 从 last_weather_data 获取天气描述，兜底处理
+    weather_text = last_weather_data.get('text', '未知') if last_weather_data else '未知'
+    location_name = app.config.get('LOCATION_NAME')  # 从配置读取
+    
+    return jsonify({
+        'location': location_name,
+        'weather_text': weather_text,
+        'last_update': datetime.fromtimestamp(last_weather_check).strftime('%Y-%m-%d %H:%M:%S') if last_weather_check else None,
+        'next_refresh_in_seconds': int(remaining),
+        'current_state': current_weather_state  # 'rainy' or 'sunny'
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5024, debug=False)
