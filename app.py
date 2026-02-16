@@ -9,6 +9,45 @@ import re
 import psutil
 import os
 import hashlib
+import csv
+
+SENSITIVE_WORDS_SET = set()
+
+def load_sensitive_words_from_csv(file_path):
+    """
+    从 all.csv 文件中加载标记为敏感词 (_sensitivewords=1) 的词到集合中
+    :param file_path: all.csv 文件路径
+    """
+    global SENSITIVE_WORDS_SET
+    try:
+        # Use 'utf-8-sig' to automatically handle the BOM character
+        with open(file_path, 'r', encoding='utf-8-sig') as csvfile:
+            reader = csv.DictReader(csvfile)
+            # With utf-8-sig, the column names should now be clean without BOM
+            words_from_csv = {
+                row['keyword'].strip() # Now this should work correctly
+                for row in reader
+                if row.get('_sensitivewords') == '1' and row.get('keyword', '').strip()
+            }
+            
+        SENSITIVE_WORDS_SET = words_from_csv
+        print(f"成功从 all.csv 加载 {len(SENSITIVE_WORDS_SET)} 个标记为敏感的唯一词语。")
+        
+    except FileNotFoundError:
+        print(f"错误：未找到敏感词 CSV 文件 {file_path}")
+        SENSITIVE_WORDS_SET = set()
+    except KeyError as e:
+        print(f"错误：CSV 文件 {file_path} 中缺少必要的列: {e}")
+        SENSITIVE_WORDS_SET = set()
+
+
+def is_sensitive(message):
+    # 遍历敏感词集合，检查消息是否包含任何一个词
+    for word in SENSITIVE_WORDS_SET:
+        # 使用 'in' 操作符进行子串匹配
+        if word in message:
+            return True
+    return False
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +94,9 @@ class Message(db.Model):
 # 初始化数据库
 with app.app_context():
     db.create_all()
+
+sensitive_words_csv_file = os.path.join(os.path.dirname(__file__), 'resources', 'all.csv')
+load_sensitive_words_from_csv(sensitive_words_csv_file)
 
 # 全局状态变量
 current_weather_state = 'sunny'  # 默认晴天状态
@@ -227,16 +269,11 @@ def handle_messages():
             if not validate_turnstile(turnstile_token, user_ip):
                 return jsonify({"error": "人机验证失败，请刷新网页"}), 400
 
-
-            # --- 新增：敏感词过滤 ---
-            # 你可以将 SENSITIVE_WORDS 放到 config.yaml 中，更灵活
-            SENSITIVE_WORDS = ['习近平', '共产党', '色情', '赌博', '发票']
-            for word in SENSITIVE_WORDS:
-                if word in content:
-                    app.logger.warning(f"API 敏感词拦截: [{word}] 内容: {content[:50]}...")
-                    # 返回模糊错误信息，避免暴露具体规则
-                    return jsonify({"error": "内容包含不合适的词汇，已被系统拦截。", "blocked": True}), 400
-
+            # 调用 is_sensitive 函数检查内容
+            if is_sensitive(content):
+                app.logger.warning(f"API 敏感词拦截: 内容: {content[:50]}...") # 记录日志
+                # 返回模糊错误信息，避免暴露具体规则
+                return jsonify({"error": "内容包含不合适的词汇，已被系统拦截。", "blocked": True}), 400
 
             # 过滤XSS
             content = sanitize_input(content)
