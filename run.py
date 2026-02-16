@@ -54,7 +54,7 @@ def main():
     print("=" * 50)
     
     # 启动应用
-    app.run(host='0.0.0.0', port=5024, debug=True)
+    app.run(host='0.0.0.0', port=5024, debug=False)
     
     return 0
 
