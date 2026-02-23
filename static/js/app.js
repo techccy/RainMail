@@ -62,7 +62,9 @@ class RainMailApp {
             alert('内容不能超过500字');
             return;
         }
-
+        this.showProcessingOverlay();
+        // 模拟进度条 (8秒)
+        this.simulateProgress(8000); // 8000毫秒 = 8秒
         const turnstileWidget = document.querySelector('.cf-turnstile iframe[src*="challenges.cloudflare.com"]'); // 更精确地选择 Widget iframe
         let cfToken = '';
         if (turnstileWidget && typeof turnstile !== 'undefined' && turnstile.getResponse) {
@@ -78,6 +80,8 @@ class RainMailApp {
         }
 
         if (!cfToken) {
+            this.hideProcessingOverlay();
+            clearInterval(this.progressIntervalId);
             alert('请先完成人机验证');
             return;
         }
@@ -93,7 +97,8 @@ class RainMailApp {
                     cf_token: cfToken // <-- 添加 cf_token 到 JSON body
                 })
             });
-
+            clearInterval(this.progressIntervalId);
+            this.hideProcessingOverlay();
             const data = await response.json();
 
             if (response.ok) {
@@ -107,13 +112,90 @@ class RainMailApp {
                 }
             } else {
                 alert(data.error || '提交失败');
+                clearInterval(this.progressIntervalId);
+                this.hideProcessingOverlay();
             }
         } catch (error) {
             console.error('提交错误:', error);
             alert('网络错误，请重试');
         }
     }
+    // --- 新增：显示处理中界面 ---
+    showProcessingOverlay() {
+        const overlay = document.getElementById('processing-overlay');
+        overlay.style.display = 'flex'; // 或 'block'，取决于CSS布局
+        document.getElementById('processing-text').textContent = '正在加密...';
+        document.getElementById('processing-progress-bar').style.width = '0%';
+        document.getElementById('processing-time-remaining').textContent = '预计剩余时间: 8 秒';
 
+        // 可选：禁用提交按钮，防止重复点击
+        // document.getElementById('submit-btn').disabled = true;
+        // document.getElementById('rainy-submit-btn').disabled = true;
+    }
+    // --- END 新增 ---
+
+    // --- 新增：隐藏处理中界面 ---
+    hideProcessingOverlay() {
+        const overlay = document.getElementById('processing-overlay');
+        overlay.style.display = 'none';
+
+        // 可选：启用提交按钮
+        // document.getElementById('submit-btn').disabled = false;
+        // document.getElementById('rainy-submit-btn').disabled = false;
+    }
+    // --- END 新增 ---
+
+    // --- 新增：模拟进度条 ---
+    simulateProgress(totalDurationMs) {
+        const progressBar = document.getElementById('processing-progress-bar');
+        const processingText = document.getElementById('processing-text');
+        const timeRemainingElement = document.getElementById('processing-time-remaining');
+
+        const steps = 100; // 进度条分为100步
+        const stepDuration = totalDurationMs / steps;
+        let currentStep = 0;
+
+        const texts = [
+            '正在加密...',
+            '正在打包...',
+            '正在上传...',
+            '正在审核...'
+        ];
+        let textIndex = 0;
+        const textChangeInterval = Math.floor(steps / texts.length); // 每隔几步换一次文字
+
+        const startTime = Date.now();
+
+        // 清除可能存在的旧定时器
+        if (this.progressIntervalId) {
+            clearInterval(this.progressIntervalId);
+        }
+
+        this.progressIntervalId = setInterval(() => {
+            currentStep++;
+            const progressPercent = Math.min((currentStep / steps) * 100, 100);
+            progressBar.style.width = `${progressPercent}%`;
+
+            // 更新文字
+            if (currentStep % textChangeInterval === 0 && textIndex < texts.length) {
+                processingText.textContent = texts[textIndex];
+                textIndex++;
+            }
+
+            // 更新剩余时间 (估算)
+            const elapsed = Date.now() - startTime;
+            const remaining = Math.max(0, totalDurationMs - elapsed);
+            timeRemainingElement.textContent = `预计剩余时间: ${(remaining / 1000).toFixed(1)} 秒`;
+
+            if (currentStep >= steps) {
+                clearInterval(this.progressIntervalId);
+                // 确保进度条达到100%
+                progressBar.style.width = '100%';
+                processingText.textContent = '处理完成...'; // 或者显示一个完成状态
+            }
+        }, stepDuration);
+    }
+// --- END 新增 ---
     async loadMessages() {
         const container = document.getElementById('messages-container');
         container.innerHTML = '<div class="loading">加载中...</div>';

@@ -37,6 +37,8 @@
                     </div>
                     {% if turnstile_site_key %}
                         <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
+                        <!-- 在 <div class="cf-turnstile" ... ></div> 之后，<button id="submit-btn"...> 之前添加 -->
+                        <input type="hidden" name="cf-token-hidden" id="cf-token-hidden" value="">
                     {% endif %}
                 </div>
                 <button id="submit-btn" class="primary-btn">投递想法</button>
@@ -61,6 +63,8 @@
                     </div>
                     {% if turnstile_site_key %}
                         <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
+                        <!-- 在 <div class="cf-turnstile" ... ></div> 之后，<button id="submit-btn"...> 之前添加 -->
+                        <input type="hidden" name="cf-token-hidden" id="rainy-cf-token-hidden" value="" style="display:none;">
                     {% endif %}
                 </div>
                 <button id="rainy-submit-btn" class="primary-btn">投递想法</button>
@@ -74,7 +78,17 @@
             </div>
         </div>
     </div>
-
+        <!-- 新增：提交处理中状态界面 -->
+    <div id="processing-overlay" class="modal" style="display: none; z-index: 1001;">
+        <div class="modal-content" style="width: 300px; text-align: center; padding: 30px;">
+            <h3 style="color: yellow;">正在处理您的想法...</h3>
+            <p id="processing-text" style="color: yellow;">正在加密...</p>
+            <div class="progress-bar-container" style="width: 100%; background-color: #f0f0f0; border-radius: 10px; margin: 20px 0;">
+                <div id="processing-progress-bar" style="width: 0%; height: 20px; background-color: #3498db; border-radius: 10px; transition: width 0.1s linear;"></div>
+            </div>
+            <p id="processing-time-remaining" style="color: yellow;">预计剩余时间: 8 秒</p>
+        </div>
+    </div>
     <!-- 成功模态框 -->
     <div id="success-modal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -99,6 +113,45 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof turnstile !== 'undefined') {
+            const containers = document.querySelectorAll('.cf-turnstile');
+            containers.forEach(function(container) {
+                const parentInterface = container.closest('#sunny-interface, #rainy-interface');
+                if (parentInterface) {
+                    const interfaceId = parentInterface.id;
+                    const hiddenInputId = interfaceId === 'sunny-interface' ? 'cf-token-hidden' : 'rainy-cf-token-hidden';
+
+                    turnstile.render(container, {
+                        'sitekey': '{{ turnstile_site_key }}',
+                        'callback': function(token) {
+                            const hiddenInput = document.getElementById(hiddenInputId);
+                            if (hiddenInput) {
+                                hiddenInput.value = token;
+                                console.log(`${interfaceId.replace('-', ' ')} Turnstile passed, token stored.`);
+                            }
+                        },
+                        'expired-callback': function() {
+                            const hiddenInput = document.getElementById(hiddenInputId);
+                            if (hiddenInput) {
+                                hiddenInput.value = '';
+                                console.log(`${interfaceId.replace('-', ' ')} Turnstile expired, token cleared.`);
+                            }
+                        },
+                        'error-callback': function() {
+                            const hiddenInput = document.getElementById(hiddenInputId);
+                            if (hiddenInput) {
+                                hiddenInput.value = '';
+                                console.log(`${interfaceId.replace('-', ' ')} Turnstile error, token cleared.`);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+    });
+    </script>
 </body>
 </html>
 <script>
