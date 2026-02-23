@@ -22,6 +22,11 @@ import json
 import qrcode
 from PIL import Image
 
+# --- 添加：用于防止并发请求天气API的锁 ---
+weather_request_lock = threading.Lock()
+# 临时存储正在进行的天气请求的结果
+pending_weather_result = None
+
 app = Flask(__name__)
 
 def load_sensitive_words_from_csv(file_path):
@@ -294,82 +299,95 @@ def get_cpu_temperature():
 
 def get_weather_status():
     """获取广州天气状态和详细数据"""
-    global current_weather_state, last_weather_check, last_weather_data, force_rain_until, _current_api_pair_index # 声明使用全局变量
+    # 注意：移除 _current_api_pair_index 从 global 声明中
+    global current_weather_state, last_weather_check, last_weather_data, force_rain_until
 
     current_time = time.time()
 
     # 检查强制降雨状态
     if force_rain_until and datetime.now() < force_rain_until:
-        current_weather_state = 'rainy'
-        return current_weather_state
+        return 'rainy' # 直接返回，不修改全局状态或检查缓存
 
     # 检查缓存是否过期
     if current_time - last_weather_check < weather_cache_time:
         return current_weather_state
 
-    # 检查是否有可用的 API (仅 API1)
-    if not API_AVAILABLE: # <-- 使用新的标志
-        print("[WARN] 无可用的 API 配置 (API1)，保持上次天气状态。")
-        return current_weather_state # 返回上次的状态
+    # --- 关键修改：将 API 请求和数据更新逻辑完全置于 Threading 锁保护之下 ---
+    with weather_request_lock:
+        # 再次检查，因为可能在等待锁的时候，另一个线程已经更新了数据
+        if current_time - last_weather_check < weather_cache_time:
+            return current_weather_state
 
-    # --- 修改：仅使用 API1 ---
-    try:
-        # 构建正确的 API URL，使用 API1
-        url = f"https://{API_HOST1}/v7/weather/now" # <-- 使用 API1 的 HOST
-        params = {
-            'location': LOCATION_ID,
-            'key': API_KEY1 # <-- 使用 API1 的 KEY
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
-        
-        # --- 重要: 检查响应状态码 ---
-        if response.status_code == 429: # Too Many Requests
-            print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 触发速率限制 (429)，无法获取数据。")
-            # 如果 API1 限流，只能等待下一次缓存过期再试
+        # 检查是否有可用的 API (仅 API1)
+        if not API_AVAILABLE: # <-- 使用新的标志 (在锁内)
+            print("[WARN] 无可用的 API 配置 (API1)，保持上次天气状态。")
+            return current_weather_state # 返回上次的状态
+
+        # --- 修改：仅使用 API1 (在锁内执行) ---
+        try:
+            # 构建正确的 API URL，使用 API1
+            url = f"https://{API_HOST1}/v7/weather/now" # <-- 使用 API1 的 HOST
+            params = {
+                'location': LOCATION_ID,
+                'key': API_KEY1 # <-- 使用 API1 的 KEY
+            }
+
+            print(f"[INFO] 正在请求 API1 获取天气数据...") # 添加日志，确认只执行一次 (在锁内)
+            response = requests.get(url, params=params, timeout=10)
+
+            # --- 重要: 检查响应状态码 ---
+            if response.status_code == 429: # Too Many Requests
+                print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 触发速率限制 (429)，无法获取数据。")
+                # 如果 API1 限流，保持上次状态，但不更新时间戳，以便尽快重试
+                return current_weather_state # 保持上次状态
+            if response.status_code != 200:
+                print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 请求失败，状态码: {response.status_code}")
+                return current_weather_state # 保持上次状态
+
+            data = response.json()
+
+            # --- 重要: 检查响应体中的错误码 ---
+            if data.get('code') == '401': # Unauthorized, 可能是 Key 无效或 Host-Key 不匹配
+                print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 无效 (401 Unauthorized)，或 Host-Key 不匹配。")
+                return current_weather_state # 保持上次状态
+            elif data.get('code') != '200': # 其他和风 API 错误
+                print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 返回错误: {data.get('code', 'Unknown Code')}, Message: {data.get('message', 'No message')}")
+                return current_weather_state # 保持上次状态
+
+            # --- 成功获取数据 ---
+            now_data = data['now']
+            weather_text = now_data.get('text', '')
+            icon_code = now_data.get('icon', '')
+
+            # 判断是否为雨天：检查文本或图标
+            is_rainy = ('雨' in weather_text) or (icon_code.startswith('3'))
+            new_weather_state = 'rainy' if is_rainy else 'sunny'
+
+            # 更新全局状态和时间戳 (在锁内更新，保证原子性)
+            current_weather_state = new_weather_state
+            last_weather_check = current_time
+            last_weather_data = now_data # 更新最后的数据
+
+            print(f"广州天气更新 (来自 API1): {weather_text} (图标: {icon_code}), 状态: {current_weather_state}")
+
+            return current_weather_state # 返回状态
+
+        except requests.exceptions.Timeout:
+            print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 请求超时。")
+            # 注意：在异常情况下，我们不更新 last_weather_check 和 last_weather_data，
+            # 这样可以让其他等待的请求或下一次调用有机会重试。
             return current_weather_state # 保持上次状态
-        if response.status_code != 200:
-            print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 请求失败，状态码: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 请求异常: {str(e)}")
+            return current_weather_state # 保持上次状态
+        except ValueError: # JSON decode error
+            print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 返回非 JSON 格式。")
+            return current_weather_state # 保持上次状态
+        except KeyError as e: # 如果 data['now'] 不存在
+            print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 响应格式错误，缺少字段: {e}")
             return current_weather_state # 保持上次状态
 
-        data = response.json()
-        
-        # --- 重要: 检查响应体中的错误码 ---
-        if data.get('code') == '401': # Unauthorized, 可能是 Key 无效或 Host-Key 不匹配
-            print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 无效 (401 Unauthorized)，或 Host-Key 不匹配。")
-            return current_weather_state # 保持上次状态
-        elif data.get('code') != '200': # 其他和风 API 错误
-            print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 返回错误: {data.get('code', 'Unknown Code')}, Message: {data.get('message', 'No message')}")
-            return current_weather_state # 保持上次状态
-
-        # --- 成功获取数据 ---
-        now_data = data['now']
-        weather_text = now_data.get('text', '')
-        icon_code = now_data.get('icon', '')
-
-        # 判断是否为雨天：检查文本或图标
-        is_rainy = ('雨' in weather_text) or (icon_code.startswith('3'))
-        current_weather_state = 'rainy' if is_rainy else 'sunny'
-        last_weather_check = current_time
-        last_weather_data = now_data # 更新最后的数据
-
-        print(f"广州天气更新 (来自 API1): {weather_text} (图标: {icon_code}), 状态: {current_weather_state}")
-        
-        return current_weather_state # 返回状态
-
-    except requests.exceptions.Timeout:
-        print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 请求超时。")
-        return current_weather_state # 保持上次状态
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 请求异常: {str(e)}")
-        return current_weather_state # 保持上次状态
-    except ValueError: # JSON decode error
-        print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 返回非 JSON 格式。")
-        return current_weather_state # 保持上次状态
-    except KeyError as e: # 如果 data['now'] 不存在
-        print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 响应格式错误，缺少字段: {e}")
-        return current_weather_state # 保持上次状态
-
+    # --- END 关键修改 ---
 def get_dashboard_data():
     """获取仪表盘数据"""
     weather_status = get_weather_status()
