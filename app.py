@@ -148,45 +148,58 @@ def initialize_totp_secret():
     return new_secret
 
 def ai_moderation_check(content):
-    """
-    通过 AI 模型判断内容是否违规
-    """
     ai_config = app.config.get('AI_MODERATION')
     if not ai_config or not ai_config.get('API_KEY'):
-        app.logger.warning("AI 审计配置缺失，跳过 AI 检查。")
-        return False # 默认放行
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {ai_config['API_KEY']}",
+        "Content-Type": "application/json"
+    }
 
     payload = {
         "model": ai_config.get('MODEL', 'deepseek-chat'),
         "messages": [
-            {"role": "system", "content": ai_config.get('SYSTEM_PROMPT')},
+            {"role": "system", "content": ai_config['SYSTEM_PROMPT']},
             {"role": "user", "content": content}
         ],
-        "temperature": 0.0 # 设为 0 保证输出稳定
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {ai_config.get('API_KEY')}",
-        "Content-Type": "application/json"
+        "temperature": 0.0,
+        "max_tokens": 600 # 稍微给一点空间让它输出结果
     }
 
     try:
         response = requests.post(
-            f"{ai_config.get('BASE_URL')}/chat/completions",
+            f"{ai_config['BASE_URL']}/chat/completions",
             headers=headers,
             json=payload,
-            timeout=10
+            timeout=5
         )
         res_data = response.json()
-        # 获取模型返回的文本，并转换为布尔值
-        result_text = res_data['choices'][0]['message']['content'].strip()
+        raw_output = res_data['choices'][0]['message']['content'].upper()
         
-        app.logger.info(f"AI 审计结果: [{result_text}] 针对内容: {content[:20]}...")
+        app.logger.info(f"AI Raw Response: [{raw_output}]")
+
+        # 从后往前找 True 和 False 出现的位置
+        pos_true = raw_output.rfind("TRUE")
+        pos_false = raw_output.rfind("FALSE")
+
+        # 逻辑判断：
+        # 1. 如果都没找到，说明敏感词中了
+        if pos_true == -1 and pos_false == -1:
+            app.logger.warning("AI未返回明确指令，默认放行")
+            return True
         
-        return "True" in result_text
+        # 2. 谁的位置索引（Index）更大，说明谁更靠后出现
+        if pos_true > pos_false:
+            app.logger.info("判别结果：拦截 (True 靠后)")
+            return True
+        else:
+            app.logger.info("判别结果：通过 (False 靠后)")
+            return False
+
     except Exception as e:
-        app.logger.error(f"AI 审计请求失败: {e}")
-        return False # 如果接口挂了，建议默认放行，避免业务中断
+        app.logger.error(f"AI 审计请求异常: {e}")
+        return False
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
