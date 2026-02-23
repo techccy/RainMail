@@ -191,6 +191,10 @@ if not (API_HOST1 and API_KEY1):
 else:
     API_AVAILABLE = True
 
+API2_AVAILABLE = bool(API_HOST2 and API_KEY2)
+if not API2_AVAILABLE:
+    print("[WARN] config.yaml 中未找到 HEFENG_HOST2 或 HEFENG_KEY2，7天预报功能将不可用。")
+
 # 数据库配置
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rainmail.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -232,6 +236,9 @@ last_weather_check = 0
 weather_cache_time = ASK_TIMES  # 缓存
 force_rain_until = None  # 强制降雨结束时间
 last_weather_data = {}  # 存储最后一次天气数据
+rain_prediction_cache_time = weather_cache_time # 预报缓存时间与天气缓存时间一致，或设为其他
+next_rain_prediction = "暂无预报" # 存储计算出的下次降雨预测文本
+last_rain_prediction_check = 0 # 存储上次预测检查的时间戳
 
 def hash_password(password):
     """密码哈希函数"""
@@ -387,7 +394,66 @@ def get_weather_status():
             print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 响应格式错误，缺少字段: {e}")
             return current_weather_state # 保持上次状态
 
-    # --- END 关键修改 ---
+def calculate_next_rain_time(forecast_list):
+    """根据7天预报列表计算下次降雨时间"""
+    if not forecast_list:
+        return "暂无预报"
+
+    today = datetime.date.today()
+    for day_forecast in forecast_list:
+        forecast_date_str = day_forecast.get('fxDate', '')
+        if not forecast_date_str:
+            continue
+        forecast_date = datetime.datetime.strptime(forecast_date_str, '%Y-%m-%d').date()
+
+        # 跳过今天
+        if forecast_date <= today:
+            continue
+
+        text_day = day_forecast.get('textDay', '')
+        text_night = day_forecast.get('textNight', '')
+        icon_day = day_forecast.get('iconDay', '')
+        icon_night = day_forecast.get('iconNight', '')
+
+        # 检查白天或晚上是否有雨
+        if '雨' in text_day or '雨' in text_night or icon_day.startswith('3') or icon_night.startswith('3'):
+            # 可以返回更详细的信息，例如 "YYYY-MM-DD 白天/夜间 有雨"
+            # 或者更友好的描述，例如 "XX月XX日 (星期X) 可能有雨"
+            # 简化处理：返回日期
+            weekday = forecast_date.strftime('%A') # 英文星期几
+            # weekday_cn = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            # weekday_map = {'Monday':'周一', 'Tuesday':'周二', ... } # 可以映射为中文
+            return f"{forecast_date.strftime('%m月%d日')} ({weekday})"
+    return "近期无雨预报"
+
+def get_weather_forecast_7d():
+    """获取7天天气预报"""
+    if not API2_AVAILABLE:
+        print("[WARN] API2 未配置，跳过7天预报获取。")
+        return None
+
+    try:
+        url = f"https://{API_HOST2}/v7/weather/7d"
+        params = {
+            'location': LOCATION_ID, # 使用与当前天气相同的LOCATION_ID
+            'key': API_KEY2
+        }
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code != 200:
+            print(f"[WARN] API2 获取7天预报失败，状态码: {response.status_code}")
+            return None
+        data = response.json()
+        if data.get('code') != '200':
+            print(f"[WARN] API2 获取7天预报返回错误: {data.get('code')}, {data.get('message', 'No message')}")
+            return None
+        return data.get('daily', [])
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] API2 获取7天预报请求异常: {e}")
+        return None
+    except (ValueError, KeyError) as e:
+        print(f"[ERROR] API2 获取7天预报响应解析错误: {e}")
+        return None
+
 def get_dashboard_data():
     """获取仪表盘数据"""
     weather_status = get_weather_status()
@@ -407,6 +473,25 @@ def get_dashboard_data():
         'cpu_temp': round(cpu_temp, 1),
         'message_count': message_count
     }
+def update_rain_prediction():
+    """更新下次降雨预测"""
+    global next_rain_prediction, last_rain_prediction_check
+    current_time = time.time()
+
+    # 检查预报缓存是否过期
+    if current_time - last_rain_prediction_check < rain_prediction_cache_time:
+        # 缓存未过期，无需更新
+        return
+
+    forecast_data = get_weather_forecast_7d()
+    if forecast_data:
+        prediction = calculate_next_rain_time(forecast_data)
+        next_rain_prediction = prediction
+        last_rain_prediction_check = current_time
+        print(f"[INFO] 更新7天预报预测: {next_rain_prediction}")
+    else:
+        # 如果获取失败，可以考虑保留上次的预测或设置为错误信息
+        print("[INFO] 未能获取新的7天预报数据，保留上次预测。")
 
 def admin_required(f):
     """管理员权限装饰器"""
