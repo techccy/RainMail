@@ -60,6 +60,17 @@ admin_password: "" # 管理员登录密码
 force_rain_duration: 10   # 强制降雨持续时间（分钟）
 totp_decrypt_password: "password" #用于加密管理员登录时二次验证器密钥的密码
 
+# AI 内容审查配置
+AI_MODERATION:
+  API_KEY: "YOUR_API_KEY" # AI审核模型API密钥
+  BASE_URL: "YOUR_BASE_URL" # AI审核模型base url
+  MODEL: "MODEL" # AI审核模型路径，可以使用deepseek等国内小型模型
+  SYSTEM_PROMPT: >
+    你是一个内容审查助手。请分析用户提交的内容是否包含暴力、色情、政治敏感或人身攻击。
+    如果内容违规，请只返回 "True"；
+    如果内容安全，请只返回 "False"。
+    不要返回任何其他文字。
+
 ```
 
 2. **启动应用**
