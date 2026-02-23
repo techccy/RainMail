@@ -22,6 +22,8 @@ import json
 import qrcode
 from PIL import Image
 
+app = Flask(__name__)
+
 def load_sensitive_words_from_csv(file_path):
     """
     从 all.csv 文件中加载标记为敏感词 (_sensitivewords=1) 的词到集合中
@@ -673,6 +675,10 @@ def weather_meta():
         'next_refresh_in_seconds': int(remaining),
         'current_state': current_weather_state  # 'rainy' or 'sunny'
     })
+
+@app.route('/privacy-policy')
+def privacy():
+    return render_template('privacy_policy.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5024, debug=False)
