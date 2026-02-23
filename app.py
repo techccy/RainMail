@@ -175,34 +175,16 @@ ASK_TIMES = app.config.get('TIMES', 1800) # 请求频率
 LOCATION_ID = app.config.get('LOCATION_ID', 101280101)  # 广东广州的和风天气位置ID
 SENSITIVE_WORDS_SET = set()
 
-API_HOSTS = [
-    app.config.get('HEFENG_HOST1'),
-    app.config.get('HEFENG_HOST2'),
-]
-API_KEYS = [
-    app.config.get('HEFENG_KEY1'),
-    app.config.get('HEFENG_KEY2'),
-]
+API_HOST1 = app.config.get('HEFENG_HOST1')
+API_HOST2 = app.config.get('HEFENG_HOST2')
+API_KEY1 = app.config.get('HEFENG_KEY1')
+API_KEY2 = app.config.get('HEFENG_KEY2')
 
 if not (API_HOST1 and API_KEY1):
     print("[ERROR] config.yaml 中未找到 HEFENG_HOST1 或 HEFENG_KEY1，天气功能将不可用。")
     API_AVAILABLE = False
 else:
     API_AVAILABLE = True
-
-# API_PAIRS = [(host, key) for host, key in zip(API_HOSTS, API_KEYS) if host and key]
-
-# if not API_PAIRS:
-#     print("[ERROR] 没有找到有效的 HEFENG_HOST 和 HEFENG_KEY 配置对，天气功能将不可用。")
-#     # 可以设置一个标志，或者让 get_weather_status 返回默认值
-#     API_PAIRS_AVAILABLE = False
-# else:
-#     API_PAIRS_AVAILABLE = True
-
-# # 用于追踪当前 API Pair 索引的全局变量
-# _current_api_pair_index = 0
-# # 创建一个锁，确保多线程环境下索引的安全更新
-# _api_pair_lock = threading.Lock()
 
 # 数据库配置
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rainmail.db'
@@ -325,117 +307,68 @@ def get_weather_status():
     if current_time - last_weather_check < weather_cache_time:
         return current_weather_state
 
-    # 注意：这里只是在准备调用 API 前切换，即使上一个没失败
-    if API_PAIRS_AVAILABLE: # 确保有 Pair 可用再切换
-        with _api_pair_lock: # 获取锁以安全地修改共享变量
-            _current_api_pair_index = (_current_api_pair_index + 1) % len(API_PAIRS)
-        print(f"[INFO] 主动切换到下一个 API Pair (当前索引: {_current_api_pair_index})") # 可选的提示信息
-
-    # 检查是否有可用的 API 对
-    if not API_PAIRS_AVAILABLE:
-        print("[WARN] 无可用的 API 配置对，保持上次天气状态。")
+    # 检查是否有可用的 API (仅 API1)
+    if not API_AVAILABLE: # <-- 使用新的标志
+        print("[WARN] 无可用的 API 配置 (API1)，保持上次天气状态。")
         return current_weather_state # 返回上次的状态
 
-    # 尝试使用列表中的每一个 Host-Key 对
-    num_pairs = len(API_PAIRS)
-    attempt_count = 0
-    
-    # 这里 current_pair_index 会是上面主动切换后的值
-    while attempt_count < num_pairs:
-        # 在循环内获取当前 Pair，确保每次迭代都获取最新的索引
-        # (这里其实用上面切换后的 _current_api_pair_index 也可以，但为了健壮性，再取一次)
-        current_pair_index = _current_api_pair_index
-        hefeng_host, api_key = API_PAIRS[current_pair_index]
+    # --- 修改：仅使用 API1 ---
+    try:
+        # 构建正确的 API URL，使用 API1
+        url = f"https://{API_HOST1}/v7/weather/now" # <-- 使用 API1 的 HOST
+        params = {
+            'location': LOCATION_ID,
+            'key': API_KEY1 # <-- 使用 API1 的 KEY
+        }
         
-        try:
-            # 构建正确的 API URL，使用当前对的 host 和 key
-            url = f"https://{hefeng_host}/v7/weather/now"
-            params = {
-                'location': LOCATION_ID, # 使用全局变量 LOCATION_ID
-                'key': api_key
-            }
-            
-            response = requests.get(url, params=params, timeout=10)
-            
-            # --- 重要: 检查响应状态码 ---
-            if response.status_code == 429: # Too Many Requests
-                print(f"[WARN] API Pair {current_pair_index} ({hefeng_host[:20]}.../{api_key[:5]}...) 触发速率限制 (429)，切换到下一个。")
-                # 在处理速率限制错误后，安全地切换到下一个 Pair
-                with _api_pair_lock: # 获取锁
-                    _current_api_pair_index = (_current_api_pair_index + 1) % num_pairs
-                attempt_count += 1
-                continue # 继续尝试下一个 Pair
-            
-            if response.status_code != 200:
-                print(f"[WARN] API Pair {current_pair_index} ({hefeng_host[:20]}.../{api_key[:5]}...) 请求失败，状态码: {response.status_code}")
-                # 即使是其他错误，也切换到下一个 Pair，以增加鲁棒性
-                with _api_pair_lock: # 获取锁
-                    _current_api_pair_index = (_current_api_pair_index + 1) % num_pairs
-                attempt_count += 1
-                continue # 继续尝试下一个 Pair
+        response = requests.get(url, params=params, timeout=10)
+        
+        # --- 重要: 检查响应状态码 ---
+        if response.status_code == 429: # Too Many Requests
+            print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 触发速率限制 (429)，无法获取数据。")
+            # 如果 API1 限流，只能等待下一次缓存过期再试
+            return current_weather_state # 保持上次状态
+        if response.status_code != 200:
+            print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 请求失败，状态码: {response.status_code}")
+            return current_weather_state # 保持上次状态
 
-            data = response.json()
-            
-            # --- 重要: 检查响应体中的错误码 ---
-            if data.get('code') == '401': # Unauthorized, 可能是 Key 无效或 Host-Key 不匹配
-                 print(f"[ERROR] API Pair {current_pair_index} ({hefeng_host[:20]}.../{api_key[:5]}...) 无效 (401 Unauthorized)，或 Host-Key 不匹配。")
-                 # Key 无效或 Host-Key 不匹配，也切换到下一个
-                 with _api_pair_lock: # 获取锁
-                     _current_api_pair_index = (_current_api_pair_index + 1) % num_pairs
-                 attempt_count += 1
-                 continue # 继续尝试下一个 Pair
-            elif data.get('code') != '200': # 其他和风 API 错误
-                 print(f"[WARN] API Pair {current_pair_index} ({hefeng_host[:20]}.../{api_key[:5]}...) 返回错误: {data.get('code', 'Unknown Code')}, Message: {data.get('message', 'No message')}")
-                 # 尝试下一个 Pair
-                 with _api_pair_lock: # 获取锁
-                     _current_api_pair_index = (_current_api_pair_index + 1) % num_pairs
-                 attempt_count += 1
-                 continue # 继续尝试下一个 Pair
+        data = response.json()
+        
+        # --- 重要: 检查响应体中的错误码 ---
+        if data.get('code') == '401': # Unauthorized, 可能是 Key 无效或 Host-Key 不匹配
+            print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 无效 (401 Unauthorized)，或 Host-Key 不匹配。")
+            return current_weather_state # 保持上次状态
+        elif data.get('code') != '200': # 其他和风 API 错误
+            print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 返回错误: {data.get('code', 'Unknown Code')}, Message: {data.get('message', 'No message')}")
+            return current_weather_state # 保持上次状态
 
-            # --- 成功获取数据 ---
-            now_data = data['now']
-            weather_text = now_data.get('text', '')
-            icon_code = now_data.get('icon', '')
+        # --- 成功获取数据 ---
+        now_data = data['now']
+        weather_text = now_data.get('text', '')
+        icon_code = now_data.get('icon', '')
 
-            # 判断是否为雨天：检查文本或图标
-            is_rainy = ('雨' in weather_text) or (icon_code.startswith('3'))
-            current_weather_state = 'rainy' if is_rainy else 'sunny'
-            last_weather_check = current_time
-            last_weather_data = now_data # 更新最后的数据
+        # 判断是否为雨天：检查文本或图标
+        is_rainy = ('雨' in weather_text) or (icon_code.startswith('3'))
+        current_weather_state = 'rainy' if is_rainy else 'sunny'
+        last_weather_check = current_time
+        last_weather_data = now_data # 更新最后的数据
 
-            print(f"广州天气更新 (来自 Pair {current_pair_index}): {weather_text} (图标: {icon_code}), 状态: {current_weather_state}")
-            
-            return current_weather_state # 返回状态
+        print(f"广州天气更新 (来自 API1): {weather_text} (图标: {icon_code}), 状态: {current_weather_state}")
+        
+        return current_weather_state # 返回状态
 
-        except requests.exceptions.Timeout:
-            print(f"[WARN] API Pair {current_pair_index} ({hefeng_host[:20]}.../{api_key[:5]}...) 请求超时，切换到下一个。")
-            with _api_pair_lock: # 获取锁
-                _current_api_pair_index = (_current_api_pair_index + 1) % num_pairs
-            attempt_count += 1
-            continue # 继续尝试下一个 Pair
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] API Pair {current_pair_index} ({hefeng_host[:20]}.../{api_key[:5]}...) 请求异常: {str(e)}，切换到下一个。")
-            with _api_pair_lock: # 获取锁
-                _current_api_pair_index = (_current_api_pair_index + 1) % num_pairs
-            attempt_count += 1
-            continue # 继续尝试下一个 Pair
-        except ValueError: # JSON decode error
-            print(f"[ERROR] API Pair {current_pair_index} ({hefeng_host[:20]}.../{api_key[:5]}...) 返回非 JSON 格式，切换到下一个。")
-            with _api_pair_lock: # 获取锁
-                _current_api_pair_index = (_current_api_pair_index + 1) % num_pairs
-            attempt_count += 1
-            continue # 继续尝试下一个 Pair
-        except KeyError as e: # 如果 data['now'] 不存在
-            print(f"[ERROR] API Pair {current_pair_index} ({hefeng_host[:20]}.../{api_key[:5]}...) 响应格式错误，缺少字段: {e}，切换到下一个。")
-            with _api_pair_lock: # 获取锁
-                _current_api_pair_index = (_current_api_pair_index + 1) % num_pairs
-            attempt_count += 1
-            continue # 继续尝试下一个 Pair
-
-    # 如果所有 Pairs 都尝试过了，都失败了
-    print("[CRITICAL] 所有 API Pairs 均尝试失败，无法获取天气状态，保持上次状态。")
-    # 保持上一次的有效状态
-    return current_weather_state
+    except requests.exceptions.Timeout:
+        print(f"[WARN] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 请求超时。")
+        return current_weather_state # 保持上次状态
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 请求异常: {str(e)}")
+        return current_weather_state # 保持上次状态
+    except ValueError: # JSON decode error
+        print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 返回非 JSON 格式。")
+        return current_weather_state # 保持上次状态
+    except KeyError as e: # 如果 data['now'] 不存在
+        print(f"[ERROR] API1 ({API_HOST1[:20]}.../{API_KEY1[:5]}...) 响应格式错误，缺少字段: {e}")
+        return current_weather_state # 保持上次状态
 
 def get_dashboard_data():
     """获取仪表盘数据"""
