@@ -679,5 +679,9 @@ def weather_meta():
 def privacy():
     return render_template('privacy_policy.html')
 
+@app.route('/privacy-policy-cn')
+def privacy():
+    return render_template('privacy_policy_cn.html')
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5024, debug=False)
