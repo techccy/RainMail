@@ -171,7 +171,7 @@ else:
 app.secret_key = 'rainmail_secret_key_2024'
 TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
 TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
-ASK_TIMES = app.config.get('TIMES', 40) # 请求频率
+ASK_TIMES = app.config.get('TIMES', 1800) # 请求频率
 LOCATION_ID = app.config.get('LOCATION_ID', 101280101)  # 广东广州的和风天气位置ID
 SENSITIVE_WORDS_SET = set()
 
@@ -184,19 +184,25 @@ API_KEYS = [
     app.config.get('HEFENG_KEY2'),
 ]
 
-API_PAIRS = [(host, key) for host, key in zip(API_HOSTS, API_KEYS) if host and key]
-
-if not API_PAIRS:
-    print("[ERROR] 没有找到有效的 HEFENG_HOST 和 HEFENG_KEY 配置对，天气功能将不可用。")
-    # 可以设置一个标志，或者让 get_weather_status 返回默认值
-    API_PAIRS_AVAILABLE = False
+if not (API_HOST1 and API_KEY1):
+    print("[ERROR] config.yaml 中未找到 HEFENG_HOST1 或 HEFENG_KEY1，天气功能将不可用。")
+    API_AVAILABLE = False
 else:
-    API_PAIRS_AVAILABLE = True
+    API_AVAILABLE = True
 
-# 用于追踪当前 API Pair 索引的全局变量
-_current_api_pair_index = 0
-# 创建一个锁，确保多线程环境下索引的安全更新
-_api_pair_lock = threading.Lock()
+# API_PAIRS = [(host, key) for host, key in zip(API_HOSTS, API_KEYS) if host and key]
+
+# if not API_PAIRS:
+#     print("[ERROR] 没有找到有效的 HEFENG_HOST 和 HEFENG_KEY 配置对，天气功能将不可用。")
+#     # 可以设置一个标志，或者让 get_weather_status 返回默认值
+#     API_PAIRS_AVAILABLE = False
+# else:
+#     API_PAIRS_AVAILABLE = True
+
+# # 用于追踪当前 API Pair 索引的全局变量
+# _current_api_pair_index = 0
+# # 创建一个锁，确保多线程环境下索引的安全更新
+# _api_pair_lock = threading.Lock()
 
 # 数据库配置
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rainmail.db'
