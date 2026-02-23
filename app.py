@@ -457,7 +457,8 @@ def get_weather_forecast_7d():
 def get_dashboard_data():
     """获取仪表盘数据"""
     weather_status = get_weather_status()
-    
+    update_rain_prediction()
+
     # 获取降雨概率
     precip_prob = last_weather_data.get('precip', '0') if last_weather_data else '0'
     
@@ -471,7 +472,8 @@ def get_dashboard_data():
         'weather_status': weather_status,
         'precip_prob': precip_prob,
         'cpu_temp': round(cpu_temp, 1),
-        'message_count': message_count
+        'message_count': message_count,
+        'next_rain_prediction': next_rain_prediction
     }
 def update_rain_prediction():
     """更新下次降雨预测"""
