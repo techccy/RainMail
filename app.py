@@ -147,14 +147,46 @@ def initialize_totp_secret():
     
     return new_secret
 
-def is_sensitive(message):
-    """检查消息是否包含敏感词，并返回命中的第一个敏感词"""
-    # 遍历敏感词集合，检查消息是否包含任何一个词
-    for word in SENSITIVE_WORDS_SET:
-        # 使用 'in' 操作符进行子串匹配
-        if word in message:
-            return word # 返回命中的敏感词
-    return None # 如果没有命中任何词，返回 None
+def ai_moderation_check(content):
+    """
+    通过 AI 模型判断内容是否违规
+    """
+    ai_config = app.config.get('AI_MODERATION')
+    if not ai_config or not ai_config.get('API_KEY'):
+        app.logger.warning("AI 审计配置缺失，跳过 AI 检查。")
+        return False # 默认放行
+
+    payload = {
+        "model": ai_config.get('MODEL', 'deepseek-chat'),
+        "messages": [
+            {"role": "system", "content": ai_config.get('SYSTEM_PROMPT')},
+            {"role": "user", "content": content}
+        ],
+        "temperature": 0.0 # 设为 0 保证输出稳定
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {ai_config.get('API_KEY')}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.post(
+            f"{ai_config.get('BASE_URL')}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+        res_data = response.json()
+        # 获取模型返回的文本，并转换为布尔值
+        result_text = res_data['choices'][0]['message']['content'].strip()
+        
+        app.logger.info(f"AI 审计结果: [{result_text}] 针对内容: {content[:20]}...")
+        
+        return "True" in result_text
+    except Exception as e:
+        app.logger.error(f"AI 审计请求失败: {e}")
+        return False # 如果接口挂了，建议默认放行，避免业务中断
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -446,12 +478,9 @@ def handle_messages():
             if not validate_turnstile(turnstile_token, user_ip):
                 return jsonify({"error": "人机验证失败，请刷新网页"}), 400
 
-            # --- 修改: 调用 is_sensitive 函数并获取命中的词 ---
-            hit_word = is_sensitive(content) # 接收命中的词
-            if hit_word: # 如果命中，hit_word 不为 None
-                app.logger.warning(f"API 敏感词拦截: 内容: {content[:50]}..., 触发规则: [{hit_word}]") # 记录日志，显示命中的词
-                # 返回模糊错误信息，避免暴露具体规则
-                return jsonify({"error": "内容包含不合适的词汇，已被系统拦截。", "blocked": True}), 400
+            if ai_moderation_check(content):
+              app.logger.warning(f"AI 语义拦截: {content}")
+              return jsonify({"error": "内容未通过系统安全审查", "blocked": True}), 400
 
             # 过滤XSS
             content = sanitize_input(content)
