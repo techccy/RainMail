@@ -297,6 +297,7 @@ class RainMailApp {
         document.getElementById('card-weather-status').textContent = 
             shareData.weather_status === 'rainy' ? '雨天模式' : '晴天模式';
         document.getElementById('card-total-messages').textContent = shareData.total_messages;
+        document.getElementById('card-unique-id').textContent = shareData.unique_identifier || 'N/A';
 
         // 生成二维码
         this.generateQRCode(shareData.message_id);

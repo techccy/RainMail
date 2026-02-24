@@ -21,6 +21,8 @@ import base64
 import json
 import qrcode
 from PIL import Image
+import random
+import string
 
 # --- 添加：用于防止并发请求天气API的锁 ---
 weather_request_lock = threading.Lock()
@@ -247,6 +249,7 @@ class Message(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     location = db.Column(db.String(50), default='广州')
+    unique_identifier = db.Column(db.String(8), nullable=True)
 
     def to_dict(self):
         return {
@@ -291,6 +294,11 @@ def sanitize_input(text):
     text = text.replace('"', '"').replace("'", '&#39;')
     text = text.replace('<', '<').replace('>', '>')
     return text.strip()
+
+def generate_unique_id(length=8):
+    """生成指定长度的随机大写字母和数字组合"""
+    characters = string.ascii_uppercase + string.digits # 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    return ''.join(random.choices(characters, k=length))
 
 def validate_turnstile(turnstile_response, user_ip):
     """
@@ -500,6 +508,8 @@ def handle_messages():
             
             # 创建新消息
             message = Message(content=content)
+            message.unique_identifier = generate_unique_id()
+            message.unique_identifier = generate_unique_id() # 生成8位ID并赋值
             db.session.add(message)
             db.session.commit()
             
@@ -509,7 +519,9 @@ def handle_messages():
                 'message_id': message.id,
                 'total_messages': message_count,
                 'created_at': message.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'weather_status': weather_status
+                'weather_status': weather_status,
+                'unique_identifier': message.unique_identifier # 将 ID 包含在 share_data 中
+
             }
             
             return jsonify({
