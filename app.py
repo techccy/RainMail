@@ -680,7 +680,7 @@ def privacy():
     return render_template('privacy_policy.html')
 
 @app.route('/privacy-policy-cn')
-def privacy():
+def privacycn():
     return render_template('privacy_policy_cn.html')
 
 if __name__ == '__main__':
