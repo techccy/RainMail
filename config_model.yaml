@@ -1,7 +1,9 @@
 HEFENG_HOST1: "a"  # 替换为你的和风天气API主机地址1，设计为两个轮换使用，若只有一个可以填相同的
-HEFENG_HOST2: "b"  # 替换为你的和风天气API主机地址2
+# HEFENG_HOST2: "b"  # 替换为你的和风天气API主机地址2（如果有的话，取消注释）
+# 如果还有可以使用的API主机地址，可以继续添加 HEFENG_HOST3, HEFENG_HOST4 等
 HEFENG_KEY1: "APIKEY1" # 替换为你的和风天气API密钥1，设计为两个轮换使用，若只有一个可以填相同的
-HEFENG_KEY2: "APIKEY2" # 替换为你的和风天气API密钥2
+# HEFENG_KEY2: "APIKEY2" # 替换为你的和风天气API密钥2（如果有的话，取消注释）
+# 如果还有可以使用的API密钥，可以继续添加 HEFENG_KEY3, HEFENG_KEY4 等
 times: 60 # 请求频率，单位为秒，和风天气免费API额度每分钟请求一次刚刚好
 TURNSTILE_SECRET_KEY: "0x"  # 替换为你的 Cloudflare Turnstile Secret Key
 TURNSTILE_SITE_KEY: "0x" # 替换成你自己的 Site Key
