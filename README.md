@@ -122,6 +122,7 @@ RainMail/
     ├── admin_dashboard.html # 管理员面板
     ├── admin_login.html     # 管理员登录页
     └── privacy_policy.html  # 隐私条款
+    
 ```
 
 ## 外网访问
