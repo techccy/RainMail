@@ -390,7 +390,6 @@ class RainMailApp {
                             }
                             img { 
                                 max-width: 100%; 
-                                /* 修复点：auto极狐 -> auto; */
                                 height: auto; 
                                 border-radius: 10px; 
                                 box-shadow: 0 4px 20px rgba(0,0,0,0.3);

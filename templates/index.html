@@ -21,7 +21,7 @@
         <div id="weather-meta" style="text-align: center; margin: 11px 0; font-size: 15px; color: #555;">
         📍 <span id="weather-location">加载中...</span> | 
         🌦️ <span id="weather-text">--</span> |
-        🕒 <span id="next-refresh">--</span> 秒后刷新
+        🕒 <span id="next-refresh">--</span> 分钟后刷新
         </div>
 
         <!-- 晴天界面 -->
@@ -165,7 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 如果元素存在，才执行
     if (locationElem && textElem && refreshElem) {
         fetchWeatherMeta();
-        setInterval(fetchWeatherMeta, 1000); // 每秒更新倒计时
+        setInterval(fetchWeatherMeta, 10000); // 每10秒更新一次
     }
 });
 
@@ -178,7 +178,7 @@ function fetchWeatherMeta() {
             // 更新 DOM
             document.getElementById('weather-location').textContent = data.location;
             document.getElementById('weather-text').textContent = data.weather_text;
-            document.getElementById('next-refresh').textContent = data.next_refresh_in_seconds;
+            document.getElementById('next-refresh').textContent = data.next_refresh_in_minutes; // 显示分钟数
 
             // 记录上次成功获取时间（用于调试）
             lastRefreshTime = new Date();

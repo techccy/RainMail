@@ -2,11 +2,11 @@
 
 体验项目--->https://dropbox.techccy.dpdns.org
 
-一个基于天气状态的匿名社交树洞应用，当广州城市下雨时解锁所有秘密。
+一个基于天气状态的匿名社交树洞应用，当**访问者**城市下雨时解锁所有秘密。
 
 ## 特性
 
-- **天气感应**：自动检测实时天气状态
+- **天气感应**：自动检测对应城市天气状态
 - **状态切换**：晴天只能投递，雨天可以查看所有秘密
 - **毛玻璃设计**：赛博禅意风格的现代化UI
 - **安全匿名**：XSS防护和内容过滤
@@ -38,7 +38,7 @@
 
 ### 基础配置
 
-复制并修改 `config.yaml` 文件：
+复制模板并修改 `config.yaml` 文件：
 
 ```bash
 cp config_model.yaml config.yaml
@@ -97,35 +97,37 @@ docker run -p 5024:5024 rainmail
 ```
 RainMail/
 ├── .gitignore
-├── Dockerfile               # Docker部署
-├── LICENSE                  # 许可证文件
-├── README.md                # 项目简介
-├── app.py                   # Flask主应用文件，包含核心逻辑、路由和天气API轮换
-├── config_model.yaml        # 配置文件模板，存放API Key、检查间隔等
-├── install.sh               # 安装脚本
+├── Dockerfile                 # Docker部署
+├── LICENSE                    # 许可证文件
+├── README.md                  # 项目简介
+├── app.py                     # Flask主应用文件，包含核心逻辑、路由和天气API轮换
+├── config_model.yaml          # 配置文件模板，存放API Key、检查间隔等
+├── install.sh                 # 安装脚本
 ├── logo.png
-├── requirements.txt         # Python依赖列表
-├── run.py                   # 启动脚本，负责检查依赖、初始化数据库并启动Flask应用和后台任务
-├── test_app.py              # 功能测试文件
+├── requirements.txt           # Python依赖列表
+├── run.py                     # 启动脚本，负责检查依赖、初始化数据库并启动Flask应用和后台任务
+├── test_app.py                # 功能测试文件
 ├── url.jpg
-├── instance/                # 用于存放数据库
-│   └── rainmail.db
-├── resources/               # 用于存放静态资源或配置模板
-│   └── all.csv              # 敏感词库
-├── static/                  # 存放前端静态资源
+├── instance/                  # 用于存放数据库
+│   └── rainmail.db            # 程序的数据库
+├── resources/                 # 用于存放静态资源或配置模板
+│   └── all.csv                # 敏感词库
+├── static/                    # 存放前端静态资源
 │   ├── css/
-│   │   └── style.css        # 样式表文件
+│   │   └── style.css          # 样式表文件
 │   └── js/
-│       └── app.js           # 前端JavaScript逻辑，处理UI切换、倒计时、消息提交等
-└── templates/               # 存放HTML模板
-    ├── index.html           # 主页模板
-    ├── admin_dashboard.html # 管理员面板
-    ├── admin_login.html     # 管理员登录页
-    └── privacy_policy.html  # 隐私条款
+│       ├── app.js             # 前端JavaScript逻辑，处理UI切换、倒计时、消息提交等
+|       ├── html2canvas.min.js # 截图用js
+|       └── qrcode.min.js      # 生成二维码用js
+└── templates/                 # 存放HTML模板
+    ├── index.html             # 主页模板
+    ├── admin_dashboard.html   # 管理员面板
+    ├── admin_login.html       # 管理员登录页
+    └── privacy_policy.html    # 隐私条款
     
 ```
 
-## 外网访问
+## 公网访问
 
 ### 使用 Cloudflare Tunnel
 

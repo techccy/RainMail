@@ -24,7 +24,7 @@ from PIL import Image
 import random
 import string
 
-# --- 添加：用于防止并发请求天气API的锁 ---
+# 用于防止并发请求天气API的锁
 weather_request_lock = threading.Lock()
 # 临时存储正在进行的天气请求的结果
 pending_weather_result = None
@@ -54,6 +54,7 @@ ASK_TIMES = app.config.get('TIMES', 3600) # 请求频率, 统一为1小时 (3600
 LOCATION_ID = app.config.get('LOCATION_ID', 101280101)  # 广东广州的和风天气位置ID
 LOCATION_NAME = app.config.get('LOCATION_NAME', '广州') # 服务器所在位置名称
 SENSITIVE_WORDS_SET = set()
+IPINFO_TOKEN = app.config.get('IPINFO_TOKEN') # ipinfo.io 访问令牌
 
 # --- 修改：动态加载多组API配置 ---
 API_PAIRS = []
@@ -215,7 +216,7 @@ def ai_moderation_check(content):
             {"role": "user", "content": content}
         ],
         "temperature": 0.0,
-        "max_tokens": 600 # 稍微给一点空间让它输出结果
+        "max_tokens": 800 # 稍微给一点空间让它输出结果
     }
 
     try:
@@ -280,6 +281,14 @@ class LocationWeatherCache(db.Model):
     last_updated = db.Column(db.DateTime, default=datetime.now) # 上次更新时间
     last_used_api_index = db.Column(db.Integer, default=0) # 记录上次使用的API索引
 
+# --- 新增：IP位置缓存模型 ---
+class IPLocationCache(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ip_address = db.Column(db.String(45), nullable=False, unique=True) # IPv4: 15 chars, IPv6: up to 39 chars, + buffer
+    city = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
 # 初始化数据库
 with app.app_context():
     db.create_all()
@@ -326,17 +335,83 @@ def get_client_ip():
     return ip
 
 def get_city_by_ip(ip_address):
-    try:
-        response = requests.get(f"http://ip-api.com/json/{ip_address}?fields=status,message,country,regionName,city")
-        data = response.json()
-        if data.get('status') == 'success':
-            return data.get('city') or data.get('regionName') or data.get('country', 'Unknown')
+    """
+    根据 IP 地址获取城市名，优先从数据库缓存获取。
+    """
+    cache_entry = IPLocationCache.query.filter_by(ip_address=ip_address).first()
+
+    # 定义缓存过期时间（例如，1个月 = 30天 * 24小时 * 3600秒）
+    cache_expiry_seconds = 30 * 24 * 3600
+
+    if cache_entry:
+        # 检查缓存是否过期
+        time_diff = (datetime.now() - cache_entry.updated_at).total_seconds()
+        if time_diff < cache_expiry_seconds:
+            print(f"[INFO] Resolved {ip_address} to '{cache_entry.city}' from cache.")
+            return cache_entry.city
         else:
-            app.logger.warning(f"IP API failed for {ip_address}: {data.get('message', 'Unknown error')}")
-            return '广州' # 默认返回广州
+            print(f"[INFO] Cache for {ip_address} is expired, fetching fresh data...")
+
+    # 缓存未命中或已过期，调用 API 查询
+    try:
+        print(f"[DEBUG] Attempting to get city for {ip_address} using ip-api.com")
+        # 使用 HTTPS，并确保参数正确
+        response = requests.get(
+            f"http://ip-api.com/json/{ip_address}",
+            params={'fields': 'status,message,country,regionName,city'},
+            timeout=10
+        )
+        data = response.json()
+
+        if data.get('status') == 'success':
+            # 优先返回 city，其次 regionName，最后 country
+            city = data.get('city')
+            region = data.get('regionName')
+            country = data.get('country')
+
+            if city and city.lower() != 'unknown':
+                result = city
+            elif region and region.lower() != 'unknown':
+                result = region
+            elif country and country.lower() != 'unknown':
+                result = country
+            else:
+                result = 'Unknown'
+
+            print(f"[INFO] Resolved {ip_address} to '{result}' via ip-api.com")
+
+            # 更新或创建缓存记录
+            if cache_entry:
+                cache_entry.city = result
+                cache_entry.updated_at = datetime.now()
+            else:
+                cache_entry = IPLocationCache(ip_address=ip_address, city=result)
+            db.session.add(cache_entry)
+            db.session.commit() # 提交数据库更改
+
+            return result
+        else:
+            # 如果 ip-api.com 失败，记录日志
+            app.logger.warning(f"ip-api.com failed for {ip_address}: {data.get('message', 'Unknown error')}")
+            # 可以选择返回默认值，或者尝试其他 API（如果已集成）
+            # 这里先返回默认值 '广州'
+            default_city = app.config.get('LOCATION_NAME', '广州')
+            print(f"[INFO] Falling back to default city: {default_city} for {ip_address} after API failure.")
+            # 即使 API 失败，也可以选择性地缓存失败结果（例如，缓存为 'Unknown' 或特定标记），
+            # 以避免立即重试。这里为了简单，不缓存失败结果，每次都尝试。
+            # 如果要缓存失败结果，可以创建一个新记录或更新现有记录为 'Unknown' 等。
+            # 例如： cache_entry.city = 'Unknown'
+            # 但需要一个机制区分是 API 临时失败还是 IP 确实未知。
+            # 这里我们只缓存成功的查询结果。
+            return default_city
+
     except Exception as e:
-        app.logger.error(f"Error getting city for IP {ip_address}: {e}")
-        return '广州' # 出错也返回默认城市
+        app.logger.error(f"Error getting city for IP {ip_address} using ip-api.com: {e}")
+        # 同样，返回默认值
+        default_city = app.config.get('LOCATION_NAME', '广州')
+        print(f"[INFO] Error resolving {ip_address}, falling back to default city: {default_city}")
+        # 不缓存错误结果
+        return default_city
 
 def generate_unique_id(length=8):
     """生成指定长度的随机大写字母和数字组合"""
@@ -399,7 +474,7 @@ def get_weather_status(city='广州'): # 默认为广州
     # 检查缓存
     cache_entry = LocationWeatherCache.query.filter_by(city=city).first()
 
-    # 定义一个内部函数来使用 API 更新天气缓存
+        # 定义一个内部函数来使用 API 更新天气缓存
     def update_weather_cache(city_to_update, api_pairs):
         nonlocal cache_entry # 声明使用外层函数的 cache_entry
         num_apis = len(api_pairs)
@@ -473,7 +548,7 @@ def get_weather_status(city='广州'): # 默认为广州
         print(f"[ERROR] All {num_apis} API pairs failed to fetch weather for {city_to_update}.")
         # 返回一个默认值，并保持上次使用的API索引不变
         last_idx = cache_entry.last_used_api_index if cache_entry else 0
-        return 'sunny', '获取失败', '999', last_idx # 返回默认值和上次使用的索引
+        return 'sunny', '获取失败', '999', 'null', last_idx # 返回默认值和上次使用的索引
 
 
     # 检查城市缓存是否需要更新 (1小时)
@@ -764,12 +839,14 @@ def weather_meta():
         last_update_time = cache_entry.last_updated.timestamp()
         elapsed = time.time() - last_update_time
         remaining_for_cache = max(0, ASK_TIMES - elapsed) # 统一缓存时间
+        remaining_for_cache_minutes = int(remaining_for_cache // 60)
 
         return jsonify({
             'location': city,
             'weather_text': cache_entry.weather_text,
             'last_update': datetime.fromtimestamp(last_update_time).strftime('%Y-%m-%d %H:%M:%S'),
             'next_refresh_in_seconds': int(remaining_for_cache), # 实际剩余缓存时间
+            'next_refresh_in_minutes': remaining_for_cache_minutes, # 实际剩余缓存时间 (分钟)
             'next_refresh_desc': f"最快 {ASK_TIMES/3600:.0f} 小时后刷新", # 描述性文字
             'current_state': cache_entry.weather_status,
             'city_specific': True # 标识城市特定
