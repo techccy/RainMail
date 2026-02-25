@@ -256,7 +256,8 @@ class Message(db.Model):
             'id': self.id,
             'content': self.content,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'location': self.location
+            'location': self.location,
+            'unique_identifier': self.unique_identifier
         }
 
 # 初始化数据库

@@ -228,6 +228,7 @@ class RainMailApp {
                 <div class="message-content">${this.escapeHtml(msg.content)}</div>
                 <div class="message-meta">
                     <span>#${msg.id}</span>
+                    <span>UID: ${msg.unique_identifier || 'N/A'}</span>
                     <span>${msg.created_at}</span>
                 </div>
             </div>

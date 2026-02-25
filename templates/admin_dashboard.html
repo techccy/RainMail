@@ -131,6 +131,7 @@
                             <th>ID</th>
                             <th>内容</th>
                             <th>时间</th>
+                            <th>UID</th>
                             <th>操作</th>
                         </tr>
                     </thead>
@@ -140,6 +141,7 @@
                             <td>#{{ message.id }}</td>
                             <td class="message-content" title="{{ message.content }}">{{ message.content }}</td>
                             <td>{{ message.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>{{ message.unique_identifier or 'N/A' }}</td>
                             <td>
                                 <button class="delete-btn" onclick="deleteMessage({{ message.id }})">删除</button>
                             </td>
