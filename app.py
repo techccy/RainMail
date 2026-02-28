@@ -81,32 +81,32 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rainmail.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-def load_sensitive_words_from_csv(file_path):
-    """
-    从 all.csv 文件中加载标记为敏感词 (_sensitivewords=1) 的词到集合中
-    :param file_path: all.csv 文件路径
-    """
-    global SENSITIVE_WORDS_SET
-    try:
-        # Use 'utf-8-sig' to automatically handle the BOM character
-        with open(file_path, 'r', encoding='utf-8-sig') as csvfile:
-            reader = csv.DictReader(csvfile)
-            # With utf-8-sig, the column names should now be clean without BOM
-            words_from_csv = {
-                row['keyword'].strip() # Now this should work correctly
-                for row in reader
-                if row.get('_sensitivewords') == '1' and row.get('keyword', '').strip()
-            }
+# def load_sensitive_words_from_csv(file_path):
+#     """
+#     从 all.csv 文件中加载标记为敏感词 (_sensitivewords=1) 的词到集合中
+#     :param file_path: all.csv 文件路径
+#     """
+#     global SENSITIVE_WORDS_SET
+#     try:
+#         # Use 'utf-8-sig' to automatically handle the BOM character
+#         with open(file_path, 'r', encoding='utf-8-sig') as csvfile:
+#             reader = csv.DictReader(csvfile)
+#             # With utf-8-sig, the column names should now be clean without BOM
+#             words_from_csv = {
+#                 row['keyword'].strip() # Now this should work correctly
+#                 for row in reader
+#                 if row.get('_sensitivewords') == '1' and row.get('keyword', '').strip()
+#             }
 
-        SENSITIVE_WORDS_SET = words_from_csv
-        print(f"成功从 all.csv 加载 {len(SENSITIVE_WORDS_SET)} 个标记为敏感的唯一词语。")
+#         SENSITIVE_WORDS_SET = words_from_csv
+#         print(f"成功从 all.csv 加载 {len(SENSITIVE_WORDS_SET)} 个标记为敏感的唯一词语。")
 
-    except FileNotFoundError:
-        print(f"错误：未找到敏感词 CSV 文件 {file_path}")
-        SENSITIVE_WORDS_SET = set()
-    except KeyError as e:
-        print(f"错误：CSV 文件 {file_path} 中缺少必要的列: {e}")
-        SENSITIVE_WORDS_SET = set()
+#     except FileNotFoundError:
+#         print(f"错误：未找到敏感词 CSV 文件 {file_path}")
+#         SENSITIVE_WORDS_SET = set()
+#     except KeyError as e:
+#         print(f"错误：CSV 文件 {file_path} 中缺少必要的列: {e}")
+#         SENSITIVE_WORDS_SET = set()
 
 def generate_totp_secret():
     """生成一个新的 TOTP 密钥"""
@@ -293,8 +293,8 @@ class IPLocationCache(db.Model):
 with app.app_context():
     db.create_all()
 
-sensitive_words_csv_file = os.path.join(os.path.dirname(__file__), 'resources', 'all.csv')
-load_sensitive_words_from_csv(sensitive_words_csv_file)
+# sensitive_words_csv_file = os.path.join(os.path.dirname(__file__), 'resources', 'all.csv')
+# load_sensitive_words_from_csv(sensitive_words_csv_file)
 
 # 全局变量存储 TOTP 密钥
 ADMIN_TOTP_SECRET = initialize_totp_secret()
