@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📮</text></svg>">
 </head>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 <body class="sunny-mode">
     <div id="weather-background"></div>
     
@@ -36,8 +36,7 @@
                         提交即表示同意我们的<a href="/privacy-policy" target="_blank" style="color: #0d6efd; text-decoration: underline;">隐私条款</a>
                     </div>
                     {% if turnstile_site_key %}
-                        <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
-                        <!-- 在 <div class="cf-turnstile" ... ></div> 之后，<button id="submit-btn"...> 之前添加 -->
+                        <div id="sunny-turnstile" class="cf-turnstile"></div>
                         <input type="hidden" name="cf-token-hidden" id="cf-token-hidden" value="">
                     {% endif %}
                 </div>
@@ -62,9 +61,8 @@
                         提交即表示同意我们的<a href="/privacy-policy" target="_blank" style="color: #0d6efd; text-decoration: underline;">隐私条款</a>
                     </div>
                     {% if turnstile_site_key %}
-                        <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
-                        <!-- 在 <div class="cf-turnstile" ... ></div> 之后，<button id="submit-btn"...> 之前添加 -->
-                        <input type="hidden" name="cf-token-hidden" id="rainy-cf-token-hidden" value="" style="display:none;">
+                        <div id="rainy-turnstile" class="cf-turnstile"></div>
+                        <input type="hidden" name="cf-token-hidden" id="rainy-cf-token-hidden" value="">
                     {% endif %}
                 </div>
                 <button id="rainy-submit-btn" class="primary-btn">投递想法</button>
@@ -116,40 +114,36 @@
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        if (typeof turnstile !== 'undefined') {
-            const containers = document.querySelectorAll('.cf-turnstile');
-            containers.forEach(function(container) {
-                const parentInterface = container.closest('#sunny-interface, #rainy-interface');
-                if (parentInterface) {
-                    const interfaceId = parentInterface.id;
-                    const hiddenInputId = interfaceId === 'sunny-interface' ? 'cf-token-hidden' : 'rainy-cf-token-hidden';
+    // 检查 Turnstile 是否加载完成
+        const checkTurnstile = setInterval(() => {
+            if (typeof turnstile !== 'undefined') {
+                clearInterval(checkTurnstile);
+                renderTurnstileWidgets();
+            }
+        }, 100);
 
-                    turnstile.render(container, {
-                        'sitekey': '{{ turnstile_site_key }}',
-                        'callback': function(token) {
-                            const hiddenInput = document.getElementById(hiddenInputId);
-                            if (hiddenInput) {
-                                hiddenInput.value = token;
-                                console.log(`${interfaceId.replace('-', ' ')} Turnstile passed, token stored.`);
-                            }
-                        },
-                        'expired-callback': function() {
-                            const hiddenInput = document.getElementById(hiddenInputId);
-                            if (hiddenInput) {
-                                hiddenInput.value = '';
-                                console.log(`${interfaceId.replace('-', ' ')} Turnstile expired, token cleared.`);
-                            }
-                        },
-                        'error-callback': function() {
-                            const hiddenInput = document.getElementById(hiddenInputId);
-                            if (hiddenInput) {
-                                hiddenInput.value = '';
-                                console.log(`${interfaceId.replace('-', ' ')} Turnstile error, token cleared.`);
-                            }
-                        }
-                    });
-                }
-            });
+        function renderTurnstileWidgets() {
+            // 1. 处理晴天界面的验证框
+            const sunnyContainer = document.getElementById('sunny-turnstile');
+            if (sunnyContainer) {
+                turnstile.render('#sunny-turnstile', {
+                    sitekey: '{{ turnstile_site_key }}',
+                    callback: function(token) {
+                        document.getElementById('cf-token-hidden').value = token;
+                    }
+                });
+            }
+
+            // 2. 处理雨天界面的验证框
+            const rainyContainer = document.getElementById('rainy-turnstile');
+            if (rainyContainer) {
+                turnstile.render('#rainy-turnstile', {
+                    sitekey: '{{ turnstile_site_key }}',
+                    callback: function(token) {
+                        document.getElementById('rainy-cf-token-hidden').value = token;
+                    }
+                });
+            }
         }
     });
     </script>
