@@ -308,3 +308,99 @@ header h1 {
     #share-card { width: 90%; }
     .modal-actions { width: 90%; }
 }
+
+/* ===== 页脚样式 ===== */
+.site-footer {
+  margin-top: 3rem;
+  padding: 1.5rem 2rem;
+  background-color: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  text-align: center;
+}
+
+.footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* GitHub 图标链接 */
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  color: #24292e;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  padding: 0.5rem;
+  border-radius: 6px;
+}
+
+.github-link:hover {
+  color: #0366d6;
+  background-color: rgba(3, 102, 214, 0.1);
+  transform: translateY(-2px);
+}
+
+.github-icon {
+  width: 26px;
+  height: 26px;
+}
+
+/* 品牌区域（你的 logo + 文字） */
+.brand-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.footer-logo {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+  opacity: 0.95;
+  transition: opacity 0.2s;
+}
+
+.footer-logo:hover {
+  opacity: 1;
+}
+
+.copyright {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #666;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* 暗色模式 */
+@media (prefers-color-scheme: dark) {
+  .site-footer {
+    background-color: #161b22;
+    border-top-color: #30363d;
+  }
+  .github-link { color: #c9d1d9; }
+  .github-link:hover {
+    color: #58a6ff;
+    background-color: rgba(88, 166, 255, 0.15);
+  }
+  .copyright { color: #8b949e; }
+}
+
+/* 移动端 */
+@media (max-width: 600px) {
+  .footer-content {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .brand-section {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}

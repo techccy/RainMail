@@ -103,7 +103,6 @@ RainMail/
 ├── app.py                     # Flask主应用文件，包含核心逻辑、路由和天气API轮换
 ├── config_model.yaml          # 配置文件模板，存放API Key、检查间隔等
 ├── install.sh                 # 安装脚本
-├── logo.png
 ├── requirements.txt           # Python依赖列表
 ├── run.py                     # 启动脚本，负责检查依赖、初始化数据库并启动Flask应用和后台任务
 ├── test_app.py                # 功能测试文件
@@ -113,6 +112,7 @@ RainMail/
 ├── resources/                 # 用于存放静态资源或配置模板
 │   └── all.csv                # 敏感词库
 ├── static/                    # 存放前端静态资源
+│   ├──techccy.png             # 没啥用，我的logo
 │   ├── css/
 │   │   └── style.css          # 样式表文件
 │   └── js/

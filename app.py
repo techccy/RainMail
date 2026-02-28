@@ -871,5 +871,11 @@ def privacy():
 def privacycn():
     return render_template('privacy_policy_cn.html')
 
+@app.context_processor
+def inject_year():
+    """向所有模板注入当前年份"""
+    from datetime import datetime
+    return {'current_year': datetime.now().year}
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5024, debug=False)
