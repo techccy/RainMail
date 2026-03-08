@@ -50,7 +50,7 @@ else:
 app.secret_key = 'rainmail_secret_key_2024'
 TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
 TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
-ASK_TIMES = app.config.get('TIMES', 3600) # 请求频率, 统一为1小时 (3600秒)
+ASK_TIMES = app.config.get('TIMES', 900) # 请求频率 (900秒)
 LOCATION_ID = app.config.get('LOCATION_ID', 101280101)  # 广东广州的和风天气位置ID
 LOCATION_NAME = app.config.get('LOCATION_NAME', '广州') # 服务器所在位置名称
 SENSITIVE_WORDS_SET = set()
