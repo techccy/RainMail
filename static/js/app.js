@@ -2,6 +2,7 @@ class RainMailApp {
     constructor() {
         this.currentWeather = 'sunny';
         this.weatherCheckInterval = null;
+        this.captchaProvider = 'cloudflare'; // 默认验证提供商
         this.init();
     }
 
@@ -9,6 +10,21 @@ class RainMailApp {
         this.bindEvents();
         this.updateInterface();
         this.startWeatherPolling();
+        this.detectCaptchaProvider();
+    }
+
+    detectCaptchaProvider() {
+        // 检测页面使用的验证提供商
+        const chaContainer = document.querySelector('.cha-container');
+        const turnstileWidget = document.querySelector('.cf-turnstile');
+        
+        if (chaContainer) {
+            this.captchaProvider = 'cha';
+            console.log('Using CHA captcha provider');
+        } else if (turnstileWidget) {
+            this.captchaProvider = 'cloudflare';
+            console.log('Using Cloudflare Turnstile');
+        }
     }
 
     bindEvents() {
@@ -62,41 +78,63 @@ class RainMailApp {
             alert('内容不能超过500字');
             return;
         }
-        this.showProcessingOverlay();
-        // 模拟进度条 (8秒)
-        this.simulateProgress(8000); // 8000毫秒 = 8秒
-        const turnstileWidget = document.querySelector('.cf-turnstile iframe[src*="challenges.cloudflare.com"]'); // 更精确地选择 Widget iframe
-        let cfToken = '';
-        if (turnstileWidget && typeof turnstile !== 'undefined' && turnstile.getResponse) {
-            // 如果 Turnstile JS SDK 可用，使用其 API
-            cfToken = turnstile.getResponse(turnstileWidget.closest('.cf-turnstile').id); // 如果 Widget 有 ID
-            if (!cfToken) { // 如果没有 ID 或者没找到，尝试获取第一个 Widget 的响应
-                cfToken = turnstile.getResponse(); // 获取第一个 Widget 的响应
+
+        // 根据验证提供商获取验证响应
+        let captchaResponse = '';
+        
+        if (this.captchaProvider === 'cloudflare') {
+            const turnstileWidget = document.querySelector('.cf-turnstile iframe[src*="challenges.cloudflare.com"]');
+            let cfToken = '';
+            if (turnstileWidget && typeof turnstile !== 'undefined' && turnstile.getResponse) {
+                cfToken = turnstile.getResponse(turnstileWidget.closest('.cf-turnstile').id);
+                if (!cfToken) {
+                    cfToken = turnstile.getResponse();
+                }
+            } else {
+                const hiddenInput = document.querySelector('input[name="cf-turnstile-response"]');
+                cfToken = hiddenInput ? hiddenInput.value : '';
             }
-        } else {
-            // 如果 SDK 不可用，尝试从隐藏的 input 获取 (这是 Cloudflare 的标准做法)
-            const hiddenInput = document.querySelector('input[name="cf-turnstile-response"]');
-            cfToken = hiddenInput ? hiddenInput.value : '';
+            captchaResponse = cfToken;
+
+            if (!captchaResponse) {
+                alert('请先完成人机验证');
+                return;
+            }
+        } else if (this.captchaProvider === 'cha') {
+            const chaAnswerInput = inputId === 'message-input' ? 
+                document.getElementById('sunny-cha-answer') : 
+                document.getElementById('rainy-cha-answer');
+            captchaResponse = chaAnswerInput ? chaAnswerInput.value.trim() : '';
+
+            if (!captchaResponse) {
+                alert('请先完成人机验证');
+                return;
+            }
         }
 
-        if (!cfToken) {
-            this.hideProcessingOverlay();
-            clearInterval(this.progressIntervalId);
-            alert('请先完成人机验证');
-            return;
-        }
+        this.showProcessingOverlay();
+        this.simulateProgress(8000); // 8000毫秒 = 8秒
 
         try {
+            const requestBody = {
+                content: content,
+            };
+
+            // 根据验证提供商添加不同的字段
+            if (this.captchaProvider === 'cloudflare') {
+                requestBody.cf_token = captchaResponse;
+            } else if (this.captchaProvider === 'cha') {
+                requestBody.cha_answer = captchaResponse;
+            }
+
             const response = await fetch('/api/messages', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    content: content,
-                    cf_token: cfToken // <-- 添加 cf_token 到 JSON body
-                })
+                body: JSON.stringify(requestBody)
             });
+            
             clearInterval(this.progressIntervalId);
             this.hideProcessingOverlay();
             const data = await response.json();
@@ -110,6 +148,18 @@ class RainMailApp {
                 if (this.currentWeather === 'rainy') {
                     this.loadMessages();
                 }
+                
+                // 如果使用 CHA，重新加载验证问题
+                if (this.captchaProvider === 'cha') {
+                    await this.loadCHAPuzzle(inputId === 'message-input' ? 'sunny-cha-question' : 'rainy-cha-question');
+                    // 清空答案输入框
+                    const chaAnswerInput = inputId === 'message-input' ? 
+                        document.getElementById('sunny-cha-answer') : 
+                        document.getElementById('rainy-cha-answer');
+                    if (chaAnswerInput) {
+                        chaAnswerInput.value = '';
+                    }
+                }
             } else {
                 alert(data.error || '提交失败');
                 clearInterval(this.progressIntervalId);
@@ -118,6 +168,21 @@ class RainMailApp {
         } catch (error) {
             console.error('提交错误:', error);
             alert('网络错误，请重试');
+            clearInterval(this.progressIntervalId);
+            this.hideProcessingOverlay();
+        }
+    }
+
+    async loadCHAPuzzle(questionElementId) {
+        try {
+            const response = await fetch('/api/cha/question');
+            const data = await response.json();
+            const questionElement = document.getElementById(questionElementId);
+            if (questionElement) {
+                questionElement.textContent = data.question;
+            }
+        } catch (error) {
+            console.error('Failed to load CHA puzzle:', error);
         }
     }
     // --- 新增：显示处理中界面 ---

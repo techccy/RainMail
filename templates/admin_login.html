@@ -69,14 +69,22 @@
                 <input type="text" id="totp_code" name="totp_code" maxlength="6" placeholder="输入6位验证码" required>
             </div>
             <!-- End of TOTP Input -->
-            {% if turnstile_site_key %}
+            {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
             <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
+            {% elif captcha_provider == 'cha' %}
+            <div class="cha-container form-group">
+                <label for="cha_answer">人机验证</label>
+                <div id="cha-question" style="background-color: #f0f8ff; padding: 10px; border-radius: 5px; margin-bottom: 10px; font-weight: bold;">{{ cha_question }}</div>
+                <input type="text" id="cha_answer" name="cha_answer" placeholder="请输入答案" required>
+            </div>
             {% endif %}
             <button type="submit" class="primary-btn" style="width: 100%">登录</button>
         </form>
     </div>
 
+    {% if captcha_provider == 'cloudflare' %}
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    {% endif %}
 
 </body>
 </html>

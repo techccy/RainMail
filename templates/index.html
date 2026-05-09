@@ -35,9 +35,14 @@
                     <div class="privacy-statement" style="margin: 10px 0; font-size: 0.9rem; color: #666; text-align: left;">
                         提交即表示同意我们的<a href="/privacy-policy" target="_blank" style="color: #0d6efd; text-decoration: underline;">隐私条款</a>
                     </div>
-                    {% if turnstile_site_key %}
+                    {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
                         <div id="sunny-turnstile" class="cf-turnstile"></div>
                         <input type="hidden" name="cf-token-hidden" id="cf-token-hidden" value="">
+                    {% elif captcha_provider == 'cha' %}
+                        <div id="sunny-cha-container" class="cha-container">
+                            <div class="cha-question" id="sunny-cha-question">加载中...</div>
+                            <input type="text" id="sunny-cha-answer" placeholder="请输入答案" required>
+                        </div>
                     {% endif %}
                 </div>
                 <button id="submit-btn" class="primary-btn">投递想法</button>
@@ -60,9 +65,14 @@
                     <div class="privacy-statement" style="margin: 10px 0; font-size: 0.9rem; color: #666; text-align: left;">
                         提交即表示同意我们的<a href="/privacy-policy" target="_blank" style="color: #0d6efd; text-decoration: underline;">隐私条款</a>
                     </div>
-                    {% if turnstile_site_key %}
+                    {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
                         <div id="rainy-turnstile" class="cf-turnstile"></div>
                         <input type="hidden" name="cf-token-hidden" id="rainy-cf-token-hidden" value="">
+                    {% elif captcha_provider == 'cha' %}
+                        <div id="rainy-cha-container" class="cha-container">
+                            <div class="cha-question" id="rainy-cha-question">加载中...</div>
+                            <input type="text" id="rainy-cha-answer" placeholder="请输入答案" required>
+                        </div>
                     {% endif %}
                 </div>
                 <button id="rainy-submit-btn" class="primary-btn">投递想法</button>
@@ -114,35 +124,55 @@
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-    // 检查 Turnstile 是否加载完成
-        const checkTurnstile = setInterval(() => {
-            if (typeof turnstile !== 'undefined') {
-                clearInterval(checkTurnstile);
-                renderTurnstileWidgets();
-            }
-        }, 100);
+        const captchaProvider = '{{ captcha_provider }}';
+        
+        // 根据验证提供商选择不同的处理方式
+        if (captchaProvider === 'cloudflare') {
+            // 检查 Turnstile 是否加载完成
+            const checkTurnstile = setInterval(() => {
+                if (typeof turnstile !== 'undefined') {
+                    clearInterval(checkTurnstile);
+                    renderTurnstileWidgets();
+                }
+            }, 100);
 
-        function renderTurnstileWidgets() {
-            // 1. 处理晴天界面的验证框
-            const sunnyContainer = document.getElementById('sunny-turnstile');
-            if (sunnyContainer) {
-                turnstile.render('#sunny-turnstile', {
-                    sitekey: '{{ turnstile_site_key }}',
-                    callback: function(token) {
-                        document.getElementById('cf-token-hidden').value = token;
-                    }
-                });
-            }
+            function renderTurnstileWidgets() {
+                // 1. 处理晴天界面的验证框
+                const sunnyContainer = document.getElementById('sunny-turnstile');
+                if (sunnyContainer) {
+                    turnstile.render('#sunny-turnstile', {
+                        sitekey: '{{ turnstile_site_key }}',
+                        callback: function(token) {
+                            document.getElementById('cf-token-hidden').value = token;
+                        }
+                    });
+                }
 
-            // 2. 处理雨天界面的验证框
-            const rainyContainer = document.getElementById('rainy-turnstile');
-            if (rainyContainer) {
-                turnstile.render('#rainy-turnstile', {
-                    sitekey: '{{ turnstile_site_key }}',
-                    callback: function(token) {
-                        document.getElementById('rainy-cf-token-hidden').value = token;
-                    }
-                });
+                // 2. 处理雨天界面的验证框
+                const rainyContainer = document.getElementById('rainy-turnstile');
+                if (rainyContainer) {
+                    turnstile.render('#rainy-turnstile', {
+                        sitekey: '{{ turnstile_site_key }}',
+                        callback: function(token) {
+                            document.getElementById('rainy-cf-token-hidden').value = token;
+                        }
+                    });
+                }
+            }
+        } else if (captchaProvider === 'cha') {
+            // 加载 CHA 验证问题
+            loadCHAPuzzle('sunny-cha-question');
+            loadCHAPuzzle('rainy-cha-question');
+        }
+
+        async function loadCHAPuzzle(questionElementId) {
+            try {
+                const response = await fetch('/api/cha/question');
+                const data = await response.json();
+                document.getElementById(questionElementId).textContent = data.question;
+            } catch (error) {
+                console.error('Failed to load CHA puzzle:', error);
+                document.getElementById(questionElementId).textContent = '加载失败，请刷新页面';
             }
         }
     });

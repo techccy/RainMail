@@ -443,6 +443,64 @@ def validate_turnstile(turnstile_response, user_ip):
         app.logger.error(f"Turnstile 验证响应解析失败: {e}")
         return False
 
+def validate_cha(cha_response, session):
+    """
+    验证 CHA (Custom Human Authentication) 验证码
+    """
+    expected_answer = session.get('cha_answer')
+    timestamp = session.get('cha_timestamp')
+    
+    if not expected_answer or not timestamp:
+        app.logger.error("CHA 验证信息丢失")
+        return False
+    
+    # 检查验证码是否过期 (5分钟)
+    if time.time() - timestamp > 300:
+        app.logger.error("CHA 验证码已过期")
+        return False
+    
+    # 验证答案
+    if str(cha_response) != str(expected_answer):
+        app.logger.error(f"CHA 验证失败: 输入 {cha_response}, 期望 {expected_answer}")
+        return False
+    
+    return True
+
+def generate_cha_question():
+    """
+    生成 CHA 验证问题 (简单的数学运算)
+    """
+    num1 = random.randint(1, 10)
+    num2 = random.randint(1, 10)
+    operators = ['+', '-', '*']
+    operator = random.choice(operators)
+    
+    if operator == '+':
+        answer = num1 + num2
+        question = f"{num1} + {num2} = ?"
+    elif operator == '-':
+        answer = num1 - num2
+        question = f"{num1} - {num2} = ?"
+    else:  # '*'
+        answer = num1 * num2
+        question = f"{num1} × {num2} = ?"
+    
+    return question, answer
+
+def validate_captcha(captcha_response, user_ip=None, session=None):
+    """
+    统一的验证函数，根据配置选择验证方式
+    """
+    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+    
+    if captcha_provider == 'cloudflare':
+        return validate_turnstile(captcha_response, user_ip)
+    elif captcha_provider == 'cha':
+        return validate_cha(captcha_response, session)
+    else:
+        app.logger.error(f"未知的验证提供商: {captcha_provider}")
+        return False
+
 def get_cpu_temperature():
     """获取CPU温度（macOS）"""
     try:
@@ -629,8 +687,11 @@ def index():
     client_ip = get_client_ip()
     city = get_city_by_ip(client_ip)
     dashboard_data = get_dashboard_data(city) # 传递城市
-    site_key = app.config.get('TURNSTILE_SITE_KEY', '')
-    return render_template('index.html', **dashboard_data, turnstile_site_key=site_key)
+    
+    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+    site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+    
+    return render_template('index.html', **dashboard_data, turnstile_site_key=site_key, captcha_provider=captcha_provider)
 
 @app.route('/api/messages', methods=['GET', 'POST'])
 def handle_messages():
@@ -641,13 +702,14 @@ def handle_messages():
             if not content:
                 return jsonify({'error': '内容不能为空'}), 400
 
-            turnstile_token = request.json.get('cf_token') # 注意这里的字段名要与前端一致
+            captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+            captcha_response = request.json.get('cf_token') if captcha_provider == 'cloudflare' else request.json.get('cha_answer')
             user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
 
-            if not turnstile_token:
+            if not captcha_response:
                 return jsonify({"error": "请完成人机验证"}), 400
 
-            if not validate_turnstile(turnstile_token, user_ip):
+            if not validate_captcha(captcha_response, user_ip, session):
                 return jsonify({"error": "人机验证失败，请刷新网页"}), 400
 
             if ai_moderation_check(content):
@@ -714,26 +776,47 @@ def health_check():
     """健康检查接口"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
+@app.route('/api/cha/question')
+def get_cha_question():
+    """获取 CHA 验证问题"""
+    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+    
+    if captcha_provider != 'cha':
+        return jsonify({'error': 'CHA 验证未启用'}), 400
+    
+    question, answer = generate_cha_question()
+    session['cha_answer'] = answer
+    session['cha_timestamp'] = time.time()
+    
+    return jsonify({
+        'question': question,
+        'timestamp': session['cha_timestamp']
+    })
+
 # 管理员路由
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_login():
     """管理员登录"""
+    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+    
     if request.method == 'POST':
         # --- 新增：管理员登录人机验证 ---
-        turnstile_token = request.form.get('cf-turnstile-response')
+        captcha_response = request.form.get('cf-turnstile-response') if captcha_provider == 'cloudflare' else request.form.get('cha_answer')
         user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr) # 获取真实 IP
         username = request.form.get('username')
         password = request.form.get('password')
         totp_code = request.form.get('totp_code') # 获取前端提交的 TOTP 码
 
-        if not turnstile_token:
+        if not captcha_response:
             # --- 修改：不再返回 JSON，而是渲染模板 ---
-            site_key = app.config.get('TURNSTILE_SITE_KEY', '')
-            return render_template('admin_login.html', error='请完成人机验证', turnstile_site_key=site_key)
+            site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+            cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
+            return render_template('admin_login.html', error='请完成人机验证', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
-        if not validate_turnstile(turnstile_token, user_ip):
-            site_key = app.config.get('TURNSTILE_SITE_KEY', '')
-            return render_template('admin_login.html', error='人机验证失败，请刷新网页', turnstile_site_key=site_key)
+        if not validate_captcha(captcha_response, user_ip, session):
+            site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+            cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
+            return render_template('admin_login.html', error='人机验证失败，请刷新网页', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
         # --- 结束新增 ---
 
         # 验证 TOTP (如果密钥存在)
@@ -741,7 +824,9 @@ def admin_login():
         if ADMIN_TOTP_SECRET:
              if not totp_code:
                  flash('请输入双重认证验证码')
-                 return render_template('admin_login.html')
+                 site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+                 cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
+                 return render_template('admin_login.html', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
              totp = pyotp.TOTP(ADMIN_TOTP_SECRET)
              totp_valid = totp.verify(totp_code, valid_window=1) # 允许前后偏移1个时间窗口
 
@@ -758,11 +843,23 @@ def admin_login():
         else:
             # 提供更模糊的错误信息以增强安全性
             flash('登录凭据无效或双重认证失败')
-            site_key = app.config.get('TURNSTILE_SITE_KEY', '')
-            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key)
+            site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+            cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
+            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
-    site_key = app.config.get('TURNSTILE_SITE_KEY', '')
-    return render_template('admin_login.html', turnstile_site_key=site_key)
+    site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+    
+    # 为 CHA 验证生成新问题
+    if captcha_provider == 'cha':
+        question, answer = generate_cha_question()
+        session['cha_question'] = question
+        session['cha_answer'] = answer
+        session['cha_timestamp'] = time.time()
+        cha_question = question
+    else:
+        cha_question = None
+    
+    return render_template('admin_login.html', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
 @app.route('/admin/dashboard')
 @admin_required

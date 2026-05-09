@@ -422,3 +422,52 @@ header h1 {
     height: 22px;
   }
 }
+
+/* CHA 验证样式 */
+.cha-container {
+    margin: 15px 0;
+    padding: 15px;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+}
+
+.cha-question {
+    font-size: 18px;
+    font-weight: bold;
+    color: #2c3e50;
+    padding: 12px;
+    background-color: #e9ecef;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+.cha-container input[type="text"] {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 16px;
+    transition: border-color 0.3s ease;
+}
+
+.cha-container input[type="text"]:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+/* 雨天模式下的 CHA 验证样式 */
+.rainy-mode .cha-container {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.rainy-mode .cha-question {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #ecf0f1;
+}
+
+.rainy-mode .cha-container input[type="text"] {
+    background-color: rgba(255, 255, 255, 0.9);
+    color: #2c3e50;
+}

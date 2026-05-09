@@ -36,6 +36,22 @@
 3. 在[开发者设置页](https://console.qweather.com/setting)中，找到 API Host 一项，通常为``*****.re.qweatherapi.com``，填入[config.yaml](config.yaml)中的``HEFENG_HOST``
 4. 在[项目管理](https://console.qweather.com/project)中，创建项目，其他随便设置，新建项目凭据，**选择API_KEY**，把API_KEY填入[config.yaml](config.yaml)中的``HEFENG_KEY``
 
+### 配置人机验证
+
+项目支持两种验证方式：
+
+1. **Cloudflare Turnstile** (推荐)
+   - 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+   - 创建 Turnstile Widget
+   - 获取 Site Key 和 Secret Key
+   - 填入配置文件中的 `TURNSTILE_SITE_KEY` 和 `TURNSTILE_SECRET_KEY`
+   - 设置 `CAPTCHA_PROVIDER: "cloudflare"`
+
+2. **CHA (Custom Human Authentication)** (自定义数学验证)
+   - 无需额外配置
+   - 自动生成简单的数学验证题
+   - 设置 `CAPTCHA_PROVIDER: "cha"`
+
 ### 基础配置
 
 复制模板并修改 `config.yaml` 文件：
@@ -53,6 +69,7 @@ HEFENG_KEY2: "APIKEY2" # 替换为你的和风天气API密钥2
 times: 60 # 请求频率，单位为秒，和风天气免费API额度每分钟请求一次刚刚好
 TURNSTILE_SECRET_KEY: "0x"  # 替换为你的 Cloudflare Turnstile Secret Key
 TURNSTILE_SITE_KEY: "0x" # 替换成你自己的 Site Key
+CAPTCHA_PROVIDER: "cloudflare"  # 验证方式选择: cloudflare 或 cha
 LOCATION_NAME: "广州"  # 替换为服务器所在地，用于前端展示
 LOCATION_ID: 101280101  # 广东广州的和风天气位置ID
 admin_username: techccy # 管理员登录账号
