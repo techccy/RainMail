@@ -77,6 +77,12 @@
                 <div id="cha-question" style="background-color: #f0f8ff; padding: 10px; border-radius: 5px; margin-bottom: 10px; font-weight: bold;">{{ cha_question }}</div>
                 <input type="text" id="cha_answer" name="cha_answer" placeholder="请输入答案" required>
             </div>
+            {% elif captcha_provider == 'altcha' %}
+            <div class="altcha-container form-group">
+                <label>人机验证</label>
+                <div id="altcha-widget"></div>
+                <input type="hidden" id="altcha-payload" name="altcha_payload" value="">
+            </div>
             {% endif %}
             <button type="submit" class="primary-btn" style="width: 100%">登录</button>
         </form>
@@ -84,6 +90,100 @@
 
     {% if captcha_provider == 'cloudflare' %}
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    {% endif %}
+
+    {% if captcha_provider == 'altcha' %}
+    <script>
+    document.addEventListener('DOMContentLoaded', async function() {
+        await loadAltchaWidget('altcha-widget', 'altcha-payload');
+    });
+
+    async function loadAltchaWidget(widgetId, payloadId) {
+        try {
+            const response = await fetch('/api/altcha/challenge');
+            const data = await response.json();
+
+            const widget = document.getElementById(widgetId);
+            widget.innerHTML = `
+                <div class="altcha-info">
+                    <p>🔐 人机验证</p>
+                    <p style="font-size: 12px; color: #666;">正在计算工作量证明...</p>
+                    <div class="altcha-progress" style="width: 100%; background: #f0f0f0; border-radius: 5px; margin: 10px 0;">
+                        <div id="${widgetId}-progress" style="width: 0%; height: 20px; background: #4CAF50; border-radius: 5px; transition: width 0.1s;"></div>
+                    </div>
+                    <p id="${widgetId}-status" style="font-size: 12px; color: #666;">初始化中...</p>
+                </div>
+            `;
+
+            // 执行工作量证明
+            await solveAltchaChallenge(data.challenge, data.salt, data.max_number, widgetId, payloadId);
+
+        } catch (error) {
+            console.error('Failed to load Altcha challenge:', error);
+            document.getElementById(widgetId).innerHTML = '<p style="color: red;">加载失败，请刷新页面</p>';
+        }
+    }
+
+    async function solveAltchaChallenge(challenge, salt, maxNumber, widgetId, payloadId) {
+        const startTime = Date.now();
+        const progressEl = document.getElementById(`${widgetId}-progress`);
+        const statusEl = document.getElementById(`${widgetId}-status`);
+        const payloadEl = document.getElementById(payloadId);
+
+        // 简单实现：直接在主线程计算
+        const targetPrefix = '00000';
+        const chunkSize = 10000;
+
+        for (let i = 0; i < maxNumber; i++) {
+            const testString = challenge + i;
+            const hash = await simpleSha256(testString);
+
+            // 更新进度
+            if (i % chunkSize === 0) {
+                const progress = Math.min((i / maxNumber) * 100, 100);
+                progressEl.style.width = progress + '%';
+                statusEl.textContent = `计算中... ${Math.floor(progress)}%`;
+                await new Promise(resolve => setTimeout(resolve, 0)); // 让 UI 有机会更新
+            }
+
+            if (hash.startsWith(targetPrefix)) {
+                // 找到解决方案
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+                progressEl.style.width = '100%';
+                progressEl.style.background = '#4CAF50';
+
+                const widget = document.getElementById(widgetId);
+                widget.innerHTML = `
+                    <div class="altcha-success" style="text-align: center; padding: 10px; background: #e8f5e9; border-radius: 5px;">
+                        <p style="color: #4CAF50; margin: 0;">✓ 验证完成 (${elapsed}s)</p>
+                    </div>
+                `;
+
+                // 保存 payload
+                payloadEl.value = JSON.stringify({
+                    challenge: challenge,
+                    number: i,
+                    signature: salt
+                });
+
+                return;
+            }
+        }
+
+        // 未找到解决方案
+        statusEl.textContent = '验证失败，请刷新页面重试';
+        progressEl.style.background = '#f44336';
+    }
+
+    // 简化的 SHA-256 实现（使用 Web Crypto API）
+    async function simpleSha256(message) {
+        const msgBuffer = new TextEncoder().encode(message);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    }
+    </script>
     {% endif %}
 
 </body>

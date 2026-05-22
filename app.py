@@ -50,6 +50,7 @@ else:
 app.secret_key = 'rainmail_secret_key_2024'
 TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
 TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
+ALTCHA_HMAC_KEY = app.config.get('ALTCHA_HMAC_KEY', '')
 ASK_TIMES = app.config.get('TIMES', 900) # 请求频率 (900秒)
 LOCATION_ID = app.config.get('LOCATION_ID', 101280101)  # 广东广州的和风天气位置ID
 LOCATION_NAME = app.config.get('LOCATION_NAME', '广州') # 服务器所在位置名称
@@ -492,13 +493,69 @@ def validate_captcha(captcha_response, user_ip=None, session=None):
     统一的验证函数，根据配置选择验证方式
     """
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
-    
+
     if captcha_provider == 'cloudflare':
         return validate_turnstile(captcha_response, user_ip)
     elif captcha_provider == 'cha':
         return validate_cha(captcha_response, session)
+    elif captcha_provider == 'altcha':
+        return validate_altcha(captcha_response)
     else:
         app.logger.error(f"未知的验证提供商: {captcha_provider}")
+        return False
+
+def validate_altcha(payload):
+    """
+    验证 Altcha 工作量证明响应
+    """
+    if not ALTCHA_HMAC_KEY:
+        app.logger.error("ALTCHA_HMAC_KEY 未在 config.yaml 中配置！")
+        return False
+
+    try:
+        import hmac
+
+        data = json.loads(payload)
+
+        # 验证必需字段
+        if 'challenge' not in data or 'number' not in data or 'signature' not in data:
+            app.logger.error("Altcha 响应缺少必需字段")
+            return False
+
+        challenge = data['challenge']
+        number = data['number']
+        signature = data['signature']
+
+        # 验证签名
+        expected_salt = hmac.new(
+            ALTCHA_HMAC_KEY.encode(),
+            challenge.encode(),
+            hashlib.sha256
+        ).hexdigest()
+
+        if signature != expected_salt:
+            app.logger.error("Altcha 签名验证失败")
+            return False
+
+        # 验证工作量证明
+        # 客户端需要找到一个数字，使得 SHA256(challenge + number) 的结果以特定数量的零开头
+        # 默认难度为 00000（5个零）
+        test_string = f"{challenge}{number}"
+        result = hashlib.sha256(test_string.encode()).hexdigest()
+
+        # 检查是否满足难度条件（前5个字符为0）
+        if result.startswith('00000'):
+            app.logger.info(f"Altcha 验证成功: {result[:10]}...")
+            return True
+        else:
+            app.logger.error(f"Altcha 工作量证明不足: {result[:10]}...")
+            return False
+
+    except json.JSONDecodeError as e:
+        app.logger.error(f"Altcha JSON 解析失败: {e}")
+        return False
+    except Exception as e:
+        app.logger.error(f"Altcha 验证异常: {e}")
         return False
 
 def get_cpu_temperature():
@@ -703,7 +760,15 @@ def handle_messages():
                 return jsonify({'error': '内容不能为空'}), 400
 
             captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
-            captcha_response = request.json.get('cf_token') if captcha_provider == 'cloudflare' else request.json.get('cha_answer')
+            if captcha_provider == 'cloudflare':
+                captcha_response = request.json.get('cf_token')
+            elif captcha_provider == 'cha':
+                captcha_response = request.json.get('cha_answer')
+            elif captcha_provider == 'altcha':
+                captcha_response = request.json.get('altcha_payload')
+            else:
+                captcha_response = None
+
             user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
 
             if not captcha_response:
@@ -780,17 +845,49 @@ def health_check():
 def get_cha_question():
     """获取 CHA 验证问题"""
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
-    
+
     if captcha_provider != 'cha':
         return jsonify({'error': 'CHA 验证未启用'}), 400
-    
+
     question, answer = generate_cha_question()
     session['cha_answer'] = answer
     session['cha_timestamp'] = time.time()
-    
+
     return jsonify({
         'question': question,
         'timestamp': session['cha_timestamp']
+    })
+
+@app.route('/api/altcha/challenge')
+def get_altcha_challenge():
+    """获取 Altcha 挑战"""
+    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+
+    if captcha_provider != 'altcha':
+        return jsonify({'error': 'Altcha 验证未启用'}), 400
+
+    if not ALTCHA_HMAC_KEY:
+        return jsonify({'error': 'Altcha 未配置'}), 500
+
+    import hmac
+
+    # 生成随机挑战字符串
+    challenge = secrets.token_hex(16)
+
+    # 使用 HMAC 生成签名（盐值）
+    salt = hmac.new(
+        ALTCHA_HMAC_KEY.encode(),
+        challenge.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    # 设置难度参数
+    # max_number: 客户端尝试的最大数字范围
+    # salt_start: 签名的前几位作为验证
+    return jsonify({
+        'challenge': challenge,
+        'salt': salt,
+        'max_number': 1000000  # 客户端最大尝试次数
     })
 
 # 管理员路由
@@ -801,7 +898,15 @@ def admin_login():
     
     if request.method == 'POST':
         # --- 新增：管理员登录人机验证 ---
-        captcha_response = request.form.get('cf-turnstile-response') if captcha_provider == 'cloudflare' else request.form.get('cha_answer')
+        if captcha_provider == 'cloudflare':
+            captcha_response = request.form.get('cf-turnstile-response')
+        elif captcha_provider == 'cha':
+            captcha_response = request.form.get('cha_answer')
+        elif captcha_provider == 'altcha':
+            captcha_response = request.form.get('altcha_payload')
+        else:
+            captcha_response = None
+
         user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr) # 获取真实 IP
         username = request.form.get('username')
         password = request.form.get('password')

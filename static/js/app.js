@@ -17,8 +17,12 @@ class RainMailApp {
         // 检测页面使用的验证提供商
         const chaContainer = document.querySelector('.cha-container');
         const turnstileWidget = document.querySelector('.cf-turnstile');
-        
-        if (chaContainer) {
+        const altchaContainer = document.querySelector('.altcha-container');
+
+        if (altchaContainer) {
+            this.captchaProvider = 'altcha';
+            console.log('Using Altcha PoW captcha');
+        } else if (chaContainer) {
             this.captchaProvider = 'cha';
             console.log('Using CHA captcha provider');
         } else if (turnstileWidget) {
@@ -81,7 +85,7 @@ class RainMailApp {
 
         // 根据验证提供商获取验证响应
         let captchaResponse = '';
-        
+
         if (this.captchaProvider === 'cloudflare') {
             const turnstileWidget = document.querySelector('.cf-turnstile iframe[src*="challenges.cloudflare.com"]');
             let cfToken = '';
@@ -101,13 +105,23 @@ class RainMailApp {
                 return;
             }
         } else if (this.captchaProvider === 'cha') {
-            const chaAnswerInput = inputId === 'message-input' ? 
-                document.getElementById('sunny-cha-answer') : 
+            const chaAnswerInput = inputId === 'message-input' ?
+                document.getElementById('sunny-cha-answer') :
                 document.getElementById('rainy-cha-answer');
             captchaResponse = chaAnswerInput ? chaAnswerInput.value.trim() : '';
 
             if (!captchaResponse) {
                 alert('请先完成人机验证');
+                return;
+            }
+        } else if (this.captchaProvider === 'altcha') {
+            const altchaPayloadInput = inputId === 'message-input' ?
+                document.getElementById('sunny-altcha-payload') :
+                document.getElementById('rainy-altcha-payload');
+            captchaResponse = altchaPayloadInput ? altchaPayloadInput.value : '';
+
+            if (!captchaResponse) {
+                alert('请等待人机验证完成');
                 return;
             }
         }
@@ -125,6 +139,8 @@ class RainMailApp {
                 requestBody.cf_token = captchaResponse;
             } else if (this.captchaProvider === 'cha') {
                 requestBody.cha_answer = captchaResponse;
+            } else if (this.captchaProvider === 'altcha') {
+                requestBody.altcha_payload = captchaResponse;
             }
 
             const response = await fetch('/api/messages', {
@@ -148,17 +164,23 @@ class RainMailApp {
                 if (this.currentWeather === 'rainy') {
                     this.loadMessages();
                 }
-                
+
                 // 如果使用 CHA，重新加载验证问题
                 if (this.captchaProvider === 'cha') {
                     await this.loadCHAPuzzle(inputId === 'message-input' ? 'sunny-cha-question' : 'rainy-cha-question');
                     // 清空答案输入框
-                    const chaAnswerInput = inputId === 'message-input' ? 
-                        document.getElementById('sunny-cha-answer') : 
+                    const chaAnswerInput = inputId === 'message-input' ?
+                        document.getElementById('sunny-cha-answer') :
                         document.getElementById('rainy-cha-answer');
                     if (chaAnswerInput) {
                         chaAnswerInput.value = '';
                     }
+                }
+
+                // 如果使用 Altcha，重新加载挑战
+                if (this.captchaProvider === 'altcha') {
+                    await this.loadAltchaChallenge(inputId === 'message-input' ? 'sunny-altcha-widget' : 'rainy-altcha-widget',
+                                                     inputId === 'message-input' ? 'sunny-altcha-payload' : 'rainy-altcha-payload');
                 }
             } else {
                 alert(data.error || '提交失败');
@@ -183,6 +205,13 @@ class RainMailApp {
             }
         } catch (error) {
             console.error('Failed to load CHA puzzle:', error);
+        }
+    }
+
+    async loadAltchaChallenge(widgetId, payloadId) {
+        // 触发全局的 Altcha 加载函数（定义在 index.html 中）
+        if (typeof loadAltchaWidget === 'function') {
+            await loadAltchaWidget(widgetId, payloadId);
         }
     }
     // --- 新增：显示处理中界面 ---

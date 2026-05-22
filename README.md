@@ -38,7 +38,7 @@
 
 ### 配置人机验证
 
-项目支持两种验证方式：
+项目支持三种验证方式：
 
 1. **Cloudflare Turnstile** (推荐)
    - 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/)
@@ -51,6 +51,13 @@
    - 无需额外配置
    - 自动生成简单的数学验证题
    - 设置 `CAPTCHA_PROVIDER: "cha"`
+
+3. **Altcha (工作量证明验证)** (无隐私问题)
+   - 完全客户端验证，无第三方依赖
+   - 使用 SHA-256 工作量证明算法
+   - 设置 `CAPTCHA_PROVIDER: "altcha"`
+   - 配置 `ALTCHA_HMAC_KEY`（建议使用至少32个字符的随机字符串）
+   - 生成密钥示例：`python -c "import secrets; print(secrets.token_urlsafe(32))"`
 
 ### 基础配置
 
@@ -69,7 +76,8 @@ HEFENG_KEY2: "APIKEY2" # 替换为你的和风天气API密钥2
 times: 60 # 请求频率，单位为秒，和风天气免费API额度每分钟请求一次刚刚好
 TURNSTILE_SECRET_KEY: "0x"  # 替换为你的 Cloudflare Turnstile Secret Key
 TURNSTILE_SITE_KEY: "0x" # 替换成你自己的 Site Key
-CAPTCHA_PROVIDER: "cloudflare"  # 验证方式选择: cloudflare 或 cha
+CAPTCHA_PROVIDER: "cloudflare"  # 验证方式选择: cloudflare, cha, altcha
+ALTCHA_HMAC_KEY: "your-hmac-key-here"  # Altcha HMAC 密钥（至少32个字符，仅在使用 altcha 时需要）
 LOCATION_NAME: "广州"  # 替换为服务器所在地，用于前端展示
 LOCATION_ID: 101280101  # 广东广州的和风天气位置ID
 admin_username: techccy # 管理员登录账号
