@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>远方来信 - 雨天信箱</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📮</text></svg>">
+</head>
+<body class="sunny-mode">
+    <div id="weather-background"></div>
+
+    <div class="container glass-effect fade-in letter-view-container">
+        <header>
+            <h1>📮 远方来信</h1>
+            <p>来自 <strong>{{ message.location }}</strong> 的信</p>
+        </header>
+
+        {% if not is_unlocked %}
+        <div class="letter-locked">
+            <div class="lock-icon">🔒</div>
+            <h2>信件尚未解锁</h2>
+            <p>这封信需要等待<strong>雨天</strong>才能解锁</p>
+            <p>当雨落下时，信件将自动解锁</p>
+            <div class="weather-status">
+                <p>当前天气：正在检查中...</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="letter-content">
+            <div class="letter-meta">
+                <span class="letter-location">来自：{{ message.location }}</span>
+                <span class="letter-date">{{ delivery.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            </div>
+            <div class="letter-body">
+                {{ message.content }}
+            </div>
+            <div class="letter-actions">
+                <button id="hug-btn" class="secondary-btn">🤗 发送拥抱</button>
+                <button id="reply-btn" class="primary-btn">✉️ 回复</button>
+            </div>
+        </div>
+
+        <div id="reply-form" class="reply-form" style="display: none;">
+            <h3>写下你的回复</h3>
+            <textarea id="reply-content" placeholder="回复内容..." maxlength="500"></textarea>
+            <div class="char-counter">已输入 <span class="char-count">0</span>/500 字</div>
+            <div class="reply-actions">
+                <button id="send-reply-btn" class="primary-btn">发送回复</button>
+                <button id="cancel-reply-btn" class="secondary-btn">取消</button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="{{ url_for('static', filename='js/letter.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof initLetterView === 'function') {
+                initLetterView({
+                    deliveryId: {{ delivery.id }},
+                    messageId: {{ message.id }},
+                    isUnlocked: {{ 'true' if is_unlocked else 'false' }}
+                });
+            }
+        });
+    </script>
+</body>
+</html>

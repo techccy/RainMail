@@ -9,3 +9,9 @@ psutil
 pyotp
 qrcode
 pillow
+# 新增依赖：情感投递系统
+Flask-Login>=0.6.3
+Flask-Mail>=0.9.1
+email-validator>=2.1.0
+Werkzeug>=3.0.0
+cryptography>=3.4.8

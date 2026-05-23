@@ -58,6 +58,34 @@ class RainMailApp {
         document.getElementById('save-card-btn').addEventListener('click', () => {
             this.saveShareCard();
         });
+
+        // 投递选项切换
+        this.bindDeliveryOptionsEvents();
+    }
+
+    bindDeliveryOptionsEvents() {
+        // 晴天界面投递选项
+        const sunnyDeliveryOptions = document.querySelectorAll('input[name="delivery-type"]');
+        sunnyDeliveryOptions.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const privateOptions = document.getElementById('private-options');
+                if (privateOptions) {
+                    privateOptions.style.display = e.target.value === 'private' ? 'block' : 'none';
+                }
+            });
+        });
+
+        // 雨天界面投递选项
+        const rainyDeliveryOptions = document.querySelectorAll('input[name="rainy-delivery-type"]');
+        rainyDeliveryOptions.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const privateOptions = document.getElementById('rainy-private-options');
+                if (privateOptions) {
+                    privateOptions.style.display = e.target.value === 'private' ? 'block' : 'none';
+                }
+            });
+        });
+    }
     }
 
     updateCharCount(textarea) {
@@ -89,6 +117,24 @@ class RainMailApp {
         if (content.length > 500) {
             alert('内容不能超过500字');
             return;
+        }
+
+        // 获取投递选项
+        const isRainy = inputId === 'rainy-message-input';
+        const deliveryTypeSelector = isRainy ? 'rainy-delivery-type' : 'delivery-type';
+        const privateOptionsId = isRainy ? 'rainy-private-options' : 'private-options';
+
+        const selectedDeliveryType = document.querySelector(`input[name="${deliveryTypeSelector}"]:checked`)?.value || 'public';
+        const replyNotificationCheckbox = document.querySelector(`#${privateOptionsId} input[name="${isRainy ? 'rainy-reply-notification' : 'reply-notification'}"]`);
+
+        const deliveryOptions = {
+            type: selectedDeliveryType
+        };
+
+        let replyNotification = 'none';
+        if (selectedDeliveryType === 'private' && replyNotificationCheckbox && replyNotificationCheckbox.checked) {
+            replyNotification = 'email';
+            deliveryOptions.emailNotification = true;
         }
 
         // 根据验证提供商获取验证响应
@@ -123,31 +169,15 @@ class RainMailApp {
                 return;
             }
         } else if (this.captchaProvider === 'altcha') {
-            // 移动端使用 CHA，桌面端使用 Altcha
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            // 使用 Altcha，无论移动端还是桌面端
+            const altchaPayloadInput = inputId === 'message-input' ?
+                document.getElementById('sunny-altcha-payload') :
+                document.getElementById('rainy-altcha-payload');
+            captchaResponse = altchaPayloadInput ? altchaPayloadInput.value : '';
 
-            if (isMobile) {
-                // 移动端：获取 CHA 答案
-                const chaAnswerInput = inputId === 'message-input' ?
-                    document.getElementById('sunny-cha-answer') :
-                    document.getElementById('rainy-cha-answer');
-                captchaResponse = chaAnswerInput ? chaAnswerInput.value.trim() : '';
-
-                if (!captchaResponse) {
-                    alert('请先完成人机验证');
-                    return;
-                }
-            } else {
-                // 桌面端：获取 Altcha payload
-                const altchaPayloadInput = inputId === 'message-input' ?
-                    document.getElementById('sunny-altcha-payload') :
-                    document.getElementById('rainy-altcha-payload');
-                captchaResponse = altchaPayloadInput ? altchaPayloadInput.value : '';
-
-                if (!captchaResponse) {
-                    alert('请等待人机验证完成');
-                    return;
-                }
+            if (!captchaResponse) {
+                alert('请等待人机验证完成');
+                return;
             }
         }
 
@@ -157,6 +187,10 @@ class RainMailApp {
         try {
             const requestBody = {
                 content: content,
+                delivery_type: selectedDeliveryType,
+                delivery_options: deliveryOptions,
+                reply_notification: replyNotification,
+                is_anonymous: true
             };
 
             // 根据验证提供商添加不同的字段
@@ -181,7 +215,7 @@ class RainMailApp {
                 },
                 body: JSON.stringify(requestBody)
             });
-            
+
             clearInterval(this.progressIntervalId);
             this.hideProcessingOverlay();
             const data = await response.json();

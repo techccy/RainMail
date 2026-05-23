@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 雨天信箱</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📮</text></svg>">
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+</head>
+<body class="auth-page">
+    <div id="weather-background"></div>
+
+    <div class="container glass-effect fade-in auth-container">
+        <header>
+            <h1>📮 雨天信箱</h1>
+            <p>登录你的账户</p>
+        </header>
+
+        <form id="login-form" class="auth-form">
+            <div class="form-group">
+                <label for="email">邮箱</label>
+                <input type="email" id="email" name="email" required placeholder="请输入邮箱">
+            </div>
+
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input type="password" id="password" name="password" required placeholder="请输入密码">
+            </div>
+
+            <!-- CAPTCHA -->
+            {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
+            <div class="form-group">
+                <div id="login-turnstile" class="cf-turnstile"></div>
+                <input type="hidden" name="cf-token-hidden" id="cf-token-hidden" value="">
+            </div>
+            {% elif captcha_provider == 'cha' %}
+            <div class="form-group">
+                <div class="cha-container">
+                    <div class="cha-question">{{ cha_question }}</div>
+                    <input type="text" id="cha-answer" name="cha_answer" placeholder="请输入答案" required>
+                </div>
+            </div>
+            {% elif captcha_provider == 'altcha' %}
+            <div class="form-group">
+                <div id="login-altcha-container" class="altcha-container">
+                    <div id="login-altcha-widget"></div>
+                    <input type="hidden" id="altcha-payload" value="">
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="error-message" id="error-message" style="display: none;"></div>
+
+            <button type="submit" class="primary-btn">登录</button>
+        </form>
+
+        <div class="auth-links">
+            <p>还没有账户？ <a href="{{ url_for('register_page') }}">立即注册</a></p>
+            <p><a href="{{ url_for('index') }}">返回首页</a></p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+    <script>
+        // 初始化登录页面
+        document.addEventListener('DOMContentLoaded', function() {
+            const captchaProvider = '{{ captcha_provider }}';
+
+            if (typeof initLoginPage === 'function') {
+                initLoginPage({
+                    captchaProvider: captchaProvider,
+                    turnstileSiteKey: '{{ turnstile_site_key }}'
+                });
+            }
+        });
+    </script>
+</body>
+</html>

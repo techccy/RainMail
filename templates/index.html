@@ -10,7 +10,27 @@
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 <body class="sunny-mode">
     <div id="weather-background"></div>
-    
+
+    <!-- 未登录时的登录入口 -->
+    <div class="auth-entry" id="auth-entry">
+        <a href="/auth/login">登录 / 注册</a>
+    </div>
+
+    <!-- 用户信息栏 -->
+    <div class="user-bar" id="user-bar" style="display: none;">
+        <div class="user-info">
+            <span class="user-greeting">你好，<span id="user-name">用户</span></span>
+            <span class="notification-badge" id="notification-badge" style="display: none;">
+                <span id="notification-count">0</span>
+            </span>
+        </div>
+        <div class="user-actions">
+            <a href="/user/inbox" class="user-link">收件箱</a>
+            <a href="/user/settings" class="user-link">设置</a>
+            <button id="logout-btn" class="text-btn">登出</button>
+        </div>
+    </div>
+
     <div class="container glass-effect fade-in">
         <header>
             <h1>📮 雨天信箱</h1>
@@ -36,6 +56,41 @@
                     <label for="message-input">你的想法（最多500字）</label>
                     <textarea id="message-input" placeholder="在这里写下你想说的话..." maxlength="500"></textarea>
                     <div class="char-counter">已输入 <span class="char-count">0</span>/500 字</div>
+
+                    <!-- 投递选项 -->
+                    <div class="delivery-options">
+                        <h4>📮 投递方式</h4>
+                        <div class="delivery-type-selector">
+                            <label class="delivery-option">
+                                <input type="radio" name="delivery-type" value="public" checked>
+                                <span class="option-content">
+                                    <span class="option-title">雨天公开广播</span>
+                                    <span class="option-desc">雨天时所有人可见</span>
+                                </span>
+                            </label>
+                            <label class="delivery-option">
+                                <input type="radio" name="delivery-type" value="private">
+                                <span class="option-content">
+                                    <span class="option-title">发给陌生人</span>
+                                    <span class="option-desc">一对一投递，雨天解锁</span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <!-- 私发选项 -->
+                        <div id="private-options" class="private-options" style="display: none;">
+                            <h5>回复通知方式</h5>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="reply-notification" value="email">
+                                <span>收到回复时邮件通知我</span>
+                            </label>
+                            <label class="checkbox-option disabled">
+                                <input type="checkbox" disabled>
+                                <span>收到回复时微信通知（即将推出）</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <div class="privacy-statement" style="margin: 10px 0; font-size: 0.9rem; color: #666; text-align: left;">
                         提交即表示同意我们的<a href="/privacy-policy" target="_blank" style="color: #0d6efd; text-decoration: underline;">隐私条款</a>
                     </div>
@@ -60,7 +115,7 @@
                 </div>
                 <button id="submit-btn" class="primary-btn">投递想法</button>
             </div>
-            
+
             <div class="weather-info">
                 <p>🌤️ 当前天气晴朗，信箱封存中</p>
                 <p>🌧️ 等到下雨时，所有想法将会公开</p>
@@ -75,6 +130,41 @@
                     <label for="rainy-message-input">你的想法（最多500字）</label>
                     <textarea id="rainy-message-input" placeholder="雨声中写下你的心声..." maxlength="500"></textarea>
                     <div class="char-counter">已输入 <span class="char-count">0</span>/500 字</div>
+
+                    <!-- 投递选项 -->
+                    <div class="delivery-options">
+                        <h4>📮 投递方式</h4>
+                        <div class="delivery-type-selector">
+                            <label class="delivery-option">
+                                <input type="radio" name="rainy-delivery-type" value="public" checked>
+                                <span class="option-content">
+                                    <span class="option-title">雨天公开广播</span>
+                                    <span class="option-desc">雨天时所有人可见</span>
+                                </span>
+                            </label>
+                            <label class="delivery-option">
+                                <input type="radio" name="rainy-delivery-type" value="private">
+                                <span class="option-content">
+                                    <span class="option-title">发给陌生人</span>
+                                    <span class="option-desc">一对一投递，雨天解锁</span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <!-- 私发选项 -->
+                        <div id="rainy-private-options" class="private-options" style="display: none;">
+                            <h5>回复通知方式</h5>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="rainy-reply-notification" value="email">
+                                <span>收到回复时邮件通知我</span>
+                            </label>
+                            <label class="checkbox-option disabled">
+                                <input type="checkbox" disabled>
+                                <span>收到回复时微信通知（即将推出）</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <div class="privacy-statement" style="margin: 10px 0; font-size: 0.9rem; color: #666; text-align: left;">
                         提交即表示同意我们的<a href="/privacy-policy" target="_blank" style="color: #0d6efd; text-decoration: underline;">隐私条款</a>
                     </div>
@@ -145,7 +235,38 @@
     <script src="{{ url_for('static', filename='js/html2canvas.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script>
+    // 检查用户登录状态
+    async function checkUserStatus() {
+        try {
+            const response = await fetch('/api/user/profile');
+            if (response.ok) {
+                const data = await response.json();
+                showUserBar(data.user);
+            }
+        } catch (error) {
+            // 未登录，忽略错误
+        }
+    }
+
+    function showUserBar(user) {
+        const userBar = document.getElementById('user-bar');
+        const authEntry = document.getElementById('auth-entry');
+        const body = document.body;
+
+        if (userBar) {
+            userBar.style.display = 'flex';
+            document.getElementById('user-name').textContent = user.username || user.email.split('@')[0];
+        }
+        if (authEntry) {
+            authEntry.style.display = 'none';
+        }
+        body.classList.add('has-user-bar');
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
+        // 检查用户状态
+        checkUserStatus();
+
         const captchaProvider = '{{ captcha_provider }}';
         
         // 检测是否为移动设备

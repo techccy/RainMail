@@ -2,6 +2,7 @@ from curses import flash
 import threading
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
+from flask_mail import Mail, Message as EmailMessage
 import requests
 import yaml
 import time
@@ -23,6 +24,7 @@ import qrcode
 from PIL import Image
 import random
 import string
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # 用于防止并发请求天气API的锁
 weather_request_lock = threading.Lock()
@@ -82,6 +84,15 @@ else:
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rainmail.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# 邮件配置
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', app.config.get('MAIL_SERVER', 'smtp.gmail.com'))
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', app.config.get('MAIL_PORT', 587)))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', app.config.get('MAIL_USE_TLS', True))
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', app.config.get('MAIL_USERNAME', ''))
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', app.config.get('MAIL_PASSWORD', ''))
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.config.get('MAIL_DEFAULT_SENDER', 'RainMail <noreply@rainmail.dev>'))
+mail = Mail(app)
 
 # def load_sensitive_words_from_csv(file_path):
 #     """
@@ -263,13 +274,25 @@ class Message(db.Model):
     location = db.Column(db.String(50), default='广州')
     unique_identifier = db.Column(db.String(8), nullable=True)
 
+    # 新增字段：情感投递系统
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # 可为空保持匿名
+    delivery_type = db.Column(db.String(20), default='public')  # 'public' 或 'private'
+    delivery_options = db.Column(db.JSON, nullable=True)  # 存储投递选项
+    reply_notification = db.Column(db.String(20), default='none')  # 'none', 'email', 'wechat'
+    is_anonymous = db.Column(db.Boolean, default=True)
+    reply_to_id = db.Column(db.Integer, db.ForeignKey('message.id'), nullable=True)
+    hugs_count = db.Column(db.Integer, default=0)
+
     def to_dict(self):
         return {
             'id': self.id,
             'content': self.content,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'location': self.location,
-            'unique_identifier': self.unique_identifier
+            'unique_identifier': self.unique_identifier,
+            'delivery_type': self.delivery_type,
+            'is_anonymous': self.is_anonymous,
+            'hugs_count': self.hugs_count
         }
 
 # --- 新增：天气缓存模型 ---
@@ -290,6 +313,85 @@ class IPLocationCache(db.Model):
     city = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+# --- 新增：用户模型 ---
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    username = db.Column(db.String(50))
+    is_verified = db.Column(db.Boolean, default=False)
+    verification_token = db.Column(db.String(128))
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    last_login = db.Column(db.DateTime)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'username': self.username,
+            'is_verified': self.is_verified,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+# --- 新增：信件投递记录模型 ---
+class LetterDelivery(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.Integer, db.ForeignKey('message.id'))
+    recipient_email = db.Column(db.String(120))  # 未登录用户邮箱
+    recipient_user_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # 登录用户
+    recipient_city = db.Column(db.String(100))
+    delivery_status = db.Column(db.String(20), default='pending')  # pending/delivered/read
+    unlock_token = db.Column(db.String(64))  # 匿名收件人的解锁令牌
+    unlocked_at = db.Column(db.DateTime)
+    read_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+# --- 新增：回复模型 ---
+class MessageReply(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    original_message_id = db.Column(db.Integer, db.ForeignKey('message.id'))
+    reply_content = db.Column(db.Text)
+    reply_type = db.Column(db.String(20), default='text')  # 'text' 或 'hug'
+    replier_user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    replier_email = db.Column(db.String(120))  # 匿名回复者邮箱
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+# --- 新增：通知模型 ---
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    email = db.Column(db.String(120))  # 非登录用户
+    notification_type = db.Column(db.String(50))
+    title = db.Column(db.String(100))
+    content = db.Column(db.Text)
+    related_id = db.Column(db.Integer)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+# --- 新增：邮件队列表 ---
+class EmailQueue(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    recipient_email = db.Column(db.String(120))
+    email_type = db.Column(db.String(50))
+    subject = db.Column(db.String(200))
+    body_html = db.Column(db.Text)
+    status = db.Column(db.String(20), default='pending')
+    attempts = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+# --- 新增：微信绑定表（预留）---
+class WeChatBinding(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    wechat_openid = db.Column(db.String(100), unique=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
 
 # 初始化数据库
 with app.app_context():
@@ -819,11 +921,35 @@ def handle_messages():
             # 过滤XSS
             content = sanitize_input(content)
 
+            # 获取投递选项
+            delivery_type = request.json.get('delivery_type', 'public')  # 'public' 或 'private'
+            delivery_options = request.json.get('delivery_options', {})
+            reply_notification = request.json.get('reply_notification', 'none')
+            is_anonymous = request.json.get('is_anonymous', True)
+
+            # 获取发送者信息
+            sender_id = session.get('user_id') if not is_anonymous else None
+
+            # 获取发送者位置
+            sender_city = get_city_by_ip(user_ip)
+
             # 创建新消息
-            message = Message(content=content)
+            message = Message(
+                content=content,
+                location=sender_city,
+                sender_id=sender_id,
+                delivery_type=delivery_type,
+                delivery_options=delivery_options,
+                reply_notification=reply_notification,
+                is_anonymous=is_anonymous
+            )
             message.unique_identifier = generate_unique_id()
             db.session.add(message)
             db.session.commit()
+
+            # 如果是私发，创建投递记录
+            if delivery_type == 'private':
+                create_private_delivery(message, sender_city)
 
             # 生成分享卡片信息
             message_count = Message.query.count()
@@ -831,8 +957,9 @@ def handle_messages():
                 'message_id': message.id,
                 'total_messages': message_count,
                 'created_at': message.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'weather_status': 'sunny', # 提交时不关心当前天气，返回固定值或从请求上下文获取
-                'unique_identifier': message.unique_identifier # 将 ID 包含在 share_data 中
+                'weather_status': 'sunny',
+                'unique_identifier': message.unique_identifier,
+                'delivery_type': delivery_type
             }
 
             return jsonify({
@@ -856,11 +983,12 @@ def handle_messages():
         if weather_status == 'sunny':
             return jsonify({'error': f'{city} 模式下无法查看消息'}), 403
 
-        messages = Message.query.order_by(Message.created_at.desc()).all()
+        # 只返回公开的消息
+        messages = Message.query.filter_by(delivery_type='public').order_by(Message.created_at.desc()).all()
         return jsonify({
             'messages': [msg.to_dict() for msg in messages],
-            'weather_status': weather_status, # 可选：返回该城市的天气状态
-            'city': city # 可选：告知前端是哪个城市的天气
+            'weather_status': weather_status,
+            'city': city
         })
 
 @app.route('/api/weather')
@@ -1130,5 +1258,800 @@ def inject_year():
     from datetime import datetime
     return {'current_year': datetime.now().year}
 
+# ==================== 用户认证相关路由 ====================
+
+def login_required_user(f):
+    """用户登录装饰器"""
+    def wrapper(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'error': '请先登录', 'redirect': '/auth/login'}), 401
+        return f(*args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
+
+@app.route('/auth/login')
+def login_page():
+    """用户登录页面"""
+    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+    site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+
+    # 为 CHA 验证生成新问题
+    if captcha_provider == 'cha':
+        question, answer = generate_cha_question()
+        session['cha_question'] = question
+        session['cha_answer'] = answer
+        session['cha_timestamp'] = time.time()
+        cha_question = question
+    else:
+        cha_question = None
+
+    return render_template('auth/login.html',
+                          turnstile_site_key=site_key,
+                          captcha_provider=captcha_provider,
+                          cha_question=cha_question)
+
+@app.route('/auth/register')
+def register_page():
+    """用户注册页面"""
+    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+    site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+
+    # 为 CHA 验证生成新问题
+    if captcha_provider == 'cha':
+        question, answer = generate_cha_question()
+        session['cha_question'] = question
+        session['cha_answer'] = answer
+        session['cha_timestamp'] = time.time()
+        cha_question = question
+    else:
+        cha_question = None
+
+    return render_template('auth/register.html',
+                          turnstile_site_key=site_key,
+                          captcha_provider=captcha_provider,
+                          cha_question=cha_question)
+
+@app.route('/api/auth/register', methods=['POST'])
+def api_register():
+    """用户注册 API"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+        username = data.get('username', '').strip()
+
+        # 验证输入
+        if not email or not password:
+            return jsonify({'error': '邮箱和密码不能为空'}), 400
+
+        if len(password) < 6:
+            return jsonify({'error': '密码长度至少6位'}), 400
+
+        # 检查邮箱是否已存在
+        if User.query.filter_by(email=email).first():
+            return jsonify({'error': '该邮箱已被注册'}), 400
+
+        # 验证 CAPTCHA
+        captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+        if captcha_provider == 'cloudflare':
+            captcha_response = data.get('cf_token')
+        elif captcha_provider == 'cha':
+            captcha_response = data.get('cha_answer')
+        elif captcha_provider == 'altcha':
+            captcha_response = data.get('altcha_payload')
+        else:
+            captcha_response = None
+
+        user_ip = get_client_ip()
+        if not validate_captcha(captcha_response, user_ip, session):
+            return jsonify({'error': '人机验证失败'}), 400
+
+        # 创建用户
+        user = User(
+            email=email,
+            username=username if username else email.split('@')[0]
+        )
+        user.set_password(password)
+
+        # 生成验证令牌
+        import secrets
+        user.verification_token = secrets.token_urlsafe(32)
+
+        db.session.add(user)
+        db.session.commit()
+
+        # 发送验证邮件
+        try:
+            send_verification_email(user)
+        except Exception as e:
+            app.logger.error(f"发送验证邮件失败: {e}")
+            # 即使邮件发送失败，也允许注册成功
+
+        return jsonify({
+            'success': True,
+            'message': '注册成功，请查收验证邮件',
+            'user': user.to_dict()
+        })
+
+    except Exception as e:
+        app.logger.error(f"注册错误: {e}")
+        return jsonify({'error': '注册失败'}), 500
+
+@app.route('/api/auth/verify-email', methods=['POST'])
+def api_verify_email():
+    """邮箱验证 API"""
+    try:
+        data = request.get_json()
+        token = data.get('token')
+
+        if not token:
+            return jsonify({'error': '验证令牌不能为空'}), 400
+
+        user = User.query.filter_by(verification_token=token).first()
+        if not user:
+            return jsonify({'error': '无效的验证令牌'}), 400
+
+        user.is_verified = True
+        user.verification_token = None
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': '邮箱验证成功'
+        })
+
+    except Exception as e:
+        app.logger.error(f"邮箱验证错误: {e}")
+        return jsonify({'error': '验证失败'}), 500
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    """用户登录 API"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+
+        # 验证 CAPTCHA
+        captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+        if captcha_provider == 'cloudflare':
+            captcha_response = data.get('cf_token')
+        elif captcha_provider == 'cha':
+            captcha_response = data.get('cha_answer')
+        elif captcha_provider == 'altcha':
+            captcha_response = data.get('altcha_payload')
+        else:
+            captcha_response = None
+
+        user_ip = get_client_ip()
+        if not validate_captcha(captcha_response, user_ip, session):
+            return jsonify({'error': '人机验证失败'}), 400
+
+        # 查找用户
+        user = User.query.filter_by(email=email).first()
+        if not user or not user.check_password(password):
+            return jsonify({'error': '邮箱或密码错误'}), 401
+
+        # 更新最后登录时间
+        user.last_login = datetime.now()
+        db.session.commit()
+
+        # 设置会话
+        session['user_id'] = user.id
+        session['user_email'] = user.email
+
+        return jsonify({
+            'success': True,
+            'message': '登录成功',
+            'user': user.to_dict()
+        })
+
+    except Exception as e:
+        app.logger.error(f"登录错误: {e}")
+        return jsonify({'error': '登录失败'}), 500
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_logout():
+    """用户登出 API"""
+    session.pop('user_id', None)
+    session.pop('user_email', None)
+    return jsonify({'success': True, 'message': '登出成功'})
+
+@app.route('/api/auth/resend-verification', methods=['POST'])
+def api_resend_verification():
+    """重发验证邮件 API"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip().lower()
+
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': '用户不存在'}), 404
+
+        if user.is_verified:
+            return jsonify({'error': '邮箱已验证'}), 400
+
+        # 重新生成验证令牌
+        user.verification_token = secrets.token_urlsafe(32)
+        db.session.commit()
+
+        # 发送验证邮件
+        send_verification_email(user)
+
+        return jsonify({
+            'success': True,
+            'message': '验证邮件已发送'
+        })
+
+    except Exception as e:
+        app.logger.error(f"重发验证邮件错误: {e}")
+        return jsonify({'error': '发送失败'}), 500
+
+# ==================== 用户相关路由 ====================
+
+@app.route('/api/user/profile')
+@login_required_user
+def api_user_profile():
+    """获取用户信息"""
+    user = User.query.get(session['user_id'])
+    if not user:
+        return jsonify({'error': '用户不存在'}), 404
+
+    return jsonify({'user': user.to_dict()})
+
+@app.route('/api/user/profile', methods=['PUT'])
+@login_required_user
+def api_update_profile():
+    """更新用户信息"""
+    try:
+        data = request.get_json()
+        user = User.query.get(session['user_id'])
+
+        if not user:
+            return jsonify({'error': '用户不存在'}), 404
+
+        if 'username' in data:
+            user.username = data['username'].strip()
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': '更新成功',
+            'user': user.to_dict()
+        })
+
+    except Exception as e:
+        app.logger.error(f"更新用户信息错误: {e}")
+        return jsonify({'error': '更新失败'}), 500
+
+@app.route('/api/user/inbox')
+@login_required_user
+def api_user_inbox():
+    """获取用户收件箱"""
+    user = User.query.get(session['user_id'])
+
+    # 获取发给该用户的信件
+    deliveries = LetterDelivery.query.filter_by(
+        recipient_user_id=user.id
+    ).order_by(LetterDelivery.created_at.desc()).all()
+
+    result = []
+    for delivery in deliveries:
+        message = Message.query.get(delivery.message_id)
+        if message:
+            result.append({
+                'id': delivery.id,
+                'message_id': message.id,
+                'sender_location': message.location,
+                'is_unlocked': delivery.delivery_status in ['delivered', 'read'],
+                'is_read': delivery.delivery_status == 'read',
+                'created_at': delivery.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'unlocked_at': delivery.unlocked_at.strftime('%Y-%m-%d %H:%M:%S') if delivery.unlocked_at else None
+            })
+
+    return jsonify({'letters': result})
+
+@app.route('/api/user/sent')
+@login_required_user
+def api_user_sent():
+    """获取用户发送的消息"""
+    user = User.query.get(session['user_id'])
+
+    messages = Message.query.filter_by(
+        sender_id=user.id
+    ).order_by(Message.created_at.desc()).all()
+
+    return jsonify({
+        'messages': [msg.to_dict() for msg in messages]
+    })
+
+@app.route('/api/user/notifications')
+@login_required_user
+def api_user_notifications():
+    """获取用户通知"""
+    user = User.query.get(session['user_id'])
+
+    notifications = Notification.query.filter_by(
+        user_id=user.id
+    ).order_by(Notification.created_at.desc()).limit(50).all()
+
+    return jsonify({
+        'notifications': [{
+            'id': n.id,
+            'type': n.notification_type,
+            'title': n.title,
+            'content': n.content,
+            'is_read': n.is_read,
+            'created_at': n.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        } for n in notifications]
+    })
+
+@app.route('/api/user/notifications/<int:notif_id>', methods=['PUT'])
+@login_required_user
+def api_mark_notification_read(notif_id):
+    """标记通知为已读"""
+    notification = Notification.query.get(notif_id)
+    if not notification or notification.user_id != session['user_id']:
+        return jsonify({'error': '通知不存在'}), 404
+
+    notification.is_read = True
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+# ==================== 信件相关路由 ====================
+
+@app.route('/letters/<token>')
+def view_letter(token):
+    """查看信件页面"""
+    delivery = LetterDelivery.query.filter_by(unlock_token=token).first()
+
+    if not delivery:
+        return render_template('error.html', message='信件不存在'), 404
+
+    message = Message.query.get(delivery.message_id)
+    if not message:
+        return render_template('error.html', message='信件内容不存在'), 404
+
+    # 检查是否已解锁
+    is_unlocked = delivery.delivery_status in ['delivered', 'read']
+
+    return render_template('user/letter.html',
+                          delivery=delivery,
+                          message=message,
+                          is_unlocked=is_unlocked)
+
+@app.route('/api/letters/<int:delivery_id>/unlock')
+def api_check_unlock(delivery_id):
+    """检查信件是否已解锁"""
+    delivery = LetterDelivery.query.get_or_404(delivery_id)
+
+    return jsonify({
+        'unlocked': delivery.delivery_status in ['delivered', 'read'],
+        'status': delivery.delivery_status
+    })
+
+@app.route('/api/letters/<int:delivery_id>/read', methods=['POST'])
+def api_mark_letter_read(delivery_id):
+    """标记信件为已读"""
+    delivery = LetterDelivery.query.get_or_404(delivery_id)
+
+    # 检查权限
+    if delivery.recipient_user_id:
+        if 'user_id' not in session or session['user_id'] != delivery.recipient_user_id:
+            return jsonify({'error': '无权访问此信件'}), 403
+
+    if delivery.delivery_status != 'read':
+        delivery.delivery_status = 'read'
+        delivery.read_at = datetime.now()
+        db.session.commit()
+
+    return jsonify({'success': True})
+
+@app.route('/api/letters/<int:delivery_id>/reply', methods=['POST'])
+def api_reply_letter(delivery_id):
+    """回复信件"""
+    try:
+        delivery = LetterDelivery.query.get_or_404(delivery_id)
+        message = Message.query.get(delivery.message_id)
+
+        if not message:
+            return jsonify({'error': '原信件不存在'}), 404
+
+        # 检查是否已解锁
+        if delivery.delivery_status not in ['delivered', 'read']:
+            return jsonify({'error': '信件未解锁'}), 403
+
+        # 检查权限
+        if delivery.recipient_user_id:
+            if 'user_id' not in session or session['user_id'] != delivery.recipient_user_id:
+                return jsonify({'error': '无权访问此信件'}), 403
+
+        data = request.get_json()
+        reply_content = data.get('content', '').strip()
+        reply_type = data.get('reply_type', 'text')
+        replier_email = data.get('replier_email', '').strip()
+
+        if reply_type == 'text' and not reply_content:
+            return jsonify({'error': '回复内容不能为空'}), 400
+
+        # 创建回复
+        reply = MessageReply(
+            original_message_id=message.id,
+            reply_content=reply_content if reply_type == 'text' else None,
+            reply_type=reply_type,
+            replier_user_id=session.get('user_id'),
+            replier_email=replier_email if not session.get('user_id') else None
+        )
+        db.session.add(reply)
+
+        # 标记信件为已读
+        if delivery.delivery_status != 'read':
+            delivery.delivery_status = 'read'
+            delivery.read_at = datetime.now()
+
+        # 通知原发件人
+        if message.sender_id:
+            notification = Notification(
+                user_id=message.sender_id,
+                notification_type='reply',
+                title='📨 你的信收到了回复',
+                content=f'有人回复了你之前发送的信件',
+                related_id=reply.id
+            )
+            db.session.add(notification)
+
+        # 如果发件人选择了邮件通知
+        if message.reply_notification == 'email' and message.sender_id:
+            sender = User.query.get(message.sender_id)
+            if sender:
+                # 发送回复通知邮件
+                send_reply_notification(sender, message, reply)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': '回复成功'
+        })
+
+    except Exception as e:
+        app.logger.error(f"回复信件错误: {e}")
+        return jsonify({'error': '回复失败'}), 500
+
+@app.route('/api/messages/<int:message_id>/hug', methods=['POST'])
+def api_hug_message(message_id):
+    """给信件发送拥抱"""
+    try:
+        message = Message.query.get_or_404(message_id)
+
+        # 增加拥抱计数
+        message.hugs_count = (message.hugs_count or 0) + 1
+
+        # 如果是回复，通知原消息发送者
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'hugs_count': message.hugs_count
+        })
+
+    except Exception as e:
+        app.logger.error(f"拥抱错误: {e}")
+        return jsonify({'error': '操作失败'}), 500
+
+def send_reply_notification(user, original_message, reply):
+    """发送回复通知邮件"""
+    if not app.config.get('MAIL_USERNAME'):
+        return
+
+    msg = EmailMessage(
+        subject='📨 你的信收到了回复',
+        recipients=[user.email],
+        html=f'''
+        <h2>📨 雨天信箱</h2>
+        <p>亲爱的 {user.username or user.email.split('@')[0]}，</p>
+        <p>你之前发送的信件收到了回复！</p>
+        <p><strong>原信件内容：</strong></p>
+        <p>{original_message.content[:100]}...</p>
+        <p><strong>回复内容：</strong></p>
+        <p>{reply.reply_content if reply.reply_type == 'text' else '🤗 发送了一个拥抱'}</p>
+        <p>登录雨天信箱查看更多详情。</p>
+        '''
+    )
+
+    try:
+        mail.send(msg)
+    except Exception as e:
+        app.logger.error(f"发送回复通知邮件失败: {e}")
+
+# ==================== 邮件辅助函数 ====================
+
+def create_private_delivery(message, sender_city):
+    """
+    创建私发投递记录，随机选择收件人
+    """
+    # 优先选择已验证的注册用户
+    verified_users = User.query.filter_by(is_verified=True).all()
+
+    if verified_users:
+        # 随机选择一个已验证用户
+        recipient_user = random.choice(verified_users)
+        delivery = LetterDelivery(
+            message_id=message.id,
+            recipient_user_id=recipient_user.id,
+            recipient_city=recipient_user.email.split('@')[-1],  # 简化：使用邮箱域名作为城市
+            unlock_token=secrets.token_urlsafe(32)
+        )
+        db.session.add(delivery)
+        db.session.commit()
+
+        # 发送新信件通知
+        send_new_letter_notification(delivery)
+
+        return delivery
+    else:
+        # 没有已验证用户，信件进入等待池
+        # 可以从请求中获取收件人邮箱，或者让信件等待
+        recipient_email = message.delivery_options.get('recipient_email') if message.delivery_options else None
+
+        if recipient_email:
+            delivery = LetterDelivery(
+                message_id=message.id,
+                recipient_email=recipient_email,
+                recipient_city=sender_city,  # 使用发送者城市作为默认
+                unlock_token=secrets.token_urlsafe(32)
+            )
+            db.session.add(delivery)
+            db.session.commit()
+
+            # 发送新信件通知
+            send_new_letter_notification(delivery)
+
+            return delivery
+
+    # 如果没有收件人，返回 None（信件进入等待池）
+    return None
+
+def send_verification_email(user):
+    """发送验证邮件"""
+    if not app.config.get('MAIL_USERNAME'):
+        app.logger.warning("邮件未配置，跳过发送验证邮件")
+        return
+
+    # 构建验证链接
+    verify_url = f"{request.host_url}api/auth/verify-email?token={user.verification_token}"
+
+    # 创建邮件
+    msg = EmailMessage(
+        subject='验证你的 RainMail 邮箱',
+        recipients=[user.email],
+        html=f'''
+        <h2>欢迎加入 RainMail</h2>
+        <p>请点击下面的链接验证你的邮箱：</p>
+        <p><a href="{verify_url}">验证邮箱</a></p>
+        <p>如果链接无法点击，请复制以下 URL 到浏览器：</p>
+        <p>{verify_url}</p>
+        <p>此链接将在 24 小时后失效。</p>
+        '''
+    )
+
+    try:
+        mail.send(msg)
+        app.logger.info(f"验证邮件已发送至 {user.email}")
+    except Exception as e:
+        app.logger.error(f"发送验证邮件失败: {e}")
+        raise
+
+def send_new_letter_notification(delivery):
+    """发送新信件通知"""
+    recipient_email = None
+    recipient_name = "朋友"
+
+    if delivery.recipient_user_id:
+        user = User.query.get(delivery.recipient_user_id)
+        if user:
+            recipient_email = user.email
+            recipient_name = user.username or user.email.split('@')[0]
+    elif delivery.recipient_email:
+        recipient_email = delivery.recipient_email
+
+    if not recipient_email:
+        return
+
+    # 构建查看链接
+    view_url = f"{request.host_url}letters/{delivery.unlock_token}"
+
+    msg = EmailMessage(
+        subject='📮 远方有一封信正在等你',
+        recipients=[recipient_email],
+        html=f'''
+        <h2>🌧️ 雨天信箱</h2>
+        <p>亲爱的 {recipient_name}，</p>
+        <p>有一封来自远方的信正在等你。</p>
+        <p>但这封信需要等待雨天才能解锁...</p>
+        <p>当雨落下时，你将可以阅读这封信。</p>
+        <p><a href="{view_url}">查看信件状态</a></p>
+        <p>如果雨天已到，信件将自动解锁。</p>
+        '''
+    )
+
+    # 添加到邮件队列
+    email_queue = EmailQueue(
+        recipient_email=recipient_email,
+        email_type='new_letter',
+        subject=msg.subject,
+        body_html=msg.html
+    )
+    db.session.add(email_queue)
+    db.session.commit()
+
+def send_letter_unlocked_notification(delivery):
+    """发送信件解锁通知"""
+    recipient_email = None
+    recipient_name = "朋友"
+
+    if delivery.recipient_user_id:
+        user = User.query.get(delivery.recipient_user_id)
+        if user:
+            recipient_email = user.email
+            recipient_name = user.username or user.email.split('@')[0]
+    elif delivery.recipient_email:
+        recipient_email = delivery.recipient_email
+
+    if not recipient_email:
+        return
+
+    # 构建查看链接
+    view_url = f"{request.host_url}letters/{delivery.unlock_token}"
+
+    msg = EmailMessage(
+        subject='🌧️ 雨来了，信已解锁',
+        recipients=[recipient_email],
+        html=f'''
+        <h2>🌧️ 雨天信箱</h2>
+        <p>亲爱的 {recipient_name}，</p>
+        <p>雨天已至，你的信件已解锁！</p>
+        <p><a href="{view_url}">点击阅读信件</a></p>
+        '''
+    )
+
+    # 添加到邮件队列
+    email_queue = EmailQueue(
+        recipient_email=recipient_email,
+        email_type='letter_unlocked',
+        subject=msg.subject,
+        body_html=msg.html
+    )
+    db.session.add(email_queue)
+    db.session.commit()
+
+# ==================== 后台任务 ====================
+
+def weather_unlock_worker():
+    """天气解锁后台任务 - 每5分钟运行一次"""
+    app.logger.info("[WeatherUnlockWorker] 启动天气解锁检查")
+
+    while True:
+        try:
+            # 获取所有待解锁的信件
+            pending_deliveries = LetterDelivery.query.filter_by(
+                delivery_status='pending'
+            ).all()
+
+            if not pending_deliveries:
+                app.logger.debug("[WeatherUnlockWorker] 没有待解锁的信件")
+
+            unlocked_count = 0
+            for delivery in pending_deliveries:
+                try:
+                    # 获取收件人城市天气
+                    city = delivery.recipient_city or '广州'
+                    weather = get_weather_status(city)
+
+                    # 解锁条件：下雨或下雪
+                    if weather in ['rainy', 'snowy']:
+                        delivery.delivery_status = 'delivered'
+                        delivery.unlocked_at = datetime.now()
+
+                        # 创建应用内通知
+                        if delivery.recipient_user_id:
+                            notification = Notification(
+                                user_id=delivery.recipient_user_id,
+                                notification_type='letter_unlocked',
+                                title='🌧️ 信件已解锁',
+                                content='雨天已至，你有一封来自远方的信已解锁，快去查看吧！',
+                                related_id=delivery.message_id
+                            )
+                            db.session.add(notification)
+
+                        # 发送解锁通知邮件
+                        send_letter_unlocked_notification(delivery)
+
+                        unlocked_count += 1
+                        app.logger.info(f"[WeatherUnlockWorker] 信件 {delivery.id} 已解锁（城市：{city}，天气：{weather}）")
+
+                except Exception as e:
+                    app.logger.error(f"[WeatherUnlockWorker] 解锁信件 {delivery.id} 时出错: {e}")
+
+            if unlocked_count > 0:
+                db.session.commit()
+                app.logger.info(f"[WeatherUnlockWorker] 本次解锁了 {unlocked_count} 封信件")
+
+        except Exception as e:
+            app.logger.error(f"[WeatherUnlockWorker] 天气解锁任务出错: {e}")
+
+        # 等待5分钟
+        time.sleep(300)
+
+def email_queue_worker():
+    """邮件队列处理任务 - 每1分钟运行一次"""
+    app.logger.info("[EmailQueueWorker] 启动邮件队列处理")
+
+    while True:
+        try:
+            # 获取待发送的邮件
+            pending_emails = EmailQueue.query.filter_by(
+                status='pending'
+            ).limit(50).all()
+
+            if not pending_emails:
+                app.logger.debug("[EmailQueueWorker] 没有待发送的邮件")
+
+            for email in pending_emails:
+                try:
+                    # 检查邮件配置
+                    if not app.config.get('MAIL_USERNAME'):
+                        app.logger.warning("[EmailQueueWorker] 邮件未配置，跳过发送")
+                        email.status = 'failed'
+                        db.session.commit()
+                        continue
+
+                    # 发送邮件
+                    msg = EmailMessage(
+                        subject=email.subject,
+                        recipients=[email.recipient_email],
+                        html=email.body_html
+                    )
+
+                    mail.send(msg)
+                    email.status = 'sent'
+                    email.sent_at = datetime.now()
+
+                    app.logger.info(f"[EmailQueueWorker] 邮件 {email.id} 已发送至 {email.recipient_email}")
+
+                except Exception as e:
+                    email.attempts += 1
+                    if email.attempts >= 3:
+                        email.status = 'failed'
+                    app.logger.error(f"[EmailQueueWorker] 发送邮件 {email.id} 失败: {e}")
+
+            db.session.commit()
+
+        except Exception as e:
+            app.logger.error(f"[EmailQueueWorker] 邮件队列任务出错: {e}")
+
+        # 等待1分钟
+        time.sleep(60)
+
+def start_background_workers():
+    """启动后台任务"""
+    # 启动天气解锁任务
+    weather_thread = threading.Thread(target=weather_unlock_worker, daemon=True)
+    weather_thread.start()
+    app.logger.info("[BackgroundWorkers] 天气解锁任务已启动")
+
+    # 启动邮件队列任务
+    email_thread = threading.Thread(target=email_queue_worker, daemon=True)
+    email_thread.start()
+    app.logger.info("[BackgroundWorkers] 邮件队列任务已启动")
+
 if __name__ == '__main__':
+    # 启动后台任务
+    try:
+        start_background_workers()
+    except Exception as e:
+        app.logger.error(f"启动后台任务失败: {e}")
+
     app.run(host='0.0.0.0', port=5024, debug=False)

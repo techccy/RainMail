@@ -471,3 +471,484 @@ header h1 {
     background-color: rgba(255, 255, 255, 0.9);
     color: #2c3e50;
 }
+
+/* ============================================================
+   8. 认证页面样式
+   ============================================================ */
+.auth-page {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+
+.auth-container {
+    max-width: 450px;
+    margin: 80px auto;
+    padding: 40px;
+}
+
+.auth-form .form-group {
+    margin-bottom: 20px;
+}
+
+.auth-form label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: inherit;
+}
+
+.auth-form input[type="email"],
+.auth-form input[type="password"],
+.auth-form input[type="text"] {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    font-size: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    color: inherit;
+    transition: all 0.3s ease;
+}
+
+.auth-form input[type="email"]:focus,
+.auth-form input[type="password"]:focus,
+.auth-form input[type="text"]:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+}
+
+.auth-form input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.password-strength {
+    margin-top: 6px;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.error-message,
+.success-message {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.error-message {
+    background: rgba(255, 68, 68, 0.2);
+    border: 1px solid rgba(255, 68, 68, 0.3);
+    color: #ffcccc;
+}
+
+.success-message {
+    background: rgba(68, 255, 68, 0.2);
+    border: 1px solid rgba(68, 255, 68, 0.3);
+    color: #ccffcc;
+}
+
+.auth-links {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.auth-links p {
+    margin: 8px 0;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.auth-links a {
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 500;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.5);
+    transition: all 0.3s ease;
+}
+
+.auth-links a:hover {
+    border-bottom-style: solid;
+    opacity: 0.8;
+}
+
+/* Auth page Turnstile */
+.auth-page .cf-turnstile {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0;
+}
+
+/* Auth page Altcha */
+.auth-page .altcha-container {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px;
+}
+
+/* 移动端认证页面 */
+@media (max-width: 600px) {
+    .auth-container {
+        margin: 20px auto;
+        padding: 24px;
+    }
+}
+
+/* ============================================================
+   9. 投递选项样式
+   ============================================================ */
+.delivery-options {
+    margin: 20px 0;
+    padding: 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.delivery-options h4 {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: inherit;
+}
+
+.delivery-options h5 {
+    margin: 16px 0 8px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0.8;
+}
+
+.delivery-type-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.delivery-option {
+    display: flex;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.delivery-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.delivery-option input[type="radio"] {
+    margin-right: 12px;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.delivery-option input[type="radio"]:checked + .option-content {
+    opacity: 1;
+}
+
+.option-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.option-title {
+    font-weight: 500;
+    font-size: 15px;
+}
+
+.option-desc {
+    font-size: 13px;
+    opacity: 0.7;
+}
+
+.private-options {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 3px solid rgba(52, 152, 219, 0.5);
+}
+
+.checkbox-option {
+    display: flex;
+    align-items: center;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.checkbox-option input[type="checkbox"] {
+    margin-right: 10px;
+    width: 16px;
+    height: 16px;
+}
+
+.checkbox-option span {
+    font-size: 14px;
+}
+
+.checkbox-option.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.checkbox-option.disabled input[type="checkbox"] {
+    cursor: not-allowed;
+}
+
+/* 雨天模式下的投递选项 */
+.rainy-mode .delivery-options {
+    background: rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.rainy-mode .delivery-option {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.rainy-mode .delivery-option:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================================
+   10. 信件阅读页面样式
+   ============================================================ */
+.letter-view-container {
+    max-width: 650px;
+    margin: 40px auto;
+}
+
+.letter-locked {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.lock-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+}
+
+.letter-locked h2 {
+    font-size: 24px;
+    margin-bottom: 16px;
+}
+
+.letter-locked p {
+    font-size: 16px;
+    color: inherit;
+    opacity: 0.8;
+    margin: 8px 0;
+}
+
+.letter-content {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 24px;
+}
+
+.letter-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.letter-body {
+    font-size: 16px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    min-height: 100px;
+}
+
+.letter-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.reply-form {
+    margin-top: 24px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+}
+
+.reply-form h3 {
+    margin: 0 0 16px 0;
+    font-size: 18px;
+}
+
+.reply-form textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: inherit;
+    font-size: 15px;
+    resize: vertical;
+}
+
+.reply-form .char-counter {
+    text-align: right;
+    font-size: 12px;
+    opacity: 0.7;
+    margin: 8px 0;
+}
+
+.reply-actions {
+    display: flex;
+    gap: 12px;
+}
+
+/* 雨天模式下的信件内容 */
+.rainy-mode .letter-content {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================================
+   11. 用户栏样式
+   ============================================================ */
+.user-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.user-greeting {
+    font-size: 15px;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.notification-badge {
+    position: relative;
+    background: #e74c3c;
+    color: white;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.user-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.user-link {
+    color: #3498db;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.user-link:hover {
+    color: #2980b9;
+}
+
+.text-btn {
+    background: none;
+    border: none;
+    color: #7f8c8d;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.2s;
+}
+
+.text-btn:hover {
+    color: #2c3e50;
+}
+
+/* 雨天模式下的用户栏 */
+.rainy-mode .user-bar {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.rainy-mode .user-greeting {
+    color: #ecf0f1;
+}
+
+.rainy-mode .user-link {
+    color: #5dade2;
+}
+
+.rainy-mode .text-btn {
+    color: #bdc3c7;
+}
+
+.rainy-mode .text-btn:hover {
+    color: #ecf0f1;
+}
+
+/* 未登录时的登录入口 */
+.auth-entry {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 100;
+}
+
+.auth-entry a {
+    display: inline-block;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #3498db;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+}
+
+.auth-entry a:hover {
+    background: white;
+    transform: translateY(-1px);
+}
+
+.rainy-mode .auth-entry a {
+    background: rgba(0, 0, 0, 0.6);
+    color: #5dade2;
+}
+
+.rainy-mode .auth-entry a:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+/* 当有用户栏时，调整容器位置 */
+body.has-user-bar .container {
+    margin-top: 60px;
+}
