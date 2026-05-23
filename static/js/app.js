@@ -73,6 +73,14 @@ class RainMailApp {
         const textarea = document.getElementById(inputId);
         const content = textarea.value.trim();
 
+        // 蜜罐检查 - 如果隐藏字段有值，说明是机器人
+        const honeypot = document.getElementById('website-hp');
+        if (honeypot && honeypot.value.trim() !== '') {
+            // 机器人检测到，假装正常处理但不实际提交
+            console.warn('Honeypot triggered');
+            return;
+        }
+
         if (!content) {
             alert('请先写下你的信件');
             return;

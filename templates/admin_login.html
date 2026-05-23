@@ -63,12 +63,11 @@
                 <label for="password">密码</label>
                 <input type="password" id="password" name="password" required>
             </div>
-            <!-- 新增: TOTP 输入框 -->
-            <div class="form-group">
-                <label for="totp_code">双重认证验证码 (TOTP)</label>
-                <input type="text" id="totp_code" name="totp_code" maxlength="6" placeholder="输入6位验证码" required>
+            <!-- 蜜罐字段 - 对浏览器隐藏，脚本会填充 -->
+            <div style="position: absolute; left: -10000px; top: -10000px;">
+                <label for="website_confirm">请勿填写此字段</label>
+                <input type="text" id="website_confirm" name="website_confirm" tabindex="-1" autocomplete="off">
             </div>
-            <!-- End of TOTP Input -->
             {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
             <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
             {% elif captcha_provider == 'cha' %}
@@ -115,8 +114,8 @@
                 </div>
             `;
 
-            // 执行工作量证明
-            await solveAltchaChallenge(data.challenge, data.salt, data.max_number, widgetId, payloadId);
+            // 执行工作量证明，使用服务器返回的目标前缀
+            await solveAltchaChallenge(data.challenge, data.salt, data.signature, data.target_prefix, data.max_number, widgetId, payloadId);
 
         } catch (error) {
             console.error('Failed to load Altcha challenge:', error);
@@ -124,14 +123,12 @@
         }
     }
 
-    async function solveAltchaChallenge(challenge, salt, maxNumber, widgetId, payloadId) {
+    async function solveAltchaChallenge(challenge, salt, signature, targetPrefix, maxNumber, widgetId, payloadId) {
         const startTime = Date.now();
         const progressEl = document.getElementById(`${widgetId}-progress`);
         const statusEl = document.getElementById(`${widgetId}-status`);
         const payloadEl = document.getElementById(payloadId);
 
-        // 简单实现：直接在主线程计算
-        const targetPrefix = '00000';
         const chunkSize = 10000;
 
         for (let i = 0; i < maxNumber; i++) {
@@ -146,6 +143,8 @@
                 await new Promise(resolve => setTimeout(resolve, 0)); // 让 UI 有机会更新
             }
 
+            // 使用服务器返回的 target_prefix 进行验证
+            // 客户端无法伪造这个值，因为它是通过 HMAC 签名的
             if (hash.startsWith(targetPrefix)) {
                 // 找到解决方案
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -159,11 +158,13 @@
                     </div>
                 `;
 
-                // 保存 payload
+                // 保存 payload，包含哈希结果供服务器验证
                 payloadEl.value = JSON.stringify({
                     challenge: challenge,
                     number: i,
-                    signature: salt
+                    salt: salt,
+                    signature: signature,
+                    hash_result: hash
                 });
 
                 return;

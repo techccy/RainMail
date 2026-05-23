@@ -9,6 +9,7 @@ TURNSTILE_SECRET_KEY: "0x"  # 替换为你的 Cloudflare Turnstile Secret Key
 TURNSTILE_SITE_KEY: "0x" # 替换成你自己的 Site Key
 CAPTCHA_PROVIDER: "cloudflare"  # 验证方式选择: cloudflare, cha, altcha
 ALTCHA_HMAC_KEY: "your-hmac-key-here"  # Altcha HMAC 密钥（用于生成挑战）
+ALTCHA_DIFFICULTY: 5  # Altcha 难度：哈希结果需要的前导零数量（建议3-6，越大越难）
 LOCATION_NAME: "广州"  # 替换为服务器所在地，用于前端展示
 LOCATION_ID: 101280101  # 广东广州的和风天气位置ID
 admin_username: techccy # 管理员登录账号

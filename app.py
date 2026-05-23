@@ -51,6 +51,7 @@ app.secret_key = 'rainmail_secret_key_2024'
 TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
 TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
 ALTCHA_HMAC_KEY = app.config.get('ALTCHA_HMAC_KEY', '')
+ALTCHA_DIFFICULTY = app.config.get('ALTCHA_DIFFICULTY', 5)  # 默认难度为5
 ASK_TIMES = app.config.get('TIMES', 900) # 请求频率 (900秒)
 LOCATION_ID = app.config.get('LOCATION_ID', 101280101)  # 广东广州的和风天气位置ID
 LOCATION_NAME = app.config.get('LOCATION_NAME', '广州') # 服务器所在位置名称
@@ -518,38 +519,52 @@ def validate_altcha(payload):
         data = json.loads(payload)
 
         # 验证必需字段
-        if 'challenge' not in data or 'number' not in data or 'signature' not in data:
-            app.logger.error("Altcha 响应缺少必需字段")
+        required_fields = ['challenge', 'number', 'salt', 'signature', 'hash_result']
+        if not all(field in data for field in required_fields):
+            app.logger.error(f"Altcha 响应缺少必需字段，已有字段: {list(data.keys())}")
             return False
 
         challenge = data['challenge']
         number = data['number']
+        salt = data['salt']
         signature = data['signature']
+        hash_result = data['hash_result']
 
-        # 验证签名
-        expected_salt = hmac.new(
+        # 1. 验证签名（防止伪造挑战）
+        expected_signature = hmac.new(
             ALTCHA_HMAC_KEY.encode(),
             challenge.encode(),
             hashlib.sha256
         ).hexdigest()
 
-        if signature != expected_salt:
+        if signature != expected_signature:
             app.logger.error("Altcha 签名验证失败")
             return False
 
-        # 验证工作量证明
-        # 客户端需要找到一个数字，使得 SHA256(challenge + number) 的结果以特定数量的零开头
-        # 默认难度为 00000（5个零）
-        test_string = f"{challenge}{number}"
-        result = hashlib.sha256(test_string.encode()).hexdigest()
+        # 2. 重新计算目标前缀（基于服务器端的难度配置）
+        # 这确保客户端必须满足服务器端要求的难度
+        target_seed = hmac.new(
+            ALTCHA_HMAC_KEY.encode(),
+            f"{challenge}{salt}".encode(),
+            hashlib.sha256
+        ).hexdigest()
+        target_prefix = target_seed[:ALTCHA_DIFFICULTY]
 
-        # 检查是否满足难度条件（前5个字符为0）
-        if result.startswith('00000'):
-            app.logger.info(f"Altcha 验证成功: {result[:10]}...")
-            return True
-        else:
-            app.logger.error(f"Altcha 工作量证明不足: {result[:10]}...")
+        # 3. 验证哈希结果是否以目标前缀开头
+        if not hash_result.startswith(target_prefix):
+            app.logger.error(f"Altcha 哈希结果不满足目标前缀: 期望 {target_prefix}...，得到 {hash_result[:ALTCHA_DIFFICULTY]}...")
             return False
+
+        # 4. 验证哈希结果确实是由 challenge + number 计算得出
+        test_string = f"{challenge}{number}"
+        expected_hash = hashlib.sha256(test_string.encode()).hexdigest()
+
+        if hash_result != expected_hash:
+            app.logger.error("Altcha 哈希结果与计算值不匹配")
+            return False
+
+        app.logger.info(f"Altcha 验证成功: {hash_result[:10]}...")
+        return True
 
     except json.JSONDecodeError as e:
         app.logger.error(f"Altcha JSON 解析失败: {e}")
@@ -557,6 +572,19 @@ def validate_altcha(payload):
     except Exception as e:
         app.logger.error(f"Altcha 验证异常: {e}")
         return False
+
+def check_honeypot(request_data):
+    """
+    检查蜜罐字段，如果被填充则记录IP并返回True
+    蜜罐字段对浏览器隐藏，但脚本机器人会填充
+    """
+    honeypot_value = request_data.get('website_confirm', '').strip()
+    if honeypot_value:
+        # 蜜罐被触发，记录IP
+        user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
+        app.logger.warning(f"[HONEYPOT] 机器人IP被记录: {user_ip}, 填充值: {honeypot_value}")
+        return True
+    return False
 
 def get_cpu_temperature():
     """获取CPU温度（macOS）"""
@@ -755,6 +783,13 @@ def handle_messages():
     if request.method == 'POST':
         # 提交新消息
         try:
+            # 蜜罐检测 - 检查JSON中是否包含蜜罐字段
+            if request.json and 'website' in request.json:
+                user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
+                app.logger.warning(f"[HONEYPOT] 机器人IP被记录: {user_ip}, 蜜罐值: {request.json.get('website')}")
+                # 返回成功响应但实际不保存，迷惑攻击者
+                return jsonify({'error': '请先完成人机验证', 'redirect': '/verify'}), 429
+
             content = request.json.get('content', '').strip()
             if not content:
                 return jsonify({'error': '内容不能为空'}), 400
@@ -874,19 +909,37 @@ def get_altcha_challenge():
     # 生成随机挑战字符串
     challenge = secrets.token_hex(16)
 
-    # 使用 HMAC 生成签名（盐值）
-    salt = hmac.new(
+    # 生成随机盐值，使每个挑战的目标都不同
+    challenge_salt = secrets.token_hex(8)
+
+    # 使用 HMAC 生成签名（用于验证挑战的有效性）
+    signature = hmac.new(
         ALTCHA_HMAC_KEY.encode(),
         challenge.encode(),
         hashlib.sha256
     ).hexdigest()
 
-    # 设置难度参数
-    # max_number: 客户端尝试的最大数字范围
-    # salt_start: 签名的前几位作为验证
+    # 生成目标哈希前缀
+    # 这是客户端需要满足的条件：SHA256(challenge + number) 必须以此前缀开头
+    # 使用 challenge_salt 确保每个挑战的目标都不同
+    # 使用 HMAC 确保客户端无法伪造目标
+    target_seed = hmac.new(
+        ALTCHA_HMAC_KEY.encode(),
+        f"{challenge}{challenge_salt}".encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    # 根据难度取前N位作为目标前缀
+    # 例如：难度5，target_seed='abc123...'，则 target_prefix='abc12'
+    target_prefix = target_seed[:ALTCHA_DIFFICULTY]
+
+    # 返回挑战信息
+    # 注意：不直接返回难度值，而是返回签名后的目标前缀
     return jsonify({
         'challenge': challenge,
-        'salt': salt,
+        'salt': challenge_salt,
+        'signature': signature,
+        'target_prefix': target_prefix,  # 客户端需要匹配的哈希前缀
         'max_number': 1000000  # 客户端最大尝试次数
     })
 
@@ -897,6 +950,13 @@ def admin_login():
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
     
     if request.method == 'POST':
+        # --- 蜜罐检测 ---
+        if check_honeypot(request.form):
+            # 蜜罐被触发，假装登录成功但实际不登录
+            site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+            cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
+            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
+
         # --- 新增：管理员登录人机验证 ---
         if captcha_provider == 'cloudflare':
             captcha_response = request.form.get('cf-turnstile-response')
@@ -910,7 +970,6 @@ def admin_login():
         user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr) # 获取真实 IP
         username = request.form.get('username')
         password = request.form.get('password')
-        totp_code = request.form.get('totp_code') # 获取前端提交的 TOTP 码
 
         if not captcha_response:
             # --- 修改：不再返回 JSON，而是渲染模板 ---
@@ -924,25 +983,12 @@ def admin_login():
             return render_template('admin_login.html', error='人机验证失败，请刷新网页', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
         # --- 结束新增 ---
 
-        # 验证 TOTP (如果密钥存在)
-        totp_valid = True # 默认为真，以防 TOTP 未正确初始化
-        if ADMIN_TOTP_SECRET:
-             if not totp_code:
-                 flash('请输入双重认证验证码')
-                 site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
-                 cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
-                 return render_template('admin_login.html', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
-             totp = pyotp.TOTP(ADMIN_TOTP_SECRET)
-             totp_valid = totp.verify(totp_code, valid_window=1) # 允许前后偏移1个时间窗口
-
         # --- 修正：统一从 config 获取管理员凭据 ---
         admin_username_from_config = app.config.get('admin_username')
         admin_password_from_config = app.config.get('admin_password')
 
-        # 验证用户名、密码和 TOTP
-        if (username == admin_username_from_config and
-            password == admin_password_from_config and
-            totp_valid):
+        # 验证用户名和密码（已移除TOTP验证）
+        if username == admin_username_from_config and password == admin_password_from_config:
             session['admin_logged_in'] = True
             return redirect(url_for('admin_dashboard'))
         else:
