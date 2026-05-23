@@ -881,7 +881,12 @@ def get_cha_question():
     """获取 CHA 验证问题"""
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
 
-    if captcha_provider != 'cha':
+    # 检测是否为移动设备
+    user_agent = request.headers.get('User-Agent', '')
+    is_mobile = bool(re.search(r'Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini', user_agent, re.IGNORECASE))
+
+    # 允许移动设备在 Altcha 模式下使用 CHA
+    if captcha_provider != 'cha' and not (captcha_provider == 'altcha' and is_mobile):
         return jsonify({'error': 'CHA 验证未启用'}), 400
 
     question, answer = generate_cha_question()
