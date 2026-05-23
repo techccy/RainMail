@@ -52,6 +52,10 @@
                             <div id="sunny-altcha-widget"></div>
                             <input type="hidden" id="sunny-altcha-payload" value="">
                         </div>
+                        <div id="sunny-cha-container" class="cha-container" style="display: none;">
+                            <div class="cha-question" id="sunny-cha-question">加载中...</div>
+                            <input type="text" id="sunny-cha-answer" placeholder="请输入答案" required>
+                        </div>
                     {% endif %}
                 </div>
                 <button id="submit-btn" class="primary-btn">投递想法</button>
@@ -86,6 +90,10 @@
                         <div id="rainy-altcha-container" class="altcha-container">
                             <div id="rainy-altcha-widget"></div>
                             <input type="hidden" id="rainy-altcha-payload" value="">
+                        </div>
+                        <div id="rainy-cha-container" class="cha-container" style="display: none;">
+                            <div class="cha-question" id="rainy-cha-question">加载中...</div>
+                            <input type="text" id="rainy-cha-answer" placeholder="请输入答案" required>
                         </div>
                     {% endif %}
                 </div>
@@ -140,6 +148,11 @@
     document.addEventListener('DOMContentLoaded', function() {
         const captchaProvider = '{{ captcha_provider }}';
         
+        // 检测是否为移动设备
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+
         // 根据验证提供商选择不同的处理方式
         if (captchaProvider === 'cloudflare') {
             // 检查 Turnstile 是否加载完成
@@ -178,9 +191,18 @@
             loadCHAPuzzle('sunny-cha-question');
             loadCHAPuzzle('rainy-cha-question');
         } else if (captchaProvider === 'altcha') {
-            // 加载 Altcha 挑战
-            loadAltchaWidget('sunny-altcha-widget', 'sunny-altcha-payload');
-            loadAltchaWidget('rainy-altcha-widget', 'rainy-altcha-payload');
+            // 检测移动设备，使用 CHA 替代 Altcha
+            if (isMobileDevice()) {
+                // 移动端：隐藏 Altcha，显示并加载 CHA
+                document.querySelectorAll('[id$="-altcha-container"]').forEach(el => el.style.display = 'none');
+                document.querySelectorAll('[id$="-cha-container"]').forEach(el => el.style.display = 'block');
+                loadCHAPuzzle('sunny-cha-question');
+                loadCHAPuzzle('rainy-cha-question');
+            } else {
+                // 桌面端：正常加载 Altcha
+                loadAltchaWidget('sunny-altcha-widget', 'sunny-altcha-payload');
+                loadAltchaWidget('rainy-altcha-widget', 'rainy-altcha-payload');
+            }
         }
 
         async function loadCHAPuzzle(questionElementId) {

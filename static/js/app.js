@@ -123,14 +123,31 @@ class RainMailApp {
                 return;
             }
         } else if (this.captchaProvider === 'altcha') {
-            const altchaPayloadInput = inputId === 'message-input' ?
-                document.getElementById('sunny-altcha-payload') :
-                document.getElementById('rainy-altcha-payload');
-            captchaResponse = altchaPayloadInput ? altchaPayloadInput.value : '';
+            // 移动端使用 CHA，桌面端使用 Altcha
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-            if (!captchaResponse) {
-                alert('请等待人机验证完成');
-                return;
+            if (isMobile) {
+                // 移动端：获取 CHA 答案
+                const chaAnswerInput = inputId === 'message-input' ?
+                    document.getElementById('sunny-cha-answer') :
+                    document.getElementById('rainy-cha-answer');
+                captchaResponse = chaAnswerInput ? chaAnswerInput.value.trim() : '';
+
+                if (!captchaResponse) {
+                    alert('请先完成人机验证');
+                    return;
+                }
+            } else {
+                // 桌面端：获取 Altcha payload
+                const altchaPayloadInput = inputId === 'message-input' ?
+                    document.getElementById('sunny-altcha-payload') :
+                    document.getElementById('rainy-altcha-payload');
+                captchaResponse = altchaPayloadInput ? altchaPayloadInput.value : '';
+
+                if (!captchaResponse) {
+                    alert('请等待人机验证完成');
+                    return;
+                }
             }
         }
 
@@ -148,7 +165,13 @@ class RainMailApp {
             } else if (this.captchaProvider === 'cha') {
                 requestBody.cha_answer = captchaResponse;
             } else if (this.captchaProvider === 'altcha') {
-                requestBody.altcha_payload = captchaResponse;
+                // Altcha 模式：移动端使用 CHA，桌面端使用 Altcha
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                if (isMobile) {
+                    requestBody.cha_answer = captchaResponse;
+                } else {
+                    requestBody.altcha_payload = captchaResponse;
+                }
             }
 
             const response = await fetch('/api/messages', {
@@ -187,8 +210,20 @@ class RainMailApp {
 
                 // 如果使用 Altcha，重新加载挑战
                 if (this.captchaProvider === 'altcha') {
-                    await this.loadAltchaChallenge(inputId === 'message-input' ? 'sunny-altcha-widget' : 'rainy-altcha-widget',
-                                                     inputId === 'message-input' ? 'sunny-altcha-payload' : 'rainy-altcha-payload');
+                    // 移动端重新加载 CHA 问题，桌面端重新加载 Altcha 挑战
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    if (isMobile) {
+                        const chaAnswerInput = inputId === 'message-input' ?
+                            document.getElementById('sunny-cha-answer') :
+                            document.getElementById('rainy-cha-answer');
+                        if (chaAnswerInput) {
+                            chaAnswerInput.value = '';
+                        }
+                        await this.loadCHAPuzzle(inputId === 'message-input' ? 'sunny-cha-question' : 'rainy-cha-question');
+                    } else {
+                        await this.loadAltchaChallenge(inputId === 'message-input' ? 'sunny-altcha-widget' : 'rainy-altcha-widget',
+                                                         inputId === 'message-input' ? 'sunny-altcha-payload' : 'rainy-altcha-payload');
+                    }
                 }
             } else {
                 alert(data.error || '提交失败');
