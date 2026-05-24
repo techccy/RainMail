@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统设置 - 雨天信箱</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .admin-settings {
+            max-width: 1000px;
+            margin: 20px auto;
+        }
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .settings-nav {
+            margin-bottom: 20px;
+        }
+        .settings-nav a {
+            color: inherit;
+            text-decoration: none;
+            opacity: 0.7;
+        }
+        .settings-nav a:hover {
+            opacity: 1;
+        }
+        .settings-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .settings-tab {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: inherit;
+        }
+        .settings-tab:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .settings-tab.active {
+            background: rgba(52, 152, 219, 0.5);
+        }
+        .settings-content {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 30px;
+            min-height: 400px;
+        }
+        .settings-panel {
+            display: none;
+        }
+        .settings-panel.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="password"],
+        .form-group input[type="number"],
+        .form-group input[type="email"],
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: inherit;
+            font-size: 14px;
+        }
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .password-wrapper {
+            position: relative;
+        }
+        .password-wrapper input {
+            padding-right: 40px;
+        }
+        .toggle-password {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            opacity: 0.6;
+            font-size: 18px;
+        }
+        .toggle-password:hover {
+            opacity: 1;
+        }
+        .settings-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: inherit;
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #229954;
+        }
+        .btn-test {
+            background: #9b59b6;
+            color: white;
+            margin-left: 10px;
+        }
+        .btn-test:hover {
+            background: #8e44ad;
+        }
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .checkbox-wrapper input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            z-index: 10000;
+            animation: slideIn 0.3s ease-out;
+        }
+        .toast-success {
+            background: #27ae60;
+        }
+        .toast-error {
+            background: #e74c3c;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .loading-overlay.show {
+            display: flex;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            .settings-tabs {
+                gap: 5px;
+            }
+            .settings-tab {
+                padding: 10px 15px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body class="sunny-mode">
+    <div class="container glass-effect admin-settings">
+        <div class="settings-header">
+            <div class="settings-nav">
+                <a href="{{ url_for('admin_dashboard') }}">← 返回仪表盘</a>
+            </div>
+            <h1>系统设置</h1>
+        </div>
+
+        <div class="settings-tabs">
+            <button class="settings-tab active" data-panel="weather">天气 API</button>
+            <button class="settings-tab" data-panel="captcha">人机验证</button>
+            <button class="settings-tab" data-panel="location">位置配置</button>
+            <button class="settings-tab" data-panel="admin">管理员</button>
+            <button class="settings-tab" data-panel="mail">邮件配置</button>
+            <button class="settings-tab" data-panel="ai">AI 审查</button>
+        </div>
+
+        <div class="settings-content">
+            <!-- 天气 API 配置 -->
+            <div class="settings-panel active" id="panel-weather">
+                <div class="section-title">天气 API 配置</div>
+                <form id="form-weather">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>API 主机 1</label>
+                            <input type="text" name="HEFENG_HOST1" data-key="weather.HEFENG_HOST1">
+                        </div>
+                        <div class="form-group">
+                            <label>API 密钥 1</label>
+                            <div class="password-wrapper">
+                                <input type="password" name="HEFENG_KEY1" data-key="weather.HEFENG_KEY1" class="password-field">
+                                <button type="button" class="toggle-password">👁</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>API 主机 2</label>
+                            <input type="text" name="HEFENG_HOST2" data-key="weather.HEFENG_HOST2">
+                        </div>
+                        <div class="form-group">
+                            <label>API 密钥 2</label>
+                            <div class="password-wrapper">
+                                <input type="password" name="HEFENG_KEY2" data-key="weather.HEFENG_KEY2" class="password-field">
+                                <button type="button" class="toggle-password">👁</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>API 主机 3</label>
+                            <input type="text" name="HEFENG_HOST3" data-key="weather.HEFENG_HOST3">
+                        </div>
+                        <div class="form-group">
+                            <label>API 密钥 3</label>
+                            <div class="password-wrapper">
+                                <input type="password" name="HEFENG_KEY3" data-key="weather.HEFENG_KEY3" class="password-field">
+                                <button type="button" class="toggle-password">👁</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>API 主机 4</label>
+                            <input type="text" name="HEFENG_HOST4" data-key="weather.HEFENG_HOST4">
+                        </div>
+                        <div class="form-group">
+                            <label>API 密钥 4</label>
+                            <div class="password-wrapper">
+                                <input type="password" name="HEFENG_KEY4" data-key="weather.HEFENG_KEY4" class="password-field">
+                                <button type="button" class="toggle-password">👁</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>请求频率（秒）</label>
+                        <input type="number" name="times" data-key="weather.times" min="60">
+                    </div>
+                </form>
+            </div>
+
+            <!-- 人机验证配置 -->
+            <div class="settings-panel" id="panel-captcha">
+                <div class="section-title">人机验证配置</div>
+                <form id="form-captcha">
+                    <div class="form-group">
+                        <label>验证提供商</label>
+                        <select name="CAPTCHA_PROVIDER" data-key="captcha.CAPTCHA_PROVIDER">
+                            <option value="cloudflare">Cloudflare Turnstile</option>
+                            <option value="cha">CHA (算术验证)</option>
+                            <option value="altcha">Altcha</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Turnstile Secret Key</label>
+                            <div class="password-wrapper">
+                                <input type="password" name="TURNSTILE_SECRET_KEY" data-key="captcha.TURNSTILE_SECRET_KEY" class="password-field">
+                                <button type="button" class="toggle-password">👁</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Turnstile Site Key</label>
+                            <div class="password-wrapper">
+                                <input type="password" name="TURNSTILE_SITE_KEY" data-key="captcha.TURNSTILE_SITE_KEY" class="password-field">
+                                <button type="button" class="toggle-password">👁</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Altcha HMAC Key</label>
+                            <div class="password-wrapper">
+                                <input type="password" name="ALTCHA_HMAC_KEY" data-key="captcha.ALTCHA_HMAC_KEY" class="password-field">
+                                <button type="button" class="toggle-password">👁</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Altcha 难度 (1-5)</label>
+                            <input type="number" name="ALTCHA_DIFFICULTY" data-key="captcha.ALTCHA_DIFFICULTY" min="1" max="5">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>验证有效期（分钟）</label>
+                        <input type="number" name="VERIFY_DURATION_MINUTES" data-key="captcha.VERIFY_DURATION_MINUTES" min="1">
+                    </div>
+                </form>
+            </div>
+
+            <!-- 位置配置 -->
+            <div class="settings-panel" id="panel-location">
+                <div class="section-title">位置配置</div>
+                <form id="form-location">
+                    <div class="form-group">
+                        <label>位置名称</label>
+                        <input type="text" name="LOCATION_NAME" data-key="location.LOCATION_NAME">
+                    </div>
+                    <div class="form-group">
+                        <label>和风天气位置 ID</label>
+                        <input type="number" name="LOCATION_ID" data-key="location.LOCATION_ID">
+                        <small style="opacity: 0.6;">例如：广州为 101280101</small>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 管理员配置 -->
+            <div class="settings-panel" id="panel-admin">
+                <div class="section-title">管理员配置</div>
+                <form id="form-admin">
+                    <div class="form-group">
+                        <label>管理员用户名</label>
+                        <input type="text" name="admin_username" data-key="admin.admin_username">
+                    </div>
+                    <div class="form-group">
+                        <label>管理员密码</label>
+                        <div class="password-wrapper">
+                            <input type="password" name="admin_password" data-key="admin.admin_password" class="password-field" placeholder="不修改请留空">
+                            <button type="button" class="toggle-password">👁</button>
+                        </div>
+                        <small style="opacity: 0.6;">显示为 **** 表示已加密存储，留空表示不修改</small>
+                    </div>
+                    <div class="form-group">
+                        <label>强制降雨持续时间（分钟）</label>
+                        <input type="number" name="force_rain_duration" data-key="admin.force_rain_duration" min="1">
+                    </div>
+                </form>
+            </div>
+
+            <!-- 邮件配置 -->
+            <div class="settings-panel" id="panel-mail">
+                <div class="section-title">邮件配置</div>
+                <form id="form-mail">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>SMTP 服务器</label>
+                            <input type="text" name="MAIL_SERVER" data-key="mail.MAIL_SERVER">
+                        </div>
+                        <div class="form-group">
+                            <label>SMTP 端口</label>
+                            <input type="number" name="MAIL_PORT" data-key="mail.MAIL_PORT" min="1" max="65535">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>发件人地址</label>
+                        <input type="email" name="MAIL_USERNAME" data-key="mail.MAIL_USERNAME">
+                    </div>
+                    <div class="form-group">
+                        <label>邮箱密码 / 应用密码</label>
+                        <div class="password-wrapper">
+                            <input type="password" name="MAIL_PASSWORD" data-key="mail.MAIL_PASSWORD" class="password-field">
+                            <button type="button" class="toggle-password">👁</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>默认发件人显示</label>
+                        <input type="text" name="MAIL_DEFAULT_SENDER" data-key="mail.MAIL_DEFAULT_SENDER">
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" name="MAIL_USE_TLS" data-key="mail.MAIL_USE_TLS" id="mail_use_tls">
+                            <label for="mail_use_tls" style="margin: 0;">使用 TLS 加密</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>测试邮件</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="email" id="test_email" placeholder="输入测试邮箱地址">
+                            <button type="button" class="btn btn-test" onclick="testEmail()">发送测试邮件</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- AI 审查配置 -->
+            <div class="settings-panel" id="panel-ai">
+                <div class="section-title">AI 内容审查配置</div>
+                <form id="form-ai">
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <div class="password-wrapper">
+                            <input type="password" name="API_KEY" data-key="ai_moderation.API_KEY" class="password-field">
+                            <button type="button" class="toggle-password">👁</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Base URL</label>
+                        <input type="text" name="BASE_URL" data-key="ai_moderation.BASE_URL">
+                    </div>
+                    <div class="form-group">
+                        <label>模型</label>
+                        <input type="text" name="MODEL" data-key="ai_moderation.MODEL">
+                    </div>
+                    <div class="form-group">
+                        <label>系统提示词</label>
+                        <textarea name="SYSTEM_PROMPT" data-key="ai_moderation.SYSTEM_PROMPT"></textarea>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="settings-actions">
+            <button class="btn btn-primary" onclick="saveConfig()">保存更改</button>
+            <button class="btn btn-secondary" onclick="resetConfig()">重置</button>
+            <button class="btn btn-success" onclick="exportConfig()">导出配置</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()">导入配置</button>
+            <input type="file" id="import-file" accept=".json" style="display: none" onchange="importConfig()">
+        </div>
+    </div>
+
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/admin-settings.js') }}"></script>
+</body>
+</html>

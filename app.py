@@ -1,6 +1,6 @@
 from curses import flash
 import threading
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, make_response, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message as EmailMessage
 import requests
@@ -13,15 +13,9 @@ import psutil
 import os
 import hashlib
 import csv
-import pyotp
 import secrets
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 import json
-import qrcode
-from PIL import Image
 import random
 import string
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -42,13 +36,38 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 # --- 新增：加载配置文件 ---
-config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
-if os.path.exists(config_path):
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-        app.config.update(config)
-else:
-    print("警告: config.yaml 文件未找到！")
+config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+config_yaml_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+
+def migrate_yaml_to_json():
+    """将YAML配置迁移到JSON格式"""
+    if not os.path.exists(config_path) and os.path.exists(config_yaml_path):
+        import yaml
+        try:
+            with open(config_yaml_path, 'r', encoding='utf-8') as f:
+                yaml_config = yaml.safe_load(f)
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(yaml_config, f, ensure_ascii=False, indent=2)
+            print(f"[INFO] 已将 config.yaml 迁移至 config.json")
+            return yaml_config
+        except Exception as e:
+            print(f"[ERROR] YAML迁移失败: {e}")
+            return {}
+
+def load_config():
+    """加载JSON配置文件，如果不存在则尝试从YAML迁移"""
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    else:
+        # 尝试从YAML迁移
+        config = migrate_yaml_to_json()
+        if config:
+            return config
+        return {}
+
+config = load_config()
+app.config.update(config)
 app.secret_key = 'rainmail_secret_key_2024'
 TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
 TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
@@ -120,97 +139,6 @@ mail = Mail(app)
 #     except KeyError as e:
 #         print(f"错误：CSV 文件 {file_path} 中缺少必要的列: {e}")
 #         SENSITIVE_WORDS_SET = set()
-
-def generate_totp_secret():
-    """生成一个新的 TOTP 密钥"""
-    return pyotp.random_base32()
-
-def derive_key_from_password(password: str, salt: bytes) -> bytes:
-    """从用户密码派生加密/解密密钥"""
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=100000,
-    )
-    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-    return key
-
-def encrypt_secret(secret: str, password: str) -> dict:
-    """使用用户密码加密 TOTP 密钥"""
-    salt = os.urandom(16)  # 生成随机盐
-    key = derive_key_from_password(password, salt)
-    fernet = Fernet(key)
-    encrypted_secret = fernet.encrypt(secret.encode())
-    # 返回加密后的密钥和盐，以便解密
-    return {"encrypted_secret": base64.b64encode(encrypted_secret).decode(), "salt": base64.b64encode(salt).decode()}
-
-def decrypt_secret(encrypted_data: dict, password: str) -> str:
-    """使用用户密码解密 TOTP 密钥"""
-    try:
-        salt = base64.b64decode(encrypted_data["salt"])
-        encrypted_secret_bytes = base64.b64decode(encrypted_data["encrypted_secret"])
-        key = derive_key_from_password(password, salt)
-        fernet = Fernet(key)
-        decrypted_secret = fernet.decrypt(encrypted_secret_bytes)
-        return decrypted_secret.decode()
-    except Exception as e:
-        print(f"解密失败: {e}")
-        raise ValueError("密码错误或加密数据损坏")
-
-def save_encrypted_secret(encrypted_data: dict, filepath: str):
-    """将加密的密钥数据保存到文件"""
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(encrypted_data, f)
-
-def load_encrypted_secret(filepath: str) -> dict:
-    """从文件加载加密的密钥数据"""
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-def initialize_totp_secret():
-    """初始化 TOTP 密钥 - 支持静默自动解密"""
-    secret_file_path = os.path.join(os.path.dirname(__file__), 'totp_secret.json')
-    qr_file_path = os.path.join(os.path.dirname(__file__), 'totp_setup_qr.png')
-
-    # 从配置中获取解密密码
-    decrypt_password = app.config.get('totp_decrypt_password')
-    if not decrypt_password:
-        print("\n[ERROR] config.yaml 中缺少 'totp_decrypt_password'，无法自动解密 TOTP 密钥！")
-        return None
-
-    # 情况1: 存在加密文件 → 尝试自动解密
-    if os.path.exists(secret_file_path):
-        try:
-            encrypted_data = load_encrypted_secret(secret_file_path)
-            totp_secret = decrypt_secret(encrypted_data, decrypt_password)
-            print(f"\n[SUCCESS] 自动解密 TOTP 密钥成功！(来自 {secret_file_path})")
-            return totp_secret
-        except Exception as e:
-            print(f"\n[ERROR] 自动解密失败: {e}")
-            print("[INFO] 将生成新的 TOTP 密钥...")
-
-    # 情况2: 文件不存在 或 解密失败 → 自动生成新密钥并加密保存
-    print("\n[INFO] 正在生成新的 TOTP 密钥（静默模式）...")
-    new_secret = generate_totp_secret()
-
-    # 生成二维码（可选，后台运行时可能不需要）
-    try:
-        issuer_name = "RainMail_Admin"
-        account_name = "admin"
-        totp_uri = pyotp.totp.TOTP(new_secret).provisioning_uri(account_name, issuer_name=issuer_name)
-        qr_img = qrcode.make(totp_uri)
-        qr_img.save(qr_file_path)
-        print(f"[SUCCESS] TOTP 二维码已保存至: {qr_file_path}")
-    except Exception as e:
-        print(f"[WARNING] 生成二维码失败: {e}")
-
-    # 用配置中的密码加密并保存
-    encrypted_data = encrypt_secret(new_secret, decrypt_password)
-    save_encrypted_secret(encrypted_data, secret_file_path)
-    print(f"[SUCCESS] 新 TOTP 密钥已加密保存至 '{secret_file_path}'")
-
-    return new_secret
 
 def ai_moderation_check(content):
     ai_config = app.config.get('AI_MODERATION')
@@ -399,14 +327,6 @@ with app.app_context():
 
 # sensitive_words_csv_file = os.path.join(os.path.dirname(__file__), 'resources', 'all.csv')
 # load_sensitive_words_from_csv(sensitive_words_csv_file)
-
-# 全局变量存储 TOTP 密钥
-ADMIN_TOTP_SECRET = initialize_totp_secret()
-if ADMIN_TOTP_SECRET:
-    print("\n[INFO] TOTP 双重认证已配置。管理员登录需要验证码。")
-else:
-    print("\n[ERROR] TOTP 双重认证配置失败，可能影响管理员登录。")
-    ADMIN_TOTP_SECRET = None # 确保变量被定义
 
 # 全局状态变量
 force_rain_until = None  # 强制降雨结束时间
@@ -1205,6 +1125,326 @@ def admin_logout():
     """管理员登出"""
     session.pop('admin_logged_in', None)
     return redirect(url_for('admin_login'))
+
+@app.route('/admin/settings')
+@admin_required
+def admin_settings():
+    """管理员设置页面"""
+    return render_template('admin_settings.html')
+
+# 敏感字段列表（用于脱敏显示）
+SENSITIVE_FIELDS = [
+    'HEFENG_KEY', 'TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY',
+    'ALTCHA_HMAC_KEY', 'admin_password', 'MAIL_PASSWORD',
+    'API_KEY', 'WECHAT_APP_SECRET', 'IPINFO_TOKEN'
+]
+
+def mask_sensitive_value(key, value):
+    """对敏感字段进行脱敏处理"""
+    if value is None or value == '':
+        return value
+    for sensitive in SENSITIVE_FIELDS:
+        if sensitive in key:
+            if isinstance(value, str) and len(value) > 4:
+                return f'****{value[-4:]}'
+            else:
+                return '****'
+    return value
+
+@app.route('/admin/api/config')
+@admin_required
+def api_get_config():
+    """获取配置（敏感字段脱敏）"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        # 构建分类配置
+        categorized_config = {
+            'weather': {
+                'HEFENG_HOST1': config.get('HEFENG_HOST1', ''),
+                'HEFENG_HOST2': config.get('HEFENG_HOST2', ''),
+                'HEFENG_HOST3': config.get('HEFENG_HOST3', ''),
+                'HEFENG_HOST4': config.get('HEFENG_HOST4', ''),
+                'HEFENG_KEY1': mask_sensitive_value('HEFENG_KEY1', config.get('HEFENG_KEY1', '')),
+                'HEFENG_KEY2': mask_sensitive_value('HEFENG_KEY2', config.get('HEFENG_KEY2', '')),
+                'HEFENG_KEY3': mask_sensitive_value('HEFENG_KEY3', config.get('HEFENG_KEY3', '')),
+                'HEFENG_KEY4': mask_sensitive_value('HEFENG_KEY4', config.get('HEFENG_KEY4', '')),
+                'times': config.get('times', 3600)
+            },
+            'captcha': {
+                'TURNSTILE_SECRET_KEY': mask_sensitive_value('TURNSTILE_SECRET_KEY', config.get('TURNSTILE_SECRET_KEY', '')),
+                'TURNSTILE_SITE_KEY': mask_sensitive_value('TURNSTILE_SITE_KEY', config.get('TURNSTILE_SITE_KEY', '')),
+                'CAPTCHA_PROVIDER': config.get('CAPTCHA_PROVIDER', 'altcha'),
+                'ALTCHA_HMAC_KEY': mask_sensitive_value('ALTCHA_HMAC_KEY', config.get('ALTCHA_HMAC_KEY', '')),
+                'ALTCHA_DIFFICULTY': config.get('ALTCHA_DIFFICULTY', 3),
+                'VERIFY_DURATION_MINUTES': config.get('VERIFY_DURATION_MINUTES', 15)
+            },
+            'location': {
+                'LOCATION_NAME': config.get('LOCATION_NAME', '广州'),
+                'LOCATION_ID': config.get('LOCATION_ID', 101280101)
+            },
+            'admin': {
+                'admin_username': config.get('admin_username', 'admin'),
+                'admin_password': mask_sensitive_value('admin_password', config.get('admin_password', '')),
+                'force_rain_duration': config.get('force_rain_duration', 10)
+            },
+            'mail': {
+                'MAIL_SERVER': config.get('MAIL_SERVER', 'smtp.gmail.com'),
+                'MAIL_PORT': config.get('MAIL_PORT', 587),
+                'MAIL_USE_TLS': config.get('MAIL_USE_TLS', True),
+                'MAIL_USERNAME': config.get('MAIL_USERNAME', ''),
+                'MAIL_PASSWORD': mask_sensitive_value('MAIL_PASSWORD', config.get('MAIL_PASSWORD', '')),
+                'MAIL_DEFAULT_SENDER': config.get('MAIL_DEFAULT_SENDER', 'RainMail <noreply@rainmail.dev>')
+            },
+            'ai_moderation': {
+                'API_KEY': mask_sensitive_value('API_KEY', config.get('AI_MODERATION', {}).get('API_KEY', '')),
+                'BASE_URL': config.get('AI_MODERATION', {}).get('BASE_URL', ''),
+                'MODEL': config.get('AI_MODERATION', {}).get('MODEL', ''),
+                'SYSTEM_PROMPT': config.get('AI_MODERATION', {}).get('SYSTEM_PROMPT', '')
+            },
+            'wechat': {
+                'WECHAT_APP_ID': config.get('WECHAT_APP_ID', ''),
+                'WECHAT_APP_SECRET': mask_sensitive_value('WECHAT_APP_SECRET', config.get('WECHAT_APP_SECRET', ''))
+            }
+        }
+
+        return jsonify({'success': True, 'config': categorized_config})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/config', methods=['PUT'])
+@admin_required
+def api_update_config():
+    """更新配置"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    backup_path = config_path + '.backup'
+
+    try:
+        # 备份当前配置
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                backup_content = f.read()
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                f.write(backup_content)
+
+        # 读取当前配置
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        # 获取提交的配置
+        data = request.get_json()
+        updates = data.get('config', {})
+
+        # 更新天气配置
+        if 'weather' in updates:
+            weather = updates['weather']
+            for i in range(1, 5):
+                host_key = f'HEFENG_HOST{i}'
+                key_key = f'HEFENG_KEY{i}'
+                if host_key in weather:
+                    config[host_key] = weather[host_key]
+                # 如果密码值以****开头，说明用户没有修改，保留原值
+                if key_key in weather:
+                    if weather[key_key] and not str(weather[key_key]).startswith('****'):
+                        config[key_key] = weather[key_key]
+            if 'times' in weather:
+                config['times'] = int(weather['times'])
+
+        # 更新人机验证配置
+        if 'captcha' in updates:
+            captcha = updates['captcha']
+            for key in ['TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'CAPTCHA_PROVIDER',
+                       'ALTCHA_HMAC_KEY', 'ALTCHA_DIFFICULTY', 'VERIFY_DURATION_MINUTES']:
+                if key in captcha:
+                    value = captcha[key]
+                    # 敏感字段脱敏检查
+                    if key in ['TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'ALTCHA_HMAC_KEY']:
+                        if value and not str(value).startswith('****'):
+                            config[key] = value
+                    elif key in ['ALTCHA_DIFFICULTY']:
+                        config[key] = int(value) if value else 3
+                    elif key in ['VERIFY_DURATION_MINUTES']:
+                        config[key] = int(value) if value else 15
+                    else:
+                        config[key] = value
+
+        # 更新位置配置
+        if 'location' in updates:
+            location = updates['location']
+            if 'LOCATION_NAME' in location:
+                config['LOCATION_NAME'] = location['LOCATION_NAME']
+            if 'LOCATION_ID' in location:
+                config['LOCATION_ID'] = int(location['LOCATION_ID'])
+
+        # 更新管理员配置
+        if 'admin' in updates:
+            admin = updates['admin']
+            if 'admin_username' in admin:
+                config['admin_username'] = admin['admin_username']
+            if 'admin_password' in admin:
+                password = admin['admin_password']
+                if password and not str(password).startswith('****'):
+                    config['admin_password'] = password
+            if 'force_rain_duration' in admin:
+                config['force_rain_duration'] = int(admin['force_rain_duration'])
+
+        # 更新邮件配置
+        if 'mail' in updates:
+            mail = updates['mail']
+            for key in ['MAIL_SERVER', 'MAIL_PORT', 'MAIL_USE_TLS',
+                       'MAIL_USERNAME', 'MAIL_PASSWORD', 'MAIL_DEFAULT_SENDER']:
+                if key in mail:
+                    value = mail[key]
+                    if key == 'MAIL_PASSWORD':
+                        if value and not str(value).startswith('****'):
+                            config[key] = value
+                    elif key == 'MAIL_PORT':
+                        config[key] = int(value) if value else 587
+                    elif key == 'MAIL_USE_TLS':
+                        config[key] = bool(value)
+                    else:
+                        config[key] = value
+
+        # 更新AI审查配置
+        ai_mod = config.get('AI_MODERATION', {})
+        if 'ai_moderation' in updates:
+            ai = updates['ai_moderation']
+            if 'API_KEY' in ai:
+                api_key = ai['API_KEY']
+                if api_key and not str(api_key).startswith('****'):
+                    ai_mod['API_KEY'] = api_key
+            if 'BASE_URL' in ai:
+                ai_mod['BASE_URL'] = ai['BASE_URL']
+            if 'MODEL' in ai:
+                ai_mod['MODEL'] = ai['MODEL']
+            if 'SYSTEM_PROMPT' in ai:
+                ai_mod['SYSTEM_PROMPT'] = ai['SYSTEM_PROMPT']
+        config['AI_MODERATION'] = ai_mod
+
+        # 更新微信配置
+        if 'wechat' in updates:
+            wechat = updates['wechat']
+            if 'WECHAT_APP_ID' in wechat:
+                config['WECHAT_APP_ID'] = wechat['WECHAT_APP_ID']
+            if 'WECHAT_APP_SECRET' in wechat:
+                secret = wechat['WECHAT_APP_SECRET']
+                if secret and not str(secret).startswith('****'):
+                    config['WECHAT_APP_SECRET'] = secret
+
+        # 写入配置文件（JSON格式）
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+
+        return jsonify({'success': True, 'message': '配置已保存，部分更改需要重启服务后生效'})
+
+    except Exception as e:
+        # 恢复备份
+        if os.path.exists(backup_path):
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_content = f.read()
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.write(backup_content)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/config/export')
+@admin_required
+def api_export_config():
+    """导出配置为 JSON 文件（与后端config.json格式一致）"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        # 直接导出配置，与后端config.json格式完全一致
+        response = make_response(json.dumps(config, ensure_ascii=False, indent=2))
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Content-Disposition'] = f'attachment; filename=rainmail_config_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        return response
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/config/import', methods=['POST'])
+@admin_required
+def api_import_config():
+    """导入配置 JSON 文件（与导出格式一致）"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    backup_path = config_path + '.backup'
+
+    try:
+        # 备份当前配置
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                backup_content = f.read()
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                f.write(backup_content)
+
+        # 检查文件上传
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': '未找到上传文件'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': '未选择文件'}), 400
+
+        if not file.filename.endswith('.json'):
+            return jsonify({'success': False, 'error': '只支持 JSON 格式文件'}), 400
+
+        # 读取并解析 JSON
+        content = file.read().decode('utf-8')
+        imported_config = json.loads(content)
+
+        # 如果是旧格式（包含config字段），提取config
+        if 'config' in imported_config:
+            imported_config = imported_config['config']
+
+        # 写入配置文件
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(imported_config, f, ensure_ascii=False, indent=2)
+
+        return jsonify({
+            'success': True,
+            'message': f'配置已导入，备份已保存至 {backup_path}。部分更改需要重启服务后生效'
+        })
+
+    except json.JSONDecodeError:
+        return jsonify({'success': False, 'error': 'JSON 解析失败'}), 400
+    except Exception as e:
+        # 恢复备份
+        if os.path.exists(backup_path):
+            with open(backup_path, 'r', encoding='utf-8') as f:
+                backup_content = f.read()
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.write(backup_content)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/config/test-email', methods=['POST'])
+@admin_required
+def api_test_email():
+    """测试邮件配置"""
+    try:
+        data = request.get_json()
+        test_email = data.get('test_email')
+
+        if not test_email:
+            return jsonify({'success': False, 'error': '请提供测试邮箱地址'}), 400
+
+        # 创建测试邮件
+        msg = EmailMessage(
+            subject='雨天信箱 - 邮件配置测试',
+            recipients=[test_email],
+            body='这是一封测试邮件，如果您收到此邮件，说明邮件配置正确。\n\n雨天信箱系统'
+        )
+
+        # 发送邮件
+        mail.send(msg)
+
+        return jsonify({'success': True, 'message': f'测试邮件已发送至 {test_email}'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'邮件发送失败: {str(e)}'}), 500
 
 @app.route('/api/weather/meta')
 def weather_meta():
