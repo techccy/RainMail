@@ -1552,6 +1552,23 @@ def register_page():
                           captcha_provider=captcha_provider,
                           cha_question=cha_question)
 
+@app.route('/user/inbox')
+@login_required_user
+def user_inbox_page():
+    """用户收件箱页面"""
+    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+    site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+
+    return render_template('user/inbox.html',
+                          captcha_provider=captcha_provider,
+                          turnstile_site_key=site_key)
+
+@app.route('/user/settings')
+@login_required_user
+def user_settings_page():
+    """用户设置页面"""
+    return render_template('user/settings.html')
+
 @app.route('/api/auth/register', methods=['POST'])
 def api_register():
     """用户注册 API"""
