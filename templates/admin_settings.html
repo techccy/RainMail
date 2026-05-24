@@ -436,9 +436,14 @@
                         <input type="text" name="MAIL_DEFAULT_SENDER" data-key="mail.MAIL_DEFAULT_SENDER">
                     </div>
                     <div class="form-group">
-                        <div class="checkbox-wrapper">
-                            <input type="checkbox" name="MAIL_USE_TLS" data-key="mail.MAIL_USE_TLS" id="mail_use_tls">
-                            <label for="mail_use_tls" style="margin: 0;">使用 TLS 加密</label>
+                        <label>加密方式</label>
+                        <div class="checkbox-wrapper" style="display: flex; gap: 15px;">
+                            <input type="radio" name="MAIL_ENCRYPTION" data-key="mail.MAIL_ENCRYPTION" value="none" id="mail_none">
+                            <label for="mail_none" style="margin: 0;">无加密</label>
+                            <input type="radio" name="MAIL_ENCRYPTION" data-key="mail.MAIL_ENCRYPTION" value="tls" id="mail_tls">
+                            <label for="mail_tls" style="margin: 0;">TLS (端口587)</label>
+                            <input type="radio" name="MAIL_ENCRYPTION" data-key="mail.MAIL_ENCRYPTION" value="ssl" id="mail_ssl">
+                            <label for="mail_ssl" style="margin: 0;">SSL (端口465)</label>
                         </div>
                     </div>
                     <div class="form-group">

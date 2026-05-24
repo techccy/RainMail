@@ -72,6 +72,12 @@ async function loadConfig() {
 
 // 填充表单
 function populateForms(config) {
+    // 处理邮件加密方式反向映射
+    if (config.mail && config.mail.MAIL_USE_TLS !== undefined && config.mail.MAIL_USE_SSL !== undefined) {
+        // 使用临时属性存储加密方式，供单选框使用
+        config.mail.MAIL_ENCRYPTION = config.mail.MAIL_USE_SSL ? 'ssl' : (config.mail.MAIL_USE_TLS ? 'tls' : 'none');
+    }
+
     document.querySelectorAll('[data-key]').forEach(input => {
         const key = input.getAttribute('data-key');
         const value = getNestedValue(config, key);
@@ -79,6 +85,8 @@ function populateForms(config) {
         if (value !== undefined && value !== null) {
             if (input.type === 'checkbox') {
                 input.checked = value;
+            } else if (input.type === 'radio') {
+                input.checked = (input.value === value);
             } else {
                 input.value = value;
             }
@@ -111,6 +119,8 @@ function collectFormData() {
         ai_moderation: {}
     };
 
+    let mailEncryption = null;
+
     document.querySelectorAll('[data-key]').forEach(input => {
         const key = input.getAttribute('data-key');
         const [category, field] = key.split('.');
@@ -118,6 +128,12 @@ function collectFormData() {
         let value;
         if (input.type === 'checkbox') {
             value = input.checked;
+        } else if (input.type === 'radio') {
+            if (input.checked) {
+                value = input.value;
+            } else {
+                return; // 跳过未选中的radio
+            }
         } else if (input.type === 'number') {
             value = input.value ? parseInt(input.value) : '';
         } else {
@@ -129,11 +145,35 @@ function collectFormData() {
             if (category === 'ai_moderation') {
                 const subField = field.split('.')[1] || field;
                 data[category][subField] = value;
+            } else if (field === 'MAIL_ENCRYPTION') {
+                mailEncryption = value;
             } else {
                 data[category][field] = value;
             }
         }
     });
+
+    // 处理加密方式转换为 MAIL_USE_TLS 和 MAIL_USE_SSL
+    if (mailEncryption) {
+        if (mailEncryption === 'tls') {
+            data.mail.MAIL_USE_TLS = true;
+            data.mail.MAIL_USE_SSL = false;
+            // 建议端口587
+            if (!data.mail.MAIL_PORT || data.mail.MAIL_PORT === 465) {
+                data.mail.MAIL_PORT = 587;
+            }
+        } else if (mailEncryption === 'ssl') {
+            data.mail.MAIL_USE_TLS = false;
+            data.mail.MAIL_USE_SSL = true;
+            // 建议端口465
+            if (!data.mail.MAIL_PORT || data.mail.MAIL_PORT === 587) {
+                data.mail.MAIL_PORT = 465;
+            }
+        } else {
+            data.mail.MAIL_USE_TLS = false;
+            data.mail.MAIL_USE_SSL = false;
+        }
+    }
 
     return data;
 }

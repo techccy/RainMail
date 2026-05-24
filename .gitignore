@@ -5,3 +5,6 @@ totp_secret.json
 static/.DS_Store
 totp_setup_qr.png
 instance/rainmail.db
+config.*
+config.json.backup
+config.json
