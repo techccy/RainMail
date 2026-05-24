@@ -54,9 +54,15 @@
             </div>
             {% elif captcha_provider == 'altcha' %}
             <div class="form-group">
+                <!-- Altcha容器 - 桌面端使用 -->
                 <div id="register-altcha-container" class="altcha-container">
                     <div id="register-altcha-widget"></div>
                     <input type="hidden" id="altcha-payload" value="">
+                </div>
+                <!-- CHA容器 - 移动端使用，默认隐藏 -->
+                <div id="register-cha-container" class="cha-container" style="display: none;">
+                    <div class="cha-question">{{ cha_question }}</div>
+                    <input type="text" id="cha-answer" name="cha_answer" placeholder="请输入答案" required>
                 </div>
             </div>
             {% endif %}

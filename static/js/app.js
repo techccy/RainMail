@@ -86,7 +86,6 @@ class RainMailApp {
             });
         });
     }
-    }
 
     updateCharCount(textarea) {
         const count = textarea.value.length;
