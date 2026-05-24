@@ -1516,8 +1516,8 @@ def login_page():
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
 
-    # 为 CHA 验证生成新问题
-    if captcha_provider == 'cha':
+    # 为 CHA 验证生成新问题 (CHA 或 Altcha 移动端回退都需要)
+    if captcha_provider in ('cha', 'altcha'):
         question, answer = generate_cha_question()
         session['cha_question'] = question
         session['cha_answer'] = answer
@@ -1537,8 +1537,8 @@ def register_page():
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
 
-    # 为 CHA 验证生成新问题
-    if captcha_provider == 'cha':
+    # 为 CHA 验证生成新问题 (CHA 或 Altcha 移动端回退都需要)
+    if captcha_provider in ('cha', 'altcha'):
         question, answer = generate_cha_question()
         session['cha_question'] = question
         session['cha_answer'] = answer
