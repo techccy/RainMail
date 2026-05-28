@@ -1621,6 +1621,36 @@ def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('admin_login'))
 
+@app.route('/admin/api/users')
+@admin_required
+def admin_get_users():
+    """获取所有用户列表"""
+    users = User.query.order_by(User.created_at.desc()).all()
+    return jsonify({
+        'success': True,
+        'users': [{
+            'id': u.id,
+            'username': u.username,
+            'email': u.email,
+            'is_verified': u.is_verified,
+            'created_at': u.created_at.strftime('%Y-%m-%d %H:%M')
+        } for u in users]
+    })
+
+@app.route('/admin/api/verify_user/<int:user_id>', methods=['POST'])
+@admin_required
+def admin_verify_user(user_id):
+    """手动验证用户"""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': '用户不存在'}), 404
+
+    user.is_verified = True
+    user.verification_token = None
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': f'用户 {user.email} 已验证'})
+
 @app.route('/admin/settings')
 @admin_required
 def admin_settings():

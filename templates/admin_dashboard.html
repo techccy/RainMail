@@ -73,6 +73,20 @@
             border-radius: 5px;
             cursor: pointer;
         }
+        .verify-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .verify-btn:hover {
+            background: #229954;
+        }
+        .users-list {
+            margin-bottom: 30px;
+        }
         .logout-btn {
             background: #95a5a6;
             color: white;
@@ -122,6 +136,28 @@
             </div>
         </div>
 
+        <!-- 用户管理 -->
+        <div class="users-list">
+            <h3>用户管理</h3>
+            <div class="messages-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>用户名</th>
+                            <th>邮箱</th>
+                            <th>验证状态</th>
+                            <th>注册时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-body">
+                        <!-- 动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- 消息列表 -->
         <div class="messages-list">
             <h3>所有消息 ({{ messages|length }} 条)</h3>
@@ -155,6 +191,55 @@
     </div>
 
     <script>
+        // 页面加载时获取用户列表
+        loadUsers();
+
+        async function loadUsers() {
+            try {
+                const response = await fetch('/admin/api/users');
+                const data = await response.json();
+                const tbody = document.getElementById('users-table-body');
+                if (data.users && data.users.length > 0) {
+                    tbody.innerHTML = data.users.map(user => `
+                        <tr>
+                            <td>${user.id}</td>
+                            <td>${user.username || 'N/A'}</td>
+                            <td>${user.email}</td>
+                            <td>${user.is_verified ? '✅ 已验证' : '❌ 未验证'}</td>
+                            <td>${user.created_at}</td>
+                            <td>
+                                ${!user.is_verified ? `<button class="verify-btn" onclick="verifyUser(${user.id}, '${user.email}')">验证</button>` : '-'}
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">暂无用户</td></tr>';
+                }
+            } catch (error) {
+                console.error('加载用户列表失败:', error);
+            }
+        }
+
+        async function verifyUser(userId, email) {
+            if (!confirm(`确定要验证用户 ${email} 吗？`)) return;
+
+            try {
+                const response = await fetch(`/admin/api/verify_user/${userId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                    loadUsers();
+                } else {
+                    alert('操作失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                alert('操作失败');
+            }
+        }
+
         async function forceRain() {
             try {
                 const response = await fetch('/admin/force_rain', {
