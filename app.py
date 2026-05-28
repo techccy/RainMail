@@ -272,7 +272,7 @@ class User(db.Model):
             'username': self.username,
             'city': self.city,
             'is_verified': self.is_verified,
-            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }
 
 # --- 新增：信件投递记录模型 ---
@@ -2096,7 +2096,8 @@ def api_register():
         })
 
     except Exception as e:
-        app.logger.error(f"注册错误: {e}")
+        import traceback
+        app.logger.error(f"注册错误: {e}\n{traceback.format_exc()}")
         return jsonify({'error': '注册失败'}), 500
 
 @app.route('/api/auth/verify-email', methods=['POST'])
@@ -2169,7 +2170,8 @@ def api_login():
         })
 
     except Exception as e:
-        app.logger.error(f"登录错误: {e}")
+        import traceback
+        app.logger.error(f"登录错误: {e}\n{traceback.format_exc()}")
         return jsonify({'error': '登录失败'}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
