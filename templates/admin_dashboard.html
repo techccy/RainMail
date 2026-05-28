@@ -176,6 +176,32 @@
             text-decoration: none;
             display: inline-block;
         }
+        .editable-cell input {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #3498db;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            box-sizing: border-box;
+        }
+        .save-btn {
+            background: #27ae60;
+            color: white;
+        }
+        .save-btn:hover {
+            background: #229954;
+        }
+        .cancel-btn {
+            background: #95a5a6;
+            color: white;
+        }
+        .cancel-btn:hover {
+            background: #7f8c8d;
+        }
+        .username-cell, .city-cell {
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="sunny-mode">
@@ -280,10 +306,17 @@
     </div>
 
     <script>
+        // 用户数据缓存
+        let usersCache = [];
         // 当前页面状态
         let currentPage = 1;
         let currentSearch = '';
         const perPage = 20;
+
+        // 获取缓存的用户数据
+        function getUserFromCache(userId) {
+            return usersCache.find(u => u.id === userId);
+        }
 
         // 页面加载时获取用户列表
         loadUsers();
@@ -297,12 +330,13 @@
                 const data = await response.json();
                 const tbody = document.getElementById('users-table-body');
                 if (data.users && data.users.length > 0) {
+                    usersCache = data.users;
                     tbody.innerHTML = data.users.map(user => `
-                        <tr>
+                        <tr data-user-id="${user.id}">
                             <td>${user.id}</td>
-                            <td>${user.username || 'N/A'}</td>
+                            <td class="username-cell">${user.username || 'N/A'}</td>
                             <td>${user.email}</td>
-                            <td>${user.city || 'N/A'}</td>
+                            <td class="city-cell">${user.city || 'N/A'}</td>
                             <td>${user.is_verified ? '✅ 已验证' : '❌ 未验证'}</td>
                             <td>${user.created_at}</td>
                             <td>${user.last_login || '从未'}</td>
@@ -363,43 +397,77 @@
         });
 
         async function editUser(userId) {
+            const row = document.querySelector(`tr[data-user-id="${userId}"]`);
+            if (!row) return;
+
+            const usernameCell = row.querySelector('.username-cell');
+            const cityCell = row.querySelector('.city-cell');
+            const currentUsername = usernameCell.textContent;
+            const currentCity = cityCell.textContent;
+
+            usernameCell.innerHTML = `<input type="text" class="edit-username" value="${currentUsername === 'N/A' ? '' : currentUsername}">`;
+            cityCell.innerHTML = `<input type="text" class="edit-city" value="${currentCity === 'N/A' ? '' : currentCity}">`;
+
+            const actionsDiv = row.querySelector('.action-btns');
+            actionsDiv.innerHTML = `
+                <button class="action-btn save-btn" onclick="saveUser(${userId})">保存</button>
+                <button class="action-btn cancel-btn" onclick="cancelEdit(${userId}, '${currentUsername}', '${currentCity}')">取消</button>
+            `;
+        }
+
+        async function saveUser(userId) {
+            const row = document.querySelector(`tr[data-user-id="${userId}"]`);
+            if (!row) return;
+
+            const newUsername = row.querySelector('.edit-username').value.trim();
+            const newCity = row.querySelector('.edit-city').value.trim() || '广州';
+
+            const updateData = {
+                username: newUsername || null,
+                city: newCity
+            };
+
             try {
-                const response = await fetch(`/admin/api/user/${userId}`);
-                const data = await response.json();
-                if (!data.success) {
-                    alert('获取用户信息失败');
-                    return;
-                }
-
-                const user = data.user;
-                const newUsername = prompt('用户名:', user.username || '');
-                if (newUsername === null) return;
-
-                const newCity = prompt('城市:', user.city || '广州');
-                if (newCity === null) return;
-
-                const updateData = {
-                    username: newUsername,
-                    city: newCity
-                };
-
-                const updateResponse = await fetch(`/admin/api/update_user/${userId}`, {
+                const response = await fetch(`/admin/api/update_user/${userId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(updateData)
                 });
 
-                const updateResult = await updateResponse.json();
-                if (updateResult.success) {
-                    alert('用户信息已更新');
+                const result = await response.json();
+                if (result.success) {
                     loadUsers(currentPage, currentSearch);
                 } else {
-                    alert('更新失败: ' + (updateResult.error || '未知错误'));
+                    alert('更新失败: ' + (result.error || '未知错误'));
+                    cancelEdit(userId, row.querySelector('.edit-username').value, newCity);
                 }
             } catch (error) {
-                console.error('编辑用户失败:', error);
+                console.error('更新用户失败:', error);
                 alert('操作失败');
+                cancelEdit(userId, row.querySelector('.edit-username').value, newCity);
             }
+        }
+
+        function cancelEdit(userId, originalUsername, originalCity) {
+            const row = document.querySelector(`tr[data-user-id="${userId}"]`);
+            if (!row) return;
+
+            row.querySelector('.username-cell').textContent = originalUsername || 'N/A';
+            row.querySelector('.city-cell').textContent = originalCity || 'N/A';
+            restoreActionButtons(row, userId);
+        }
+
+        function restoreActionButtons(row, userId) {
+            const user = getUserFromCache(userId);
+            if (!user) return;
+
+            const actionsDiv = row.querySelector('.action-btns');
+            actionsDiv.innerHTML = `
+                <button class="action-btn edit-btn" onclick="editUser(${userId})">编辑</button>
+                <button class="action-btn reset-btn" onclick="resetPassword(${userId}, '${user.email}')">重置密码</button>
+                ${!user.is_verified ? `<button class="action-btn verify-btn" onclick="verifyUser(${userId}, '${user.email}')">验证</button>` : ''}
+                <button class="action-btn delete-btn" onclick="deleteUser(${userId}, '${user.email}')">删除</button>
+            `;
         }
 
         async function resetPassword(userId, email) {

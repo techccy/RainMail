@@ -246,6 +246,8 @@ class Message(db.Model):
     is_anonymous = db.Column(db.Boolean, default=True)
     reply_to_id = db.Column(db.Integer, db.ForeignKey('message.id'), nullable=True)
     hugs_count = db.Column(db.Integer, default=0)
+    sender_email = db.Column(db.String(120), nullable=True)  # 未登录用户的邮箱
+    public_after_reply = db.Column(db.Boolean, default=False)  # 被回复后是否公开
 
     def to_dict(self):
         return {
@@ -1082,6 +1084,16 @@ def handle_messages():
             reply_notification = request.json.get('reply_notification', 'none')
             is_anonymous = request.json.get('is_anonymous', True)
 
+            # 获取新增字段
+            sender_email = request.json.get('sender_email', '').strip()
+            public_after_reply = request.json.get('public_after_reply', False)
+
+            # 验证邮箱格式（如果提供了邮箱）
+            if sender_email:
+                email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+                if not re.match(email_regex, sender_email):
+                    return jsonify({'error': '邮箱格式不正确'}), 400
+
             # 如果是一对一投递且要求登录，检查用户是否已登录
             if delivery_type == 'private' and app.config.get('PRIVATE_DELIVERY_REQUIRE_LOGIN', False):
                 if 'user_id' not in session:
@@ -1101,7 +1113,9 @@ def handle_messages():
                 delivery_type=delivery_type,
                 delivery_options=delivery_options,
                 reply_notification=reply_notification,
-                is_anonymous=is_anonymous
+                is_anonymous=is_anonymous,
+                sender_email=sender_email if sender_email else None,
+                public_after_reply=public_after_reply
             )
             message.unique_identifier = generate_unique_id()
             db.session.add(message)
@@ -2637,6 +2651,18 @@ def api_reply_letter(delivery_id):
             if sender:
                 # 发送回复通知微信
                 send_wechat_reply_notification(sender, message, reply)
+
+        # 如果原信件设置了"被回复后公开"
+        if message.public_after_reply:
+            # 将原信件改为公开
+            message.delivery_type = 'public'
+
+            # 标记相关的投递记录为已公开
+            delivery = LetterDelivery.query.filter_by(message_id=message.id).first()
+            if delivery:
+                delivery.delivery_status = 'public'
+
+            app.logger.info(f"Message {message.id} has been made public after reply by {delivery_id}")
 
         db.session.commit()
 

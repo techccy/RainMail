@@ -81,15 +81,17 @@
                         <div id="private-options" class="private-options" style="display: none;">
                             <h5>回复通知方式</h5>
                             <label class="checkbox-option">
-                                <input type="checkbox" name="reply-notification" value="email">
+                                <input type="checkbox" class="email-notification-checkbox" name="reply-notification" value="email">
                                 <span>收到回复时邮件通知我</span>
                             </label>
-                            {% if wechat_enabled %}
-                            <label class="checkbox-option">
-                                <input type="checkbox" name="reply-notification" value="wechat">
-                                <span>收到回复时微信通知我</span>
+                            <div class="sender-email-container" style="display: none;">
+                                <input type="email" class="sender-email-input" placeholder="请输入您的邮箱地址">
+                                <small>我们将通过此邮箱通知您收到回复</small>
+                            </div>
+                            <label class="checkbox-option public-after-reply-option">
+                                <input type="checkbox" class="public-after-reply-checkbox" name="public-after-reply">
+                                <span>被回复后公开</span>
                             </label>
-                            {% endif %}
                         </div>
                     </div>
 
@@ -157,12 +159,16 @@
                         <div id="rainy-private-options" class="private-options" style="display: none;">
                             <h5>回复通知方式</h5>
                             <label class="checkbox-option">
-                                <input type="checkbox" name="rainy-reply-notification" value="email">
+                                <input type="checkbox" class="email-notification-checkbox" name="rainy-reply-notification" value="email">
                                 <span>收到回复时邮件通知我</span>
                             </label>
-                            <label class="checkbox-option disabled">
-                                <input type="checkbox" disabled>
-                                <span>收到回复时微信通知（即将推出）</span>
+                            <div class="sender-email-container" style="display: none;">
+                                <input type="email" class="sender-email-input" placeholder="请输入您的邮箱地址">
+                                <small>我们将通过此邮箱通知您收到回复</small>
+                            </div>
+                            <label class="checkbox-option public-after-reply-option">
+                                <input type="checkbox" class="public-after-reply-checkbox" name="rainy-public-after-reply">
+                                <span>被回复后公开</span>
                             </label>
                         </div>
                     </div>
@@ -263,6 +269,12 @@
             authEntry.style.display = 'none';
         }
         body.classList.add('has-user-bar');
+
+        // 更新应用状态
+        if (window.app && user.email) {
+            window.app.isLoggedIn = true;
+            window.app.userEmail = user.email;
+        }
     }
 
     document.addEventListener('DOMContentLoaded', function() {

@@ -948,6 +948,53 @@ header h1 {
     background: rgba(0, 0, 0, 0.8);
 }
 
+/* ===== 邮箱输入框样式 ===== */
+.sender-email-container {
+    margin-left: 24px;
+    margin-top: 8px;
+    margin-bottom: 12px;
+}
+
+.sender-email-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    font-size: 14px;
+    background: rgba(255, 255, 255, 0.1);
+    color: inherit;
+    transition: all 0.2s ease;
+}
+
+.sender-email-input:focus {
+    outline: none;
+    border-color: rgba(52, 152, 219, 0.6);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.sender-email-input::placeholder {
+    color: rgba(128, 128, 128, 0.6);
+}
+
+.sender-email-container small {
+    display: block;
+    margin-top: 6px;
+    color: #888;
+    font-size: 12px;
+}
+
+.rainy-mode .sender-email-input {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.rainy-mode .sender-email-input:focus {
+    border-color: rgba(93, 173, 226, 0.6);
+}
+
+.rainy-mode .sender-email-container small {
+    color: #aaa;
+}
+
 /* 当有用户栏时，调整容器位置 */
 body.has-user-bar .container {
     margin-top: 60px;

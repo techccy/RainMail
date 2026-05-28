@@ -3,6 +3,8 @@ class RainMailApp {
         this.currentWeather = 'sunny';
         this.weatherCheckInterval = null;
         this.captchaProvider = 'cloudflare'; // 默认验证提供商
+        this.isLoggedIn = false;  // 用户登录状态
+        this.userEmail = '';  // 用户登录邮箱
         this.init();
     }
 
@@ -85,6 +87,70 @@ class RainMailApp {
                 }
             });
         });
+
+        // 邮箱通知和邮箱输入框逻辑 - 绑定所有相关元素
+        this.bindEmailNotificationEvents('private-options', 'delivery-type');
+        this.bindEmailNotificationEvents('rainy-private-options', 'rainy-delivery-type');
+    }
+
+    bindEmailNotificationEvents(optionsContainerId, deliveryTypeName) {
+        const optionsContainer = document.getElementById(optionsContainerId);
+        if (!optionsContainer) return;
+
+        const emailCheckbox = optionsContainer.querySelector('.email-notification-checkbox');
+        const emailContainer = optionsContainer.querySelector('.sender-email-container');
+        const emailInput = optionsContainer.querySelector('.sender-email-input');
+        const publicCheckbox = optionsContainer.querySelector('.public-after-reply-checkbox');
+
+        if (!emailCheckbox || !emailContainer || !emailInput || !publicCheckbox) return;
+
+        // 邮件通知勾选事件
+        emailCheckbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                if (this.isLoggedIn) {
+                    // 已登录用户，显示登录邮箱提示
+                    emailContainer.style.display = 'block';
+                    emailInput.value = this.userEmail;
+                    emailInput.readOnly = true;
+                    emailInput.placeholder = `使用登录邮箱: ${this.userEmail}`;
+                    // 取消强制公开
+                    publicCheckbox.disabled = false;
+                } else {
+                    // 未登录用户，显示邮箱输入框
+                    emailContainer.style.display = 'block';
+                    emailInput.readOnly = false;
+                    emailInput.placeholder = '请输入您的邮箱地址';
+                    emailInput.value = '';
+                    // 取消强制公开
+                    publicCheckbox.disabled = false;
+                }
+            } else {
+                // 取消勾选邮件通知
+                emailContainer.style.display = 'none';
+                emailInput.value = '';
+
+                if (!this.isLoggedIn) {
+                    // 未登录用户取消邮件通知，强制勾选公开
+                    publicCheckbox.checked = true;
+                    publicCheckbox.disabled = true;
+                }
+            }
+        });
+
+        // "被回复后公开"取消事件
+        publicCheckbox.addEventListener('change', (e) => {
+            if (!e.target.checked && !this.isLoggedIn && !emailCheckbox.checked) {
+                // 未登录用户试图取消公开且未勾选邮件通知
+                alert('登录或填写邮箱');
+                e.target.checked = true;
+            }
+        });
+
+        // 初始化：如果未登录且未勾选邮件通知，强制勾选公开
+        if (!this.isLoggedIn && !emailCheckbox.checked) {
+            publicCheckbox.checked = true;
+            publicCheckbox.disabled = true;
+        }
     }
 
     updateCharCount(textarea) {
@@ -125,6 +191,8 @@ class RainMailApp {
 
         const selectedDeliveryType = document.querySelector(`input[name="${deliveryTypeSelector}"]:checked`)?.value || 'public';
         const replyNotificationCheckbox = document.querySelector(`#${privateOptionsId} input[name="${isRainy ? 'rainy-reply-notification' : 'reply-notification'}"]`);
+        const publicAfterReplyCheckbox = document.querySelector(`#${privateOptionsId} .public-after-reply-checkbox`);
+        const senderEmailInput = document.querySelector(`#${privateOptionsId} .sender-email-input`);
 
         const deliveryOptions = {
             type: selectedDeliveryType
@@ -134,6 +202,30 @@ class RainMailApp {
         if (selectedDeliveryType === 'private' && replyNotificationCheckbox && replyNotificationCheckbox.checked) {
             replyNotification = 'email';
             deliveryOptions.emailNotification = true;
+        }
+
+        // 获取"被回复后公开"选项
+        let publicAfterReply = false;
+        if (selectedDeliveryType === 'private' && publicAfterReplyCheckbox) {
+            publicAfterReply = publicAfterReplyCheckbox.checked;
+        }
+
+        // 获取发送者邮箱
+        let senderEmail = '';
+        if (selectedDeliveryType === 'private' && senderEmailInput && senderEmailInput.value) {
+            senderEmail = senderEmailInput.value.trim();
+        }
+
+        // 如果勾选了邮件通知但未填写邮箱，提示用户
+        if (replyNotification === 'email' && !senderEmail && !this.isLoggedIn) {
+            alert('请输入您的邮箱地址');
+            return;
+        }
+
+        // 验证邮箱格式
+        if (senderEmail && !this.isValidEmail(senderEmail)) {
+            alert('请输入正确的邮箱格式');
+            return;
         }
 
         // 根据验证提供商获取验证响应
@@ -189,7 +281,9 @@ class RainMailApp {
                 delivery_type: selectedDeliveryType,
                 delivery_options: deliveryOptions,
                 reply_notification: replyNotification,
-                is_anonymous: true
+                is_anonymous: true,
+                public_after_reply: publicAfterReply,
+                sender_email: senderEmail
             };
 
             // 根据验证提供商添加不同的字段
@@ -633,11 +727,16 @@ class RainMailApp {
         div.textContent = text;
         return div.innerHTML;
     }
+
+    isValidEmail(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
 }
 
 // 页面加载完成后初始化应用
 document.addEventListener('DOMContentLoaded', () => {
-    new RainMailApp();
+    window.app = new RainMailApp();
 });
 
 // 添加键盘快捷键
