@@ -6,15 +6,31 @@
 
 ## 特性
 
+### 核心功能
 - **天气感应**：自动检测对应城市天气状态
 - **状态切换**：晴天只能投递，雨天可以查看所有秘密
 - **毛玻璃设计**：赛博禅意风格的现代化UI
-- **安全匿名**：XSS防护和内容过滤
-- **分享功能**：生成精美的存票卡片
 - **实时同步**：WebSocket风格的天气状态更新
-- **用户系统**：支持注册登录，情感投递功能
+
+### 用户系统
+- **注册登录**：支持邮箱验证的用户注册
+- **情感投递**：发送私密情感信件到指定城市
+- **消息分类**：支持普通消息、私密投递、情感信件三种类型
+- **消息互动**：点赞、拥抱、回复等社交互动功能
+
+### 管理功能
+- **用户管理**：管理员可编辑用户信息、重置密码、删除用户
+- **验证管理**：管理员可批准用户邮箱验证
+- **消息审核**：删除违规消息
+- **系统监控**：统计信息、CPU温度、降雨概率等
+- **强制降雨**：可手动开启60分钟雨天模式
+
+### 安全特性
+- **XSS防护**：输入内容过滤和转义
+- **SQL注入防护**：参数化查询
 - **AI内容审查**：集成AI智能内容审核
 - **多种验证**：支持Cloudflare Turnstile、Altcha、自定义数学验证
+- **密码安全**：哈希存储，邮箱验证机制
 
 ## 快速开始
 
@@ -156,7 +172,6 @@ docker run -p 5024:5024 rainmail
 ```
 RainMail/
 ├── .gitignore
-├── .claude/                  # Claude Code 配置
 ├── Dockerfile                # Docker 部署配置
 ├── LICENSE                   # 许可证文件
 ├── README.md                 # 项目文档
@@ -164,13 +179,14 @@ RainMail/
 ├── config_model.yaml         # 配置文件模板
 ├── config.yaml               # YAML 配置文件
 ├── config.json               # JSON 配置文件（优先）
-├── config.json.backup        # 配置备份
 ├── install.sh                # 安装脚本
 ├── requirements.txt          # Python 依赖列表
 ├── run.py                    # 启动脚本
 ├── curl.py                   # 天气检查脚本
 ├── test_app.py               # 功能测试文件
 ├── totp_secret.json          # TOTP 密钥存储
+├── migrations/               # 数据库迁移文件
+│   └── add_message_columns.sql
 ├── instance/                 # 数据库目录
 │   └── rainmail.db           # SQLite 数据库
 ├── resources/                # 静态资源
@@ -192,7 +208,11 @@ RainMail/
     │   ├── login.html        # 登录页
     │   └── register.html     # 注册页
     ├── user/                 # 用户功能
-    │   └── letter.html       # 情感投递页
+    │   ├── inbox.html        # 收件箱
+    │   ├── letter.html       # 情感投递页
+    │   ├── settings.html     # 用户设置
+    │   ├── profile.html      # 用户资料
+    │   └── sent.html         # 已发送
     ├── privacy_policy.html   # 隐私条款（英文）
     └── privacy_policy_cn.html # 隐私条款（中文）
 ```
@@ -243,22 +263,52 @@ RainMail/
 ### 获取天气状态
 ```
 GET /api/weather
-返回: {"weather_status": "sunny"|"rainy"}
+返回: {"weather_status": "sunny"|"rainy", "precip_prob": 60}
 ```
 
 ### 消息管理
 ```
-GET /api/messages        # 获取消息列表（仅雨天）
-POST /api/messages       # 提交新消息
-Body: {"content": "消息内容"}
+GET /api/messages              # 获取消息列表（仅雨天）
+POST /api/messages            # 提交新消息
+Body: {"content": "消息内容", "message_type": "normal"}
+```
+
+### 消息互动
+```
+POST /api/messages/<id>/like    # 点赞消息
+POST /api/messages/<id>/hug     # 拥抱消息
+POST /api/messages/<id>/reply   # 回复消息
 ```
 
 ### 用户认证
 ```
-POST /api/auth/register  # 用户注册
-POST /api/auth/login     # 用户登录
-POST /api/auth/logout    # 用户登出
-GET /api/auth/status     # 获取登录状态
+POST /api/auth/register     # 用户注册
+POST /api/auth/login        # 用户登录
+POST /api/auth/logout       # 用户登出
+GET /api/auth/status        # 获取登录状态
+POST /api/auth/verify       # 发送验证码
+POST /api/auth/confirm      # 确认验证码
+```
+
+### 用户功能
+```
+GET /api/user/profile       # 获取用户资料
+GET /api/user/inbox         # 获取收件箱（情感信件）
+GET /api/user/sent          # 获取已发送消息
+GET /api/user/notifications # 获取通知列表
+```
+
+### 管理员API
+```
+GET /admin/api/users                # 获取用户列表（支持分页搜索）
+PUT /admin/api/update_user/<id>     # 更新用户信息
+POST /admin/api/reset_password/<id> # 重置用户密码
+POST /admin/api/delete_user/<id>    # 删除用户
+POST /admin/api/verify_user/<id>    # 批准用户验证
+POST /admin/force_rain              # 强制降雨60分钟
+POST /admin/delete_message/<id>     # 删除消息
+GET /admin/api/config                # 获取系统配置
+PUT /admin/api/config                # 更新系统配置
 ```
 
 ### 健康检查
@@ -269,20 +319,47 @@ GET /api/health
 
 ## 界面预览
 
+### 主页
 - **晴天模式**：浅色背景，云雾动效，只能投递
 - **雨天模式**：深色背景，雨滴动效，可查看所有秘密
 - **响应式设计**：支持移动端和桌面端
 - **实时监控**：数秒刷新天气
 
+### 用户界面
+- **情感投递**：给指定城市投递匿名情感信件
+- **收件箱**：查看收到的情感信件
+- **消息互动**：点赞、拥抱、回复等社交功能
+
+### 管理后台
+- **系统概览**：消息总数、降雨概率、CPU温度等
+- **用户管理**：搜索、编辑、重置密码、删除用户
+- **验证管理**：批准用户邮箱验证
+- **消息审核**：查看和删除违规消息
+
 ## 安全特性
 
-- XSS输入过滤
-- SQL注入防护
+### 输入安全
+- XSS输入过滤和转义
+- SQL注入防护（参数化查询）
+- AI智能内容审查
+- 敏感词过滤
+
+### 认证安全
+- 密码哈希存储（bcrypt）
+- 邮箱验证机制
+- 人机验证（Cloudflare Turnstile / Altcha / 数学验证）
+- 会话管理
+
+### 系统安全
 - 天气API请求超时处理
 - 错误状态缓存机制
-- AI智能内容审查
-- 密码哈希存储
-- 邮箱验证机制
+- 爆破防护和警告
+- 管理员操作确认
+
+### 数据隐私
+- 匿名投递机制
+- 私密消息隔离
+- 用户数据隔离
 
 ## 许可证
 
