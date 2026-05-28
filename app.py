@@ -24,6 +24,13 @@ from Crypto.Util.Padding import unpad, pad
 import struct
 import xml.etree.ElementTree as ET
 
+# =============================================================================
+# 警告：非法侵入计算机信息系统将受到法律制裁
+# 根据《中华人民共和国刑法》第二百八十五条、第二百八十六条
+# 详细内容见 docs/warning
+# 任何未经授权访问本系统的行为都将被记录并依法追究
+# =============================================================================
+
 # 用于防止并发请求天气API的锁
 weather_request_lock = threading.Lock()
 # 临时存储正在进行的天气请求的结果
@@ -117,6 +124,30 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', app.config.get('MA
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', app.config.get('MAIL_PASSWORD', ''))
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.config.get('MAIL_DEFAULT_SENDER', 'RainMail <noreply@rainmail.dev>'))
 mail = Mail(app)
+
+# --- 爆破检测和警告系统 ---
+BRUTE_FORCE_THRESHOLD = 3  # 失败3次后显示警告
+
+def get_warning_text():
+    """读取警告文本"""
+    try:
+        warning_path = os.path.join(os.path.dirname(__file__), 'docs/warning')
+        with open(warning_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        app.logger.error(f"读取警告文件失败: {e}")
+        return ""
+
+def track_failed_login():
+    """跟踪登录失败次数，返回是否应显示警告"""
+    failed = session.get('failed_attempts', 0)
+    session['failed_attempts'] = failed + 1
+    app.logger.warning(f"登录失败次数: {failed + 1}, IP: {request.remote_addr}")
+    return failed + 1 >= BRUTE_FORCE_THRESHOLD
+
+def reset_failed_login():
+    """重置登录失败计数"""
+    session.pop('failed_attempts', None)
 
 # def load_sensitive_words_from_csv(file_path):
 #     """
@@ -1051,6 +1082,11 @@ def handle_messages():
             reply_notification = request.json.get('reply_notification', 'none')
             is_anonymous = request.json.get('is_anonymous', True)
 
+            # 如果是一对一投递且要求登录，检查用户是否已登录
+            if delivery_type == 'private' and app.config.get('PRIVATE_DELIVERY_REQUIRE_LOGIN', False):
+                if 'user_id' not in session:
+                    return jsonify({'error': '一对一投递需要先登录', 'require_login': True}), 403
+
             # 获取发送者信息
             sender_id = session.get('user_id') if not is_anonymous else None
 
@@ -1496,13 +1532,19 @@ def admin_login():
         # 验证用户名和密码（已移除TOTP验证）
         if username == admin_username_from_config and password == admin_password_from_config:
             session['admin_logged_in'] = True
+            reset_failed_login()  # 登录成功，重置失败计数
             return redirect(url_for('admin_dashboard'))
         else:
             # 提供更模糊的错误信息以增强安全性
             flash('登录凭据无效或双重认证失败')
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
             cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
-            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
+
+            # 检测爆破行为
+            show_warning = track_failed_login()
+            warning_text = get_warning_text() if show_warning else ""
+
+            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question, warning=warning_text)
 
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
     
@@ -1644,12 +1686,16 @@ def api_get_config():
                 'force_rain_duration': config.get('force_rain_duration', 10)
             },
             'mail': {
+                'MAIL_ENABLED': config.get('MAIL_ENABLED', True),
                 'MAIL_SERVER': config.get('MAIL_SERVER', 'smtp.gmail.com'),
                 'MAIL_PORT': config.get('MAIL_PORT', 587),
                 'MAIL_USE_TLS': config.get('MAIL_USE_TLS', True),
                 'MAIL_USERNAME': config.get('MAIL_USERNAME', ''),
                 'MAIL_PASSWORD': mask_sensitive_value('MAIL_PASSWORD', config.get('MAIL_PASSWORD', '')),
                 'MAIL_DEFAULT_SENDER': config.get('MAIL_DEFAULT_SENDER', 'RainMail <noreply@rainmail.dev>')
+            },
+            'delivery': {
+                'PRIVATE_DELIVERY_REQUIRE_LOGIN': config.get('PRIVATE_DELIVERY_REQUIRE_LOGIN', False)
             },
             'ai_moderation': {
                 'API_KEY': mask_sensitive_value('API_KEY', config.get('AI_MODERATION', {}).get('API_KEY', '')),
@@ -1750,11 +1796,13 @@ def api_update_config():
         # 更新邮件配置
         if 'mail' in updates:
             mail = updates['mail']
-            for key in ['MAIL_SERVER', 'MAIL_PORT', 'MAIL_USE_TLS',
+            for key in ['MAIL_ENABLED', 'MAIL_SERVER', 'MAIL_PORT', 'MAIL_USE_TLS',
                        'MAIL_USERNAME', 'MAIL_PASSWORD', 'MAIL_DEFAULT_SENDER']:
                 if key in mail:
                     value = mail[key]
-                    if key == 'MAIL_PASSWORD':
+                    if key == 'MAIL_ENABLED':
+                        config[key] = bool(value)
+                    elif key == 'MAIL_PASSWORD':
                         if value and not str(value).startswith('****'):
                             config[key] = value
                     elif key == 'MAIL_PORT':
@@ -1799,6 +1847,12 @@ def api_update_config():
                     config['WECHAT_ENCODING_AES_KEY'] = key
             if 'WECHAT_TEMPLATE_ID' in wechat:
                 config['WECHAT_TEMPLATE_ID'] = wechat['WECHAT_TEMPLATE_ID']
+
+        # 更新投递配置
+        if 'delivery' in updates:
+            delivery = updates['delivery']
+            if 'PRIVATE_DELIVERY_REQUIRE_LOGIN' in delivery:
+                config['PRIVATE_DELIVERY_REQUIRE_LOGIN'] = bool(delivery['PRIVATE_DELIVERY_REQUIRE_LOGIN'])
 
         # 写入配置文件（JSON格式）
         with open(config_path, 'w', encoding='utf-8') as f:
@@ -2153,7 +2207,12 @@ def api_login():
         # 查找用户
         user = User.query.filter_by(email=email).first()
         if not user or not user.check_password(password):
-            return jsonify({'error': '邮箱或密码错误'}), 401
+            # 检测爆破行为
+            show_warning = track_failed_login()
+            response = {'error': '邮箱或密码错误'}
+            if show_warning:
+                response['warning'] = get_warning_text()
+            return jsonify(response), 401
 
         # 更新最后登录时间
         user.last_login = datetime.now()
@@ -2162,6 +2221,7 @@ def api_login():
         # 设置会话
         session['user_id'] = user.id
         session['user_email'] = user.email
+        reset_failed_login()  # 登录成功，重置失败计数
 
         return jsonify({
             'success': True,
@@ -2474,6 +2534,10 @@ def api_hug_message(message_id):
 
 def send_reply_notification(user, original_message, reply):
     """发送回复通知邮件"""
+    if not is_mail_enabled():
+        app.logger.info("邮件功能已禁用，跳过发送回复通知邮件")
+        return
+
     if not app.config.get('MAIL_USERNAME'):
         return
 
@@ -2532,6 +2596,10 @@ def send_wechat_reply_notification(user, original_message, reply):
 
 # ==================== 邮件辅助函数 ====================
 
+def is_mail_enabled():
+    """检查邮件功能是否启用"""
+    return app.config.get('MAIL_ENABLED', True)
+
 def create_private_delivery(message, sender_city):
     """
     创建私发投递记录，随机选择收件人
@@ -2580,6 +2648,10 @@ def create_private_delivery(message, sender_city):
 
 def send_verification_email(user):
     """发送验证邮件"""
+    if not is_mail_enabled():
+        app.logger.info("邮件功能已禁用，跳过发送验证邮件")
+        return
+
     if not app.config.get('MAIL_USERNAME'):
         app.logger.warning("邮件未配置，跳过发送验证邮件")
         return
@@ -2610,6 +2682,10 @@ def send_verification_email(user):
 
 def send_new_letter_notification(delivery):
     """发送新信件通知"""
+    if not is_mail_enabled():
+        app.logger.info("邮件功能已禁用，跳过发送新信件通知")
+        return
+
     recipient_email = None
     recipient_name = "朋友"
 
@@ -2653,6 +2729,10 @@ def send_new_letter_notification(delivery):
 
 def send_letter_unlocked_notification(delivery):
     """发送信件解锁通知"""
+    if not is_mail_enabled():
+        app.logger.info("邮件功能已禁用，跳过发送信件解锁通知")
+        return
+
     recipient_email = None
     recipient_name = "朋友"
 

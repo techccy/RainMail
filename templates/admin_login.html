@@ -1,5 +1,13 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+<!--
+================================================================================
+警告：非法侵入计算机信息系统将受到法律制裁
+根据《中华人民共和国刑法》第二百八十五条、第二百八十六条
+详细内容见 docs/warning
+任何未经授权访问本系统的行为都将被记录并依法追究
+================================================================================
+-->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -44,6 +52,9 @@
         
         {% if error %}
             <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        {% if warning %}
+            <div class="alert" style="background-color: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 15px; border-radius: 5px; margin-bottom: 20px; white-space: pre-wrap; font-size: 12px;">{{ warning }}</div>
         {% endif %}
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}

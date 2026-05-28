@@ -259,7 +259,12 @@ class RainMailApp {
                     }
                 }
             } else {
-                alert(data.error || '提交失败');
+                // 检查是否需要登录
+                if (data.require_login) {
+                    this.showLoginModal();
+                } else {
+                    alert(data.error || '提交失败');
+                }
                 clearInterval(this.progressIntervalId);
                 this.hideProcessingOverlay();
             }
@@ -365,7 +370,37 @@ class RainMailApp {
             }
         }, stepDuration);
     }
-// --- END 新增 ---
+    // --- END 新增 ---
+
+    // 显示登录弹窗
+    showLoginModal() {
+        // 创建登录弹窗
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.id = 'login-modal';
+        modal.style.display = 'flex';
+        modal.style.zIndex = '2000';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 400px;">
+                <h2>需要登录</h2>
+                <p>一对一投递功能需要登录后才能使用。</p>
+                <p>登录后，收到回复时可在收件箱查看。</p>
+                <div class="modal-actions">
+                    <a href="/auth/login" class="primary-btn">前往登录</a>
+                    <button class="secondary-btn" onclick="this.closest('.modal').remove()">取消</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        // 点击背景关闭
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    }
+
     async loadMessages() {
         const container = document.getElementById('messages-container');
         container.innerHTML = '<div class="loading">加载中...</div>';

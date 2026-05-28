@@ -252,6 +252,7 @@
             <button class="settings-tab" data-panel="location">位置配置</button>
             <button class="settings-tab" data-panel="admin">管理员</button>
             <button class="settings-tab" data-panel="mail">邮件配置</button>
+            <button class="settings-tab" data-panel="delivery">投递配置</button>
             <button class="settings-tab" data-panel="ai">AI 审查</button>
         </div>
 
@@ -410,48 +411,70 @@
             <div class="settings-panel" id="panel-mail">
                 <div class="section-title">邮件配置</div>
                 <form id="form-mail">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>SMTP 服务器</label>
-                            <input type="text" name="MAIL_SERVER" data-key="mail.MAIL_SERVER">
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="mail_enabled" name="MAIL_ENABLED" data-key="mail.MAIL_ENABLED" onchange="toggleMailConfig()">
+                            <label for="mail_enabled">启用邮件功能</label>
+                        </div>
+                    </div>
+                    <div id="mail-config-fields">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>SMTP 服务器</label>
+                                <input type="text" name="MAIL_SERVER" data-key="mail.MAIL_SERVER">
+                            </div>
+                            <div class="form-group">
+                                <label>SMTP 端口</label>
+                                <input type="number" name="MAIL_PORT" data-key="mail.MAIL_PORT" min="1" max="65535">
+                            </div>
                         </div>
                         <div class="form-group">
-                            <label>SMTP 端口</label>
-                            <input type="number" name="MAIL_PORT" data-key="mail.MAIL_PORT" min="1" max="65535">
+                            <label>发件人地址</label>
+                            <input type="email" name="MAIL_USERNAME" data-key="mail.MAIL_USERNAME">
+                        </div>
+                        <div class="form-group">
+                            <label>邮箱密码 / 应用密码</label>
+                            <div class="password-wrapper">
+                                <input type="password" name="MAIL_PASSWORD" data-key="mail.MAIL_PASSWORD" class="password-field">
+                                <button type="button" class="toggle-password">👁</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>默认发件人显示</label>
+                            <input type="text" name="MAIL_DEFAULT_SENDER" data-key="mail.MAIL_DEFAULT_SENDER">
+                        </div>
+                        <div class="form-group">
+                            <label>加密方式</label>
+                            <div class="checkbox-wrapper" style="display: flex; gap: 15px;">
+                                <input type="radio" name="MAIL_ENCRYPTION" data-key="mail.MAIL_ENCRYPTION" value="none" id="mail_none">
+                                <label for="mail_none" style="margin: 0;">无加密</label>
+                                <input type="radio" name="MAIL_ENCRYPTION" data-key="mail.MAIL_ENCRYPTION" value="tls" id="mail_tls">
+                                <label for="mail_tls" style="margin: 0;">TLS (端口587)</label>
+                                <input type="radio" name="MAIL_ENCRYPTION" data-key="mail.MAIL_ENCRYPTION" value="ssl" id="mail_ssl">
+                                <label for="mail_ssl" style="margin: 0;">SSL (端口465)</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>测试邮件</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="email" id="test_email" placeholder="输入测试邮箱地址">
+                                <button type="button" class="btn btn-test" onclick="testEmail()">发送测试邮件</button>
+                            </div>
                         </div>
                     </div>
+                </form>
+            </div>
+
+            <!-- 投递配置 -->
+            <div class="settings-panel" id="panel-delivery">
+                <div class="section-title">投递配置</div>
+                <form id="form-delivery">
                     <div class="form-group">
-                        <label>发件人地址</label>
-                        <input type="email" name="MAIL_USERNAME" data-key="mail.MAIL_USERNAME">
-                    </div>
-                    <div class="form-group">
-                        <label>邮箱密码 / 应用密码</label>
-                        <div class="password-wrapper">
-                            <input type="password" name="MAIL_PASSWORD" data-key="mail.MAIL_PASSWORD" class="password-field">
-                            <button type="button" class="toggle-password">👁</button>
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" name="PRIVATE_DELIVERY_REQUIRE_LOGIN" data-key="delivery.PRIVATE_DELIVERY_REQUIRE_LOGIN">
+                            <label>一对一投递必须登录</label>
                         </div>
-                    </div>
-                    <div class="form-group">
-                        <label>默认发件人显示</label>
-                        <input type="text" name="MAIL_DEFAULT_SENDER" data-key="mail.MAIL_DEFAULT_SENDER">
-                    </div>
-                    <div class="form-group">
-                        <label>加密方式</label>
-                        <div class="checkbox-wrapper" style="display: flex; gap: 15px;">
-                            <input type="radio" name="MAIL_ENCRYPTION" data-key="mail.MAIL_ENCRYPTION" value="none" id="mail_none">
-                            <label for="mail_none" style="margin: 0;">无加密</label>
-                            <input type="radio" name="MAIL_ENCRYPTION" data-key="mail.MAIL_ENCRYPTION" value="tls" id="mail_tls">
-                            <label for="mail_tls" style="margin: 0;">TLS (端口587)</label>
-                            <input type="radio" name="MAIL_ENCRYPTION" data-key="mail.MAIL_ENCRYPTION" value="ssl" id="mail_ssl">
-                            <label for="mail_ssl" style="margin: 0;">SSL (端口465)</label>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>测试邮件</label>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="email" id="test_email" placeholder="输入测试邮箱地址">
-                            <button type="button" class="btn btn-test" onclick="testEmail()">发送测试邮件</button>
-                        </div>
+                        <small style="opacity: 0.6; display: block; margin-top: 8px;">启用后，用户必须登录才能投递一对一信件，收到回复时可在收件箱查看</small>
                     </div>
                 </form>
             </div>

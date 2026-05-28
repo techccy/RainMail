@@ -92,6 +92,9 @@ function populateForms(config) {
             }
         }
     });
+
+    // 更新邮件配置字段显示状态
+    toggleMailConfig();
 }
 
 // 获取嵌套对象的值
@@ -116,7 +119,8 @@ function collectFormData() {
         location: {},
         admin: {},
         mail: {},
-        ai_moderation: {}
+        ai_moderation: {},
+        delivery: {}
     };
 
     let mailEncryption = null;
@@ -333,4 +337,13 @@ function showToast(message, type = 'success') {
     setTimeout(() => {
         toast.remove();
     }, 3000);
+}
+
+// 切换邮件配置显示
+function toggleMailConfig() {
+    const mailEnabled = document.getElementById('mail_enabled');
+    const mailConfigFields = document.getElementById('mail-config-fields');
+    if (mailConfigFields) {
+        mailConfigFields.style.display = mailEnabled.checked ? 'block' : 'none';
+    }
 }

@@ -3,6 +3,31 @@
 // 全局状态
 let turnstileWidgetId = null;
 
+// 显示警告信息
+function showWarning(message) {
+    console.log('showWarning 被调用');
+    // 创建或获取警告元素
+    let warningElement = document.getElementById('warning-message');
+    if (!warningElement) {
+        warningElement = document.createElement('div');
+        warningElement.id = 'warning-message';
+        warningElement.style.cssText = 'background-color: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 15px; border-radius: 5px; margin: 15px 0; white-space: pre-wrap; font-size: 12px;';
+        // 插入到错误消息之后
+        const errorElement = document.getElementById('error-message');
+        if (errorElement && errorElement.parentNode) {
+            errorElement.parentNode.insertBefore(warningElement, errorElement.nextSibling);
+        } else {
+            // 如果找不到错误消息元素，添加到表单前面
+            const form = document.getElementById('login-form') || document.getElementById('register-form');
+            if (form) {
+                form.parentNode.insertBefore(warningElement, form);
+            }
+        }
+    }
+    warningElement.textContent = message;
+    warningElement.style.display = 'block';
+}
+
 // 检测是否为移动设备
 function isMobileDevice() {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -135,7 +160,12 @@ function initLoginPage(config) {
                 // 登录成功，跳转首页
                 window.location.href = '/';
             } else {
+                // 显示错误信息
                 showError(data.error || '登录失败');
+                // 如果有警告信息，显示警告
+                if (data.warning) {
+                    showWarning(data.warning);
+                }
             }
         } catch (error) {
             console.error('登录错误:', error);
