@@ -1274,7 +1274,7 @@ def _send_wechat_reply(to_user, from_user, content, timestamp, nonce, encrypt_ty
     return response
 
 @app.route('/user/wechat/auth')
-@login_required
+@login_required_user
 def wechat_auth_callback():
     """微信 OAuth 授权回调"""
     code = request.args.get('code')
@@ -1329,7 +1329,7 @@ def wechat_auth_callback():
         return redirect(url_for('user_settings') + '?error=wechat_auth_error')
 
 @app.route('/api/user/wechat/unbind', methods=['POST'])
-@login_required
+@login_required_user
 def api_wechat_unbind():
     """解除微信绑定"""
     user_id = session.get('user_id')
@@ -1344,7 +1344,7 @@ def api_wechat_unbind():
         return jsonify({'success': False, 'error': '解绑失败'}), 500
 
 @app.route('/api/user/wechat/status', methods=['GET'])
-@login_required
+@login_required_user
 def api_wechat_status():
     """获取微信绑定状态"""
     user_id = session.get('user_id')
