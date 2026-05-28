@@ -2308,7 +2308,7 @@ def api_register():
 
 @app.route('/api/auth/verify-email', methods=['POST'])
 def api_verify_email():
-    """邮箱验证 API"""
+    """邮箱验证 API (POST) - 用于前端AJAX调用"""
     try:
         data = request.get_json()
         token = data.get('token')
@@ -2332,6 +2332,29 @@ def api_verify_email():
     except Exception as e:
         app.logger.error(f"邮箱验证错误: {e}")
         return jsonify({'error': '验证失败'}), 500
+
+@app.route('/verify-email', methods=['GET'])
+def verify_email_page():
+    """处理邮件验证链接点击 (GET) - 用于邮件中的链接"""
+    try:
+        token = request.args.get('token')
+
+        if not token:
+            return redirect('/auth/login?error=invalid_token')
+
+        user = User.query.filter_by(verification_token=token).first()
+        if not user:
+            return redirect('/auth/login?error=invalid_token')
+
+        user.is_verified = True
+        user.verification_token = None
+        db.session.commit()
+
+        return redirect('/auth/login?verified=1')
+
+    except Exception as e:
+        app.logger.error(f"邮箱验证错误: {e}")
+        return redirect('/auth/login?error=verification_failed')
 
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
@@ -2820,8 +2843,8 @@ def send_verification_email(user):
         app.logger.warning("邮件未配置，跳过发送验证邮件")
         return
 
-    # 构建验证链接
-    verify_url = f"{request.host_url}api/auth/verify-email?token={user.verification_token}"
+    # 构建验证链接 - 使用新的GET端点
+    verify_url = f"{request.host_url}verify-email?token={user.verification_token}"
 
     # 创建邮件
     msg = EmailMessage(

@@ -64,6 +64,7 @@
             {% endif %}
 
             <div class="error-message" id="error-message" style="display: none;"></div>
+            <div class="success-message" id="success-message" style="display: none;"></div>
 
             <button type="submit" class="primary-btn">登录</button>
         </form>
@@ -85,6 +86,25 @@
                     captchaProvider: captchaProvider,
                     turnstileSiteKey: '{{ turnstile_site_key }}'
                 });
+            }
+
+            // 检查URL参数
+            const urlParams = new URLSearchParams(window.location.search);
+            const verified = urlParams.get('verified');
+            const error = urlParams.get('error');
+
+            if (verified === '1') {
+                const successMsg = document.getElementById('success-message');
+                successMsg.textContent = '✓ 邮箱验证成功，请登录';
+                successMsg.style.display = 'block';
+            } else if (error) {
+                const errorMsg = document.getElementById('error-message');
+                const errorMessages = {
+                    'invalid_token': '验证链接无效或已过期',
+                    'verification_failed': '验证失败，请重试'
+                };
+                errorMsg.textContent = errorMessages[error] || '验证失败';
+                errorMsg.style.display = 'block';
             }
         });
     </script>
