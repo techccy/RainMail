@@ -87,6 +87,85 @@
         .users-list {
             margin-bottom: 30px;
         }
+        .search-box {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .search-input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+        }
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+        .action-btns {
+            display: flex;
+            gap: 8px;
+        }
+        .action-btn {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .edit-btn {
+            background: #3498db;
+            color: white;
+        }
+        .edit-btn:hover {
+            background: #2980b9;
+        }
+        .reset-btn {
+            background: #f39c12;
+            color: white;
+        }
+        .reset-btn:hover {
+            background: #e67e22;
+        }
+        .delete-btn {
+            background: #e74c3c;
+            color: white;
+        }
+        .delete-btn:hover {
+            background: #c0392b;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .pagination button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            cursor: pointer;
+        }
+        .pagination button:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .pagination span {
+            color: rgba(255, 255, 255, 0.7);
+        }
         .logout-btn {
             background: #95a5a6;
             color: white;
@@ -139,6 +218,11 @@
         <!-- 用户管理 -->
         <div class="users-list">
             <h3>用户管理</h3>
+            <div class="search-box">
+                <input type="text" id="search-input" class="search-input" placeholder="搜索用户名或邮箱...">
+                <button onclick="searchUsers()" class="secondary-btn">搜索</button>
+                <button onclick="clearSearch()" class="secondary-btn">清除</button>
+            </div>
             <div class="messages-table">
                 <table>
                     <thead>
@@ -146,8 +230,10 @@
                             <th>ID</th>
                             <th>用户名</th>
                             <th>邮箱</th>
+                            <th>城市</th>
                             <th>验证状态</th>
                             <th>注册时间</th>
+                            <th>最后登录</th>
                             <th>操作</th>
                         </tr>
                     </thead>
@@ -155,6 +241,9 @@
                         <!-- 动态加载 -->
                     </tbody>
                 </table>
+            </div>
+            <div class="pagination" id="pagination">
+                <!-- 分页控件 -->
             </div>
         </div>
 
@@ -191,12 +280,20 @@
     </div>
 
     <script>
+        // 当前页面状态
+        let currentPage = 1;
+        let currentSearch = '';
+        const perPage = 20;
+
         // 页面加载时获取用户列表
         loadUsers();
 
-        async function loadUsers() {
+        async function loadUsers(page = 1, search = '') {
+            currentPage = page;
+            currentSearch = search;
             try {
-                const response = await fetch('/admin/api/users');
+                const url = `/admin/api/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(search)}`;
+                const response = await fetch(url);
                 const data = await response.json();
                 const tbody = document.getElementById('users-table-body');
                 if (data.users && data.users.length > 0) {
@@ -205,18 +302,149 @@
                             <td>${user.id}</td>
                             <td>${user.username || 'N/A'}</td>
                             <td>${user.email}</td>
+                            <td>${user.city || 'N/A'}</td>
                             <td>${user.is_verified ? '✅ 已验证' : '❌ 未验证'}</td>
                             <td>${user.created_at}</td>
+                            <td>${user.last_login || '从未'}</td>
                             <td>
-                                ${!user.is_verified ? `<button class="verify-btn" onclick="verifyUser(${user.id}, '${user.email}')">验证</button>` : '-'}
+                                <div class="action-btns">
+                                    <button class="action-btn edit-btn" onclick="editUser(${user.id})">编辑</button>
+                                    <button class="action-btn reset-btn" onclick="resetPassword(${user.id}, '${user.email}')">重置密码</button>
+                                    ${!user.is_verified ? `<button class="action-btn verify-btn" onclick="verifyUser(${user.id}, '${user.email}')">验证</button>` : ''}
+                                    <button class="action-btn delete-btn" onclick="deleteUser(${user.id}, '${user.email}')">删除</button>
+                                </div>
                             </td>
                         </tr>
                     `).join('');
+                    renderPagination(data.total, data.pages, page);
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">暂无用户</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">暂无用户</td></tr>';
+                    document.getElementById('pagination').innerHTML = '';
                 }
             } catch (error) {
                 console.error('加载用户列表失败:', error);
+            }
+        }
+
+        function renderPagination(total, pages, current) {
+            const pagination = document.getElementById('pagination');
+            if (pages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = `
+                <button onclick="loadUsers(1, currentSearch)" ${current === 1 ? 'disabled' : ''}>首页</button>
+                <button onclick="loadUsers(${current - 1}, currentSearch)" ${current === 1 ? 'disabled' : ''}>上一页</button>
+                <span>第 ${current} / ${pages} 页 (共 ${total} 条)</span>
+                <button onclick="loadUsers(${current + 1}, currentSearch)" ${current === pages ? 'disabled' : ''}>下一页</button>
+                <button onclick="loadUsers(${pages}, currentSearch)" ${current === pages ? 'disabled' : ''}>末页</button>
+            `;
+            pagination.innerHTML = html;
+        }
+
+        function searchUsers() {
+            const searchValue = document.getElementById('search-input').value.trim();
+            loadUsers(1, searchValue);
+        }
+
+        function clearSearch() {
+            document.getElementById('search-input').value = '';
+            loadUsers(1, '');
+        }
+
+        // 监听搜索框回车事件
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('search-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchUsers();
+                }
+            });
+        });
+
+        async function editUser(userId) {
+            try {
+                const response = await fetch(`/admin/api/user/${userId}`);
+                const data = await response.json();
+                if (!data.success) {
+                    alert('获取用户信息失败');
+                    return;
+                }
+
+                const user = data.user;
+                const newUsername = prompt('用户名:', user.username || '');
+                if (newUsername === null) return;
+
+                const newCity = prompt('城市:', user.city || '广州');
+                if (newCity === null) return;
+
+                const updateData = {
+                    username: newUsername,
+                    city: newCity
+                };
+
+                const updateResponse = await fetch(`/admin/api/update_user/${userId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(updateData)
+                });
+
+                const updateResult = await updateResponse.json();
+                if (updateResult.success) {
+                    alert('用户信息已更新');
+                    loadUsers(currentPage, currentSearch);
+                } else {
+                    alert('更新失败: ' + (updateResult.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('编辑用户失败:', error);
+                alert('操作失败');
+            }
+        }
+
+        async function resetPassword(userId, email) {
+            const newPassword = prompt(`为用户 ${email} 设置新密码 (至少6位):`);
+            if (!newPassword) return;
+
+            if (newPassword.length < 6) {
+                alert('密码长度至少6位');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/api/reset_password/${userId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: newPassword})
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                } else {
+                    alert('操作失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                alert('操作失败');
+            }
+        }
+
+        async function deleteUser(userId, email) {
+            if (!confirm(`确定要删除用户 ${email} 吗？\n\n此操作将删除该用户的所有数据，包括：\n- 发送的消息\n- 信件投递记录\n- 通知记录\n- 微信绑定\n\n此操作不可恢复！`)) return;
+
+            try {
+                const response = await fetch(`/admin/api/delete_user/${userId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert('用户已删除');
+                    loadUsers(currentPage, currentSearch);
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                alert('操作失败');
             }
         }
 
@@ -231,7 +459,7 @@
                 const data = await response.json();
                 if (data.success) {
                     alert(data.message);
-                    loadUsers();
+                    loadUsers(currentPage, currentSearch);
                 } else {
                     alert('操作失败: ' + (data.error || '未知错误'));
                 }

@@ -1624,17 +1624,38 @@ def admin_logout():
 @app.route('/admin/api/users')
 @admin_required
 def admin_get_users():
-    """获取所有用户列表"""
-    users = User.query.order_by(User.created_at.desc()).all()
+    """获取所有用户列表，支持搜索和分页"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search = request.args.get('search', '').strip()
+
+    query = User.query
+    if search:
+        query = query.filter(
+            db.or_(
+                User.username.ilike(f'%{search}%'),
+                User.email.ilike(f'%{search}%')
+            )
+        )
+
+    pagination = query.order_by(User.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
     return jsonify({
         'success': True,
         'users': [{
             'id': u.id,
             'username': u.username,
             'email': u.email,
+            'city': u.city,
             'is_verified': u.is_verified,
-            'created_at': u.created_at.strftime('%Y-%m-%d %H:%M')
-        } for u in users]
+            'created_at': u.created_at.strftime('%Y-%m-%d %H:%M'),
+            'last_login': u.last_login.strftime('%Y-%m-%d %H:%M') if u.last_login else None
+        } for u in pagination.items],
+        'total': pagination.total,
+        'pages': pagination.pages,
+        'current_page': page
     })
 
 @app.route('/admin/api/verify_user/<int:user_id>', methods=['POST'])
@@ -1650,6 +1671,93 @@ def admin_verify_user(user_id):
     db.session.commit()
 
     return jsonify({'success': True, 'message': f'用户 {user.email} 已验证'})
+
+@app.route('/admin/api/user/<int:user_id>')
+@admin_required
+def admin_get_user(user_id):
+    """获取单个用户详情"""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': '用户不存在'}), 404
+
+    return jsonify({
+        'success': True,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'city': user.city,
+            'is_verified': user.is_verified,
+            'created_at': user.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'last_login': user.last_login.strftime('%Y-%m-%d %H:%M:%S') if user.last_login else None
+        }
+    })
+
+@app.route('/admin/api/update_user/<int:user_id>', methods=['PUT'])
+@admin_required
+def admin_update_user(user_id):
+    """更新用户信息"""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': '用户不存在'}), 404
+
+    data = request.get_json()
+    if 'username' in data:
+        user.username = data['username'].strip() or None
+    if 'city' in data:
+        user.city = data['city'].strip() or '广州'
+    if 'email' in data:
+        # 检查邮箱是否重复
+        existing = User.query.filter(
+            User.email == data['email'].strip(),
+            User.id != user_id
+        ).first()
+        if existing:
+            return jsonify({'success': False, 'error': '邮箱已被使用'}), 400
+        user.email = data['email'].strip()
+
+    db.session.commit()
+    return jsonify({'success': True, 'message': '用户信息已更新'})
+
+@app.route('/admin/api/reset_password/<int:user_id>', methods=['POST'])
+@admin_required
+def admin_reset_password(user_id):
+    """重置用户密码"""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': '用户不存在'}), 404
+
+    data = request.get_json()
+    new_password = data.get('password', '').strip()
+    if not new_password or len(new_password) < 6:
+        return jsonify({'success': False, 'error': '密码长度至少6位'}), 400
+
+    user.set_password(new_password)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': f'用户 {user.email} 的密码已重置'})
+
+@app.route('/admin/api/delete_user/<int:user_id>', methods=['POST'])
+@admin_required
+def admin_delete_user(user_id):
+    """删除用户"""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': '用户不存在'}), 404
+
+    # 删除用户发送的消息
+    Message.query.filter_by(sender_id=user_id).delete()
+    # 删除用户的信件投递记录
+    LetterDelivery.query.filter_by(recipient_user_id=user_id).delete()
+    # 删除用户的通知
+    Notification.query.filter_by(user_id=user_id).delete()
+    # 删除微信绑定
+    WeChatBinding.query.filter_by(user_id=user_id).delete()
+    # 删除用户
+    db.session.delete(user)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': '用户已删除'})
 
 @app.route('/admin/settings')
 @admin_required
