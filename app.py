@@ -982,6 +982,15 @@ def admin_required(f):
     wrapper.__name__ = f.__name__
     return wrapper
 
+def login_required_user(f):
+    """用户登录装饰器"""
+    def wrapper(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'error': '请先登录', 'redirect': '/auth/login'}), 401
+        return f(*args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
+
 @app.route('/')
 def index():
     """首页路由"""
@@ -1957,15 +1966,6 @@ def inject_year():
     return {'current_year': datetime.now().year}
 
 # ==================== 用户认证相关路由 ====================
-
-def login_required_user(f):
-    """用户登录装饰器"""
-    def wrapper(*args, **kwargs):
-        if 'user_id' not in session:
-            return jsonify({'error': '请先登录', 'redirect': '/auth/login'}), 401
-        return f(*args, **kwargs)
-    wrapper.__name__ = f.__name__
-    return wrapper
 
 @app.route('/auth/login')
 def login_page():
