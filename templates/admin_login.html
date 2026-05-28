@@ -4,7 +4,6 @@
 ================================================================================
 警告：非法侵入计算机信息系统将受到法律制裁
 根据《中华人民共和国刑法》第二百八十五条、第二百八十六条
-详细内容见 docs/warning
 任何未经授权访问本系统的行为都将被记录并依法追究
 ================================================================================
 -->
@@ -76,7 +75,7 @@
             </div>
             <!-- 蜜罐字段 - 对浏览器隐藏，脚本会填充 -->
             <div style="position: absolute; left: -10000px; top: -10000px;">
-                <label for="website_confirm">请勿填写此字段</label>
+                <label for="website_confirm">username</label>
                 <input type="text" id="website_confirm" name="website_confirm" tabindex="-1" autocomplete="off">
             </div>
             {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
