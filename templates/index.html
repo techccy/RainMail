@@ -84,10 +84,12 @@
                                 <input type="checkbox" name="reply-notification" value="email">
                                 <span>收到回复时邮件通知我</span>
                             </label>
-                            <label class="checkbox-option disabled">
-                                <input type="checkbox" disabled>
-                                <span>收到回复时微信通知（即将推出）</span>
+                            {% if wechat_enabled %}
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="reply-notification" value="wechat">
+                                <span>收到回复时微信通知我</span>
                             </label>
+                            {% endif %}
                         </div>
                     </div>
 

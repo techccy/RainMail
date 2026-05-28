@@ -8,3 +8,4 @@ instance/rainmail.db
 config.*
 config.json.backup
 config.json
+docs/

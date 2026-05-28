@@ -55,6 +55,27 @@
                 </form>
             </div>
 
+            {% if config.WECHAT_ENABLED %}
+            <!-- 微信绑定卡片 -->
+            <div class="settings-card">
+                <h2>💬 微信绑定</h2>
+                <div id="wechat-status" class="wechat-status">
+                    <div class="wechat-loading">加载中...</div>
+                </div>
+                <div id="wechat-actions" class="wechat-actions" style="display: none;">
+                    <button id="wechat-bind-btn" class="wechat-btn wechat-bind" style="display: none;">
+                        绑定微信
+                    </button>
+                    <button id="wechat-unbind-btn" class="wechat-btn wechat-unbind" style="display: none;">
+                        解除绑定
+                    </button>
+                </div>
+                <p class="wechat-hint">
+                    绑定微信后，当你的信件收到回复时将通过微信通知你。
+                </p>
+            </div>
+            {% endif %}
+
             <!-- 操作卡片 -->
             <div class="settings-card">
                 <h2>🔗 快捷操作</h2>
@@ -171,7 +192,108 @@
         // 页面加载时执行
         document.addEventListener('DOMContentLoaded', () => {
             loadUserProfile();
+            loadWechatStatus();
         });
+
+        // 加载微信绑定状态
+        async function loadWechatStatus() {
+            try {
+                const response = await fetch('/api/user/wechat/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    updateWechatUI(data);
+                }
+            } catch (error) {
+                console.error('加载微信状态失败:', error);
+            }
+        }
+
+        // 更新微信绑定 UI
+        function updateWechatUI(data) {
+            const statusDiv = document.getElementById('wechat-status');
+            const actionsDiv = document.getElementById('wechat-actions');
+            const bindBtn = document.getElementById('wechat-bind-btn');
+            const unbindBtn = document.getElementById('wechat-unbind-btn');
+
+            actionsDiv.style.display = 'block';
+
+            if (data.bound) {
+                statusDiv.innerHTML = `
+                    <div class="wechat-bound">
+                        <span class="wechat-icon">✓</span>
+                        <span>已绑定微信账号</span>
+                        <small>OpenID: ${data.openid}</small>
+                    </div>
+                `;
+                bindBtn.style.display = 'none';
+                unbindBtn.style.display = 'inline-block';
+            } else {
+                statusDiv.innerHTML = `
+                    <div class="wechat-unbound">
+                        <span class="wechat-icon">○</span>
+                        <span>未绑定微信</span>
+                    </div>
+                `;
+                bindBtn.style.display = 'inline-block';
+                unbindBtn.style.display = 'none';
+            }
+        }
+
+        // 绑定微信
+        document.getElementById('wechat-bind-btn').addEventListener('click', () => {
+            const appId = '{{ config.WECHAT_APP_ID or "" }}';
+            if (!appId) {
+                showMessage('微信未配置', 'error');
+                return;
+            }
+            const redirectUri = encodeURIComponent(window.location.origin + '/user/wechat/auth');
+            const authUrl = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${appId}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_userinfo#wechat_redirect`;
+            window.location.href = authUrl;
+        });
+
+        // 解除微信绑定
+        document.getElementById('wechat-unbind-btn').addEventListener('click', async () => {
+            if (!confirm('确定要解除微信绑定吗？之后将无法收到微信通知。')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/user/wechat/unbind', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('✓ 解绑成功');
+                    loadWechatStatus();
+                } else {
+                    showMessage(data.error || '解绑失败', 'error');
+                }
+            } catch (error) {
+                console.error('解绑微信失败:', error);
+                showMessage('网络错误，请重试', 'error');
+            }
+        });
+
+        // 检查 URL 参数中的成功/错误消息
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('success') === 'wechat_bound') {
+            showMessage('✓ 微信绑定成功');
+            loadWechatStatus();
+            // 清除 URL 参数
+            window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (urlParams.get('error')) {
+            const error = urlParams.get('error');
+            const errorMessages = {
+                'wechat_auth_failed': '微信授权失败',
+                'wechat_not_configured': '微信未配置',
+                'wechat_auth_error': '微信授权异常',
+                'wechat_already_bound': '该微信账号已被其他用户绑定'
+            };
+            showMessage(errorMessages[error] || '操作失败', 'error');
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
     </script>
 
     <style>
@@ -305,6 +427,64 @@
                 transform: translateX(0);
                 opacity: 1;
             }
+        }
+
+        /* 微信绑定样式 */
+        .wechat-status {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .wechat-bound {
+            color: #27ae60;
+        }
+
+        .wechat-unbound {
+            color: #888;
+        }
+
+        .wechat-icon {
+            font-size: 1.2rem;
+            margin-right: 8px;
+        }
+
+        .wechat-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .wechat-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: opacity 0.2s;
+        }
+
+        .wechat-btn:hover {
+            opacity: 0.8;
+        }
+
+        .wechat-bind {
+            background: #07c160;
+            color: white;
+        }
+
+        .wechat-unbind {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .wechat-hint {
+            margin-top: 15px;
+            padding: 10px;
+            background: #fff8e1;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: #666;
         }
 
         @media (max-width: 600px) {

@@ -19,6 +19,10 @@ import json
 import random
 import string
 from werkzeug.security import generate_password_hash, check_password_hash
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad, pad
+import struct
+import xml.etree.ElementTree as ET
 
 # 用于防止并发请求天气API的锁
 weather_request_lock = threading.Lock()
@@ -249,6 +253,7 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
     username = db.Column(db.String(50))
+    city = db.Column(db.String(100), default='广州')
     is_verified = db.Column(db.Boolean, default=False)
     verification_token = db.Column(db.String(128))
     created_at = db.Column(db.DateTime, default=datetime.now)
@@ -265,6 +270,7 @@ class User(db.Model):
             'id': self.id,
             'email': self.email,
             'username': self.username,
+            'city': self.city,
             'is_verified': self.is_verified,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
         }
@@ -321,6 +327,193 @@ class WeChatBinding(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     wechat_openid = db.Column(db.String(100), unique=True)
     created_at = db.Column(db.DateTime, default=datetime.now)
+
+# --- 微信消息加解密类 ---
+class WXBizMsgCrypt:
+    """微信消息加解密类"""
+
+    def __init__(self, token, encoding_aes_key, app_id):
+        self.token = token
+        self.key = base64.b64decode(encoding_aes_key + "=")
+        self.app_id = app_id
+
+    def verify_signature(self, signature, timestamp, nonce, echostr=None):
+        """验证微信签名"""
+        tmp_arr = [self.token, timestamp, nonce]
+        if echostr:
+            tmp_arr.append(echostr)
+        tmp_arr.sort()
+        tmp_str = ''.join(tmp_arr)
+        tmp_str = hashlib.sha1(tmp_str.encode()).hexdigest()
+        return tmp_str == signature
+
+    def decrypt_msg(self, msg, msg_signature, timestamp, nonce):
+        """解密微信消息"""
+        # 验证签名
+        if not self.verify_signature(msg_signature, timestamp, nonce, msg):
+            return None, "签名验证失败"
+
+        try:
+            # Base64 解码
+            cipher_text = base64.b64decode(msg)
+            # AES 解密
+            cipher = AES.new(self.key, AES.MODE_CBC, self.key[:16])
+            decrypted = cipher.decrypt(cipher_text)
+            # 去除 PKCS7 填充
+            pad_len = decrypted[-1]
+            decrypted = decrypted[:-pad_len]
+            # 解析消息: random(16B) + msg_len(4B) + msg + appid
+            msg_len = struct.unpack('>I', decrypted[16:20])[0]
+            message = decrypted[20:20 + msg_len].decode('utf-8')
+            app_id = decrypted[20 + msg_len:].decode('utf-8')
+
+            if app_id != self.app_id:
+                return None, "AppID 不匹配"
+
+            return message, None
+        except Exception as e:
+            return None, f"解密失败: {str(e)}"
+
+    def encrypt_msg(self, msg, nonce=None):
+        """加密微信回复消息"""
+        try:
+            if nonce is None:
+                nonce = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+
+            # 构造加密内容: random(16B) + msg_len(4B) + msg + appid
+            text = msg.encode('utf-8')
+            app_id_bytes = self.app_id.encode('utf-8')
+            msg_len = len(text)
+            random_str = os.urandom(16)
+
+            format_str = b'>I' + str(msg_len) + b's' + str(len(app_id_bytes)) + b's'
+            pad_text = random_str + struct.pack('>I', msg_len) + text + app_id_bytes
+
+            # PKCS7 填充
+            block_size = 32
+            padding_len = block_size - (len(pad_text) % block_size)
+            pad_text += bytes([padding_len] * padding_len)
+
+            # AES 加密
+            cipher = AES.new(self.key, AES.MODE_CBC, self.key[:16])
+            encrypted = cipher.encrypt(pad_text)
+
+            # Base64 编码
+            return base64.b64encode(encrypted).decode('utf-8'), nonce
+        except Exception as e:
+            return None, f"加密失败: {str(e)}"
+
+# --- 微信相关辅助函数 ---
+def get_wechat_access_token():
+    """获取微信 access_token（带缓存）"""
+    cache_key = 'wechat_access_token'
+    cache_expiry = 'wechat_token_expiry'
+
+    # 检查缓存
+    token = session.get(cache_key) if cache_key in session else None
+    expiry = session.get(cache_expiry) if cache_expiry in session else None
+
+    if token and expiry and time.time() < expiry:
+        return token
+
+    # 获取新 token
+    app_id = app.config.get('WECHAT_APP_ID')
+    app_secret = app.config.get('WECHAT_APP_SECRET')
+
+    if not app_id or not app_secret:
+        return None
+
+    url = f"https://api.weixin.qq.com/cgi-bin/token"
+    params = {
+        'grant_type': 'client_credential',
+        'appid': app_id,
+        'secret': app_secret
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+
+        if 'access_token' in data:
+            token = data['access_token']
+            # 缓存 7000 秒（7200 秒内有效）
+            session[cache_key] = token
+            session[cache_expiry] = time.time() + 7000
+            return token
+        else:
+            app.logger.error(f"获取微信 access_token 失败: {data}")
+            return None
+    except Exception as e:
+        app.logger.error(f"获取微信 access_token 异常: {e}")
+        return None
+
+# 全局 access_token 缓存（用于非 session 场景）
+_wechat_token_cache = {'token': None, 'expiry': 0}
+
+def get_wechat_access_token_global():
+    """获取微信 access_token（全局缓存）"""
+    global _wechat_token_cache
+
+    if _wechat_token_cache['token'] and time.time() < _wechat_token_cache['expiry']:
+        return _wechat_token_cache['token']
+
+    app_id = app.config.get('WECHAT_APP_ID')
+    app_secret = app.config.get('WECHAT_APP_SECRET')
+
+    if not app_id or not app_secret:
+        return None
+
+    url = "https://api.weixin.qq.com/cgi-bin/token"
+    params = {
+        'grant_type': 'client_credential',
+        'appid': app_id,
+        'secret': app_secret
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+
+        if 'access_token' in data:
+            _wechat_token_cache['token'] = data['access_token']
+            _wechat_token_cache['expiry'] = time.time() + 7000
+            return _wechat_token_cache['token']
+        else:
+            app.logger.error(f"获取微信 access_token 失败: {data}")
+            return None
+    except Exception as e:
+        app.logger.error(f"获取微信 access_token 异常: {e}")
+        return None
+
+def send_wechat_template_message(openid, template_id, data, url=None):
+    """发送微信模板消息"""
+    access_token = get_wechat_access_token_global()
+    if not access_token:
+        return False, "无法获取 access_token"
+
+    api_url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}"
+
+    payload = {
+        "touser": openid,
+        "template_id": template_id,
+        "data": data
+    }
+
+    if url:
+        payload["url"] = url
+
+    try:
+        response = requests.post(api_url, json=payload, timeout=10)
+        result = response.json()
+
+        if result.get('errcode') == 0:
+            return True, None
+        else:
+            app.logger.error(f"发送模板消息失败: {result}")
+            return False, result.get('errmsg', '未知错误')
+    except Exception as e:
+        app.logger.error(f"发送模板消息异常: {e}")
+        return False, str(e)
 
 # 初始化数据库
 with app.app_context():
@@ -795,11 +988,12 @@ def index():
     client_ip = get_client_ip()
     city = get_city_by_ip(client_ip)
     dashboard_data = get_dashboard_data(city) # 传递城市
-    
+
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
-    
-    return render_template('index.html', **dashboard_data, turnstile_site_key=site_key, captcha_provider=captcha_provider)
+    wechat_enabled = app.config.get('WECHAT_ENABLED', False)
+
+    return render_template('index.html', **dashboard_data, turnstile_site_key=site_key, captcha_provider=captcha_provider, wechat_enabled=wechat_enabled)
 
 @app.route('/api/messages', methods=['GET', 'POST'])
 def handle_messages():
@@ -924,6 +1118,255 @@ def weather_api():
 def health_check():
     """健康检查接口"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+
+# --- 微信公众号接口 ---
+@app.route('/wechat', methods=['GET'])
+def wechat_verify():
+    """微信服务器验证"""
+    token = app.config.get('WECHAT_TOKEN')
+    if not token:
+        return '微信未配置', 500
+
+    signature = request.args.get('signature')
+    timestamp = request.args.get('timestamp')
+    nonce = request.args.get('nonce')
+    echostr = request.args.get('echostr')
+
+    if not all([signature, timestamp, nonce, echostr]):
+        return '参数不完整', 400
+
+    # 验证签名
+    tmp_arr = [token, timestamp, nonce]
+    tmp_arr.sort()
+    tmp_str = ''.join(tmp_arr)
+    tmp_str = hashlib.sha1(tmp_str.encode()).hexdigest()
+
+    if tmp_str == signature:
+        return echostr
+    else:
+        return '验证失败', 403
+
+@app.route('/wechat', methods=['POST'])
+def wechat_message():
+    """接收微信消息和事件"""
+    token = app.config.get('WECHAT_TOKEN')
+    encoding_aes_key = app.config.get('WECHAT_ENCODING_AES_KEY')
+    app_id = app.config.get('WECHAT_APP_ID')
+
+    if not all([token, encoding_aes_key, app_id]):
+        return '微信未配置', 500
+
+    signature = request.args.get('signature')
+    timestamp = request.args.get('timestamp')
+    nonce = request.args.get('nonce')
+    msg_signature = request.args.get('msg_signature')
+    encrypt_type = request.args.get('encrypt_type', 'raw')
+
+    try:
+        # 读取请求体
+        data = request.get_data(as_text=True)
+
+        if encrypt_type == 'aes':
+            # 安全模式 - 解密消息
+            root = ET.fromstring(data)
+            encrypt = root.find('Encrypt').text
+
+            crypt = WXBizMsgCrypt(token, encoding_aes_key, app_id)
+            msg, err = crypt.decrypt_msg(encrypt, msg_signature, timestamp, nonce)
+
+            if err:
+                app.logger.error(f"解密微信消息失败: {err}")
+                return '解密失败', 400
+
+            # 解析 XML 消息
+            msg_root = ET.fromstring(msg)
+        else:
+            # 明文模式
+            msg_root = ET.fromstring(data)
+
+        # 获取消息类型
+        msg_type = msg_root.find('MsgType').text if msg_root.find('MsgType') is not None else ''
+        from_user = msg_root.find('FromUserName').text if msg_root.find('FromUserName') is not None else ''
+        to_user = msg_root.find('ToUserName').text if msg_root.find('ToUserName') is not None else ''
+
+        # 处理事件
+        if msg_type == 'event':
+            event = msg_root.find('Event').text if msg_root.find('Event') is not None else ''
+
+            if event == 'subscribe':
+                # 用户关注事件
+                reply_content = """欢迎关注雨天信箱！
+
+在这里，你可以：
+• 发送匿名信件
+• 收到回复时获得通知
+
+点击下方菜单或访问 https://rainmail.dev 开始使用"""
+
+                return _send_wechat_reply(to_user, from_user, reply_content, timestamp, nonce, encrypt_type, token, encoding_aes_key, app_id)
+
+            elif event == 'unsubscribe':
+                # 用户取消关注 - 删除绑定
+                WeChatBinding.query.filter_by(wechat_openid=from_user).delete()
+                db.session.commit()
+                return 'success'
+
+        # 处理文本消息
+        elif msg_type == 'text':
+            content = msg_root.find('Content').text if msg_root.find('Content') is not None else ''
+
+            # 简单自动回复
+            if content in ['绑定', 'bind', '登录', 'login']:
+                reply_content = """请点击链接完成账号绑定：
+
+https://rainmail.dev/user/settings
+
+绑定后即可收到信件回复通知。"""
+                return _send_wechat_reply(to_user, from_user, reply_content, timestamp, nonce, encrypt_type, token, encoding_aes_key, app_id)
+            else:
+                reply_content = "感谢您的来信！请访问 https://rainmail.dev 发送信件。"
+                return _send_wechat_reply(to_user, from_user, reply_content, timestamp, nonce, encrypt_type, token, encoding_aes_key, app_id)
+
+        return 'success'
+
+    except Exception as e:
+        app.logger.error(f"处理微信消息异常: {e}")
+        return '处理失败', 500
+
+def _send_wechat_reply(to_user, from_user, content, timestamp, nonce, encrypt_type, token, encoding_aes_key, app_id):
+    """发送微信回复消息"""
+    # 构造 XML 消息
+    reply_time = str(int(time.time()))
+    msg_xml = f"""<xml>
+<ToUserName><![CDATA[{from_user}]]></ToUserName>
+<FromUserName><![CDATA[{to_user}]]></FromUserName>
+<CreateTime>{reply_time}</CreateTime>
+<MsgType><![CDATA[text]]></MsgType>
+<Content><![CDATA[{content}]]></Content>
+</xml>"""
+
+    if encrypt_type == 'aes':
+        # 加密消息
+        crypt = WXBizMsgCrypt(token, encoding_aes_key, app_id)
+        encrypted, _ = crypt.encrypt_msg(msg_xml)
+
+        if encrypted is None:
+            return '加密失败', 500
+
+        # 生成签名
+        reply_nonce = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+        tmp_arr = [token, reply_time, reply_nonce, encrypted]
+        tmp_arr.sort()
+        tmp_str = ''.join(tmp_arr)
+        msg_signature = hashlib.sha1(tmp_str.encode()).hexdigest()
+
+        response_xml = f"""<xml>
+<Encrypt><![CDATA[{encrypted}]]></Encrypt>
+<MsgSignature><![CDATA[{msg_signature}]]></MsgSignature>
+<TimeStamp>{reply_time}</TimeStamp>
+<Nonce><![CDATA[{reply_nonce}]]></Nonce>
+</xml>"""
+    else:
+        response_xml = msg_xml
+
+    response = make_response(response_xml)
+    response.content_type = 'application/xml'
+    return response
+
+@app.route('/user/wechat/auth')
+@login_required
+def wechat_auth_callback():
+    """微信 OAuth 授权回调"""
+    code = request.args.get('code')
+    state = request.args.get('state', '')
+
+    if not code:
+        return redirect(url_for('user_settings') + '?error=wechat_auth_failed')
+
+    app_id = app.config.get('WECHAT_APP_ID')
+    app_secret = app.config.get('WECHAT_APP_SECRET')
+
+    if not app_id or not app_secret:
+        return redirect(url_for('user_settings') + '?error=wechat_not_configured')
+
+    # 获取 access_token 和 openid
+    token_url = "https://api.weixin.qq.com/sns/oauth2/access_token"
+    params = {
+        'appid': app_id,
+        'secret': app_secret,
+        'code': code,
+        'grant_type': 'authorization_code'
+    }
+
+    try:
+        response = requests.get(token_url, params=params, timeout=10)
+        data = response.json()
+
+        if 'openid' in data:
+            openid = data['openid']
+            user_id = session.get('user_id')
+
+            # 检查是否已有绑定
+            existing = WeChatBinding.query.filter_by(wechat_openid=openid).first()
+            if existing and existing.user_id != user_id:
+                return redirect(url_for('user_settings') + '?error=wechat_already_bound')
+
+            # 删除旧的绑定
+            WeChatBinding.query.filter_by(user_id=user_id).delete()
+
+            # 创建新绑定
+            binding = WeChatBinding(user_id=user_id, wechat_openid=openid)
+            db.session.add(binding)
+            db.session.commit()
+
+            return redirect(url_for('user_settings') + '?success=wechat_bound')
+        else:
+            app.logger.error(f"微信授权失败: {data}")
+            return redirect(url_for('user_settings') + '?error=wechat_auth_failed')
+
+    except Exception as e:
+        app.logger.error(f"微信授权异常: {e}")
+        return redirect(url_for('user_settings') + '?error=wechat_auth_error')
+
+@app.route('/api/user/wechat/unbind', methods=['POST'])
+@login_required
+def api_wechat_unbind():
+    """解除微信绑定"""
+    user_id = session.get('user_id')
+
+    try:
+        WeChatBinding.query.filter_by(user_id=user_id).delete()
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': '解绑成功'})
+    except Exception as e:
+        app.logger.error(f"解绑微信失败: {e}")
+        return jsonify({'success': False, 'error': '解绑失败'}), 500
+
+@app.route('/api/user/wechat/status', methods=['GET'])
+@login_required
+def api_wechat_status():
+    """获取微信绑定状态"""
+    user_id = session.get('user_id')
+
+    binding = WeChatBinding.query.filter_by(user_id=user_id).first()
+
+    if binding:
+        # 隐藏部分 openid
+        openid_masked = binding.wechat_openid[:8] + '***' + binding.wechat_openid[-4:]
+        return jsonify({
+            'success': True,
+            'bound': True,
+            'openid': openid_masked,
+            'created_at': binding.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        })
+    else:
+        return jsonify({
+            'success': True,
+            'bound': False
+        })
+
+# --- 微信公众号接口结束 ---
 
 @app.route('/api/cha/question')
 def get_cha_question():
@@ -1137,7 +1580,7 @@ def admin_settings():
 SENSITIVE_FIELDS = [
     'HEFENG_KEY', 'TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY',
     'ALTCHA_HMAC_KEY', 'admin_password', 'MAIL_PASSWORD',
-    'API_KEY', 'WECHAT_APP_SECRET', 'IPINFO_TOKEN'
+    'API_KEY', 'WECHAT_APP_SECRET', 'WECHAT_ENCODING_AES_KEY', 'IPINFO_TOKEN'
 ]
 
 def mask_sensitive_value(key, value):
@@ -1206,8 +1649,12 @@ def api_get_config():
                 'SYSTEM_PROMPT': config.get('AI_MODERATION', {}).get('SYSTEM_PROMPT', '')
             },
             'wechat': {
+                'WECHAT_ENABLED': config.get('WECHAT_ENABLED', False),
                 'WECHAT_APP_ID': config.get('WECHAT_APP_ID', ''),
-                'WECHAT_APP_SECRET': mask_sensitive_value('WECHAT_APP_SECRET', config.get('WECHAT_APP_SECRET', ''))
+                'WECHAT_APP_SECRET': mask_sensitive_value('WECHAT_APP_SECRET', config.get('WECHAT_APP_SECRET', '')),
+                'WECHAT_TOKEN': config.get('WECHAT_TOKEN', ''),
+                'WECHAT_ENCODING_AES_KEY': mask_sensitive_value('WECHAT_ENCODING_AES_KEY', config.get('WECHAT_ENCODING_AES_KEY', '')),
+                'WECHAT_TEMPLATE_ID': config.get('WECHAT_TEMPLATE_ID', '')
             }
         }
 
@@ -1327,12 +1774,22 @@ def api_update_config():
         # 更新微信配置
         if 'wechat' in updates:
             wechat = updates['wechat']
+            if 'WECHAT_ENABLED' in wechat:
+                config['WECHAT_ENABLED'] = bool(wechat['WECHAT_ENABLED'])
             if 'WECHAT_APP_ID' in wechat:
                 config['WECHAT_APP_ID'] = wechat['WECHAT_APP_ID']
             if 'WECHAT_APP_SECRET' in wechat:
                 secret = wechat['WECHAT_APP_SECRET']
                 if secret and not str(secret).startswith('****'):
                     config['WECHAT_APP_SECRET'] = secret
+            if 'WECHAT_TOKEN' in wechat:
+                config['WECHAT_TOKEN'] = wechat['WECHAT_TOKEN']
+            if 'WECHAT_ENCODING_AES_KEY' in wechat:
+                key = wechat['WECHAT_ENCODING_AES_KEY']
+                if key and not str(key).startswith('****'):
+                    config['WECHAT_ENCODING_AES_KEY'] = key
+            if 'WECHAT_TEMPLATE_ID' in wechat:
+                config['WECHAT_TEMPLATE_ID'] = wechat['WECHAT_TEMPLATE_ID']
 
         # 写入配置文件（JSON格式）
         with open(config_path, 'w', encoding='utf-8') as f:
@@ -1567,7 +2024,10 @@ def user_inbox_page():
 @login_required_user
 def user_settings_page():
     """用户设置页面"""
-    return render_template('user/settings.html')
+    return render_template('user/settings.html', config={
+        'WECHAT_APP_ID': app.config.get('WECHAT_APP_ID', ''),
+        'WECHAT_ENABLED': app.config.get('WECHAT_ENABLED', False)
+    })
 
 @app.route('/api/auth/register', methods=['POST'])
 def api_register():
@@ -1604,10 +2064,14 @@ def api_register():
         if not validate_captcha(captcha_response, user_ip, session):
             return jsonify({'error': '人机验证失败'}), 400
 
+        # 获取用户城市
+        user_city = get_city_by_ip(user_ip)
+
         # 创建用户
         user = User(
             email=email,
-            username=username if username else email.split('@')[0]
+            username=username if username else email.split('@')[0],
+            city=user_city
         )
         user.set_password(password)
 
@@ -1967,6 +2431,13 @@ def api_reply_letter(delivery_id):
                 # 发送回复通知邮件
                 send_reply_notification(sender, message, reply)
 
+        # 如果发件人选择了微信通知
+        if message.reply_notification == 'wechat' and message.sender_id:
+            sender = User.query.get(message.sender_id)
+            if sender:
+                # 发送回复通知微信
+                send_wechat_reply_notification(sender, message, reply)
+
         db.session.commit()
 
         return jsonify({
@@ -2024,6 +2495,39 @@ def send_reply_notification(user, original_message, reply):
     except Exception as e:
         app.logger.error(f"发送回复通知邮件失败: {e}")
 
+def send_wechat_reply_notification(user, original_message, reply):
+    """发送微信回复通知（模板消息）"""
+    template_id = app.config.get('WECHAT_TEMPLATE_ID')
+    if not template_id:
+        app.logger.warning("微信模板消息未配置")
+        return False
+
+    binding = WeChatBinding.query.filter_by(user_id=user.id).first()
+    if not binding:
+        app.logger.warning(f"用户 {user.id} 未绑定微信")
+        return False
+
+    # 构造模板消息数据
+    reply_text = reply.reply_content if reply.reply_type == 'text' else '🤗 发送了一个拥抱'
+    original_text = original_message.content[:50] + '...' if len(original_message.content) > 50 else original_message.content
+
+    # 构建收件箱 URL
+    inbox_url = f"{request.host_url.rstrip('/')}/user/inbox"
+
+    data = {
+        "first": {"value": "你的信收到了回复"},
+        "keyword1": {"value": original_text},
+        "keyword2": {"value": reply_text},
+        "remark": {"value": "点击查看详情"}
+    }
+
+    success, err = send_wechat_template_message(binding.wechat_openid, template_id, data, inbox_url)
+
+    if not success:
+        app.logger.error(f"发送微信通知失败: {err}")
+
+    return success
+
 # ==================== 邮件辅助函数 ====================
 
 def create_private_delivery(message, sender_city):
@@ -2039,7 +2543,7 @@ def create_private_delivery(message, sender_city):
         delivery = LetterDelivery(
             message_id=message.id,
             recipient_user_id=recipient_user.id,
-            recipient_city=recipient_user.email.split('@')[-1],  # 简化：使用邮箱域名作为城市
+            recipient_city=recipient_user.city or '广州',
             unlock_token=secrets.token_urlsafe(32)
         )
         db.session.add(delivery)
