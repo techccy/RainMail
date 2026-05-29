@@ -2262,7 +2262,11 @@ def api_register():
         elif captcha_provider == 'cha':
             captcha_response = data.get('cha_answer')
         elif captcha_provider == 'altcha':
-            captcha_response = data.get('altcha_payload')
+            # 支持移动端使用 CHA 回退
+            if data.get('cha_answer'):
+                captcha_response = data.get('cha_answer')
+            else:
+                captcha_response = data.get('altcha_payload')
         else:
             captcha_response = None
 
@@ -2371,7 +2375,11 @@ def api_login():
         elif captcha_provider == 'cha':
             captcha_response = data.get('cha_answer')
         elif captcha_provider == 'altcha':
-            captcha_response = data.get('altcha_payload')
+            # 支持移动端使用 CHA 回退
+            if data.get('cha_answer'):
+                captcha_response = data.get('cha_answer')
+            else:
+                captcha_response = data.get('altcha_payload')
         else:
             captcha_response = None
 
