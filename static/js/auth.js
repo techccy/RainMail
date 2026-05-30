@@ -285,12 +285,7 @@ function initRegisterPage(config) {
         } else if (config.captchaProvider === 'cha') {
             captchaResponse = document.getElementById('cha-answer').value;
         } else if (config.captchaProvider === 'altcha') {
-            // Altcha模式：移动端使用CHA，桌面端使用Altcha
-            if (isMobileDevice()) {
-                captchaResponse = document.getElementById('cha-answer').value;
-            } else {
-                captchaResponse = document.getElementById('altcha-payload').value;
-            }
+            captchaResponse = document.getElementById('altcha-payload').value;
         } else {
             // 其他情况
             captchaResponse = document.getElementById('cha-answer')?.value || '';
