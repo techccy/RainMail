@@ -43,6 +43,8 @@ pending_weather_result = None
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+app = Flask(__name__)
+
 log = logging.getLogger('werkwerkzeug')
 log.setLevel(logging.ERROR)
 
