@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const payloadEl = document.getElementById(payloadId);
 
         // 使用服务器返回的 target_prefix（由 ALTCHA_DIFFICULTY 控制）
-        const chunkSize = 10000;
+        const chunkSize = 500;
 
         for (let i = 0; i < maxNumber; i++) {
             const testString = challenge + i;

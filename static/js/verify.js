@@ -88,7 +88,7 @@ class VerifyPage {
         const startTime = Date.now();
         const progressEl = document.getElementById('altcha-progress');
         const statusEl = document.getElementById('altcha-status');
-        const chunkSize = 10000;
+        const chunkSize = 500;
 
         for (let i = 0; i < maxNumber; i++) {
             const testString = challenge + i;

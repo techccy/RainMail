@@ -379,7 +379,7 @@ async function solveAltchaChallenge(challenge, salt, signature, targetPrefix, ma
     const startTime = Date.now();
     const progressEl = document.getElementById(`${widgetId}-progress`);
     const statusEl = document.getElementById(`${widgetId}-status`);
-    const chunkSize = 10000;
+    const chunkSize = 500;
     const simpleSha256 = async (msg) => {
         const msgBuffer = new TextEncoder().encode(msg);
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
