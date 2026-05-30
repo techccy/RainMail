@@ -1036,3 +1036,85 @@ header h1 {
 body.has-user-bar .container {
     margin-top: 60px;
 }
+
+/* ============================================================
+   12. reCAPTCHA v3 验证状态样式
+   ============================================================ */
+.recaptcha-v3-container {
+    position: relative;
+}
+
+.captcha-status {
+    font-size: 13px;
+    color: #666;
+    padding: 8px 12px;
+    background: #f5f5f5;
+    border-radius: 4px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.status-icon {
+    margin-right: 6px;
+}
+
+.captcha-status.status-success {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.captcha-status.status-error {
+    background: #ffebee;
+    color: #c62828;
+}
+
+/* 雨天模式下的验证状态样式 */
+.rainy-mode .captcha-status {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.rainy-mode .captcha-status.status-success {
+    background: rgba(76, 175, 80, 0.2);
+    color: #81c784;
+}
+
+.rainy-mode .captcha-status.status-error {
+    background: rgba(244, 67, 54, 0.2);
+    color: #ef5350;
+}
+
+/* reCAPTCHA v3 容器和刷新按钮 */
+.recaptcha-v3-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.refresh-captcha-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+    background: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.refresh-captcha-btn:hover {
+    background: #f57c00;
+    transform: scale(1.05);
+}
+
+/* 雨天模式下的刷新按钮 */
+.rainy-mode .refresh-captcha-btn {
+    background: #ffb74d;
+    color: #333;
+}
+
+.rainy-mode .refresh-captcha-btn:hover {
+    background: #ff9800;
+}

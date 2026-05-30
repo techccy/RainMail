@@ -309,6 +309,22 @@ class RainMailApp {
                 alert('请等待人机验证完成');
                 return;
             }
+        } else if (this.captchaProvider === 'recaptcha' || this.captchaProvider === 'recaptcha_v3') {
+            const recaptchaTokenInput = document.getElementById('recaptcha-token-hidden');
+            captchaResponse = recaptchaTokenInput ? recaptchaTokenInput.value : '';
+
+            if (!captchaResponse) {
+                // 显示刷新按钮
+                const refreshBtn = document.getElementById('refresh-captcha-btn');
+                const statusEl = document.getElementById('recaptcha-v3-status');
+                if (statusEl) {
+                    statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证未完成或已过期，请点击刷新';
+                    statusEl.classList.add('status-error');
+                }
+                if (refreshBtn) refreshBtn.style.display = 'inline-block';
+                alert('人机验证未完成或已过期，请点击刷新验证按钮');
+                return;
+            }
         }
 
         this.showProcessingOverlay();
@@ -328,6 +344,8 @@ class RainMailApp {
             // 根据验证提供商添加不同的字段
             if (this.captchaProvider === 'cloudflare') {
                 requestBody.cf_token = captchaResponse;
+            } else if (this.captchaProvider === 'recaptcha' || this.captchaProvider === 'recaptcha_v3') {
+                requestBody.recaptcha_token = captchaResponse;
             } else if (this.captchaProvider === 'cha') {
                 requestBody.cha_answer = captchaResponse;
             } else if (this.captchaProvider === 'altcha') {
@@ -372,6 +390,13 @@ class RainMailApp {
                 if (this.captchaProvider === 'altcha') {
                     await this.loadAltchaChallenge(inputId === 'message-input' ? 'sunny-altcha-widget' : 'rainy-altcha-widget',
                                                      inputId === 'message-input' ? 'sunny-altcha-payload' : 'rainy-altcha-payload');
+                }
+
+                // 如果使用 reCAPTCHA v3，重新获取验证
+                if (this.captchaProvider === 'recaptcha' || this.captchaProvider === 'recaptcha_v3') {
+                    if (typeof window.refreshRecaptcha === 'function') {
+                        await window.refreshRecaptcha();
+                    }
                 }
             } else {
                 // 检查是否需要登录

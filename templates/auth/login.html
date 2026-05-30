@@ -46,8 +46,11 @@
                 <input type="hidden" name="cf-token-hidden" id="cf-token-hidden" value="">
             </div>
             {% elif captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}
-            <div class="form-group">
+            <div class="form-group recaptcha-v3-container">
                 <input type="hidden" name="recaptcha-token-hidden" id="recaptcha-token-hidden" value="">
+                <div id="recaptcha-v3-status" class="captcha-status">
+                    <span class="status-icon">⏳</span> 正在进行人机验证...
+                </div>
             </div>
             {% elif captcha_provider == 'cha' %}
             <div class="form-group">

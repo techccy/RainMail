@@ -47,49 +47,35 @@ app = Flask(__name__)
 log = logging.getLogger('werkwerkzeug')
 log.setLevel(logging.ERROR)
 
-# --- 新增：加载配置文件 ---
+# --- 配置文件加载 ---
 config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-config_yaml_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
-
-def migrate_yaml_to_json():
-    """将YAML配置迁移到JSON格式"""
-    if not os.path.exists(config_path) and os.path.exists(config_yaml_path):
-        import yaml
-        try:
-            with open(config_yaml_path, 'r', encoding='utf-8') as f:
-                yaml_config = yaml.safe_load(f)
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(yaml_config, f, ensure_ascii=False, indent=2)
-            print(f"[INFO] 已将 config.yaml 迁移至 config.json")
-            return yaml_config
-        except Exception as e:
-            print(f"[ERROR] YAML迁移失败: {e}")
-            return {}
 
 def load_config():
-    """加载JSON配置文件，如果不存在则尝试从YAML迁移"""
-    if os.path.exists(config_path):
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    else:
-        # 尝试从YAML迁移
-        config = migrate_yaml_to_json()
-        if config:
-            return config
-        return {}
+    """加载JSON配置文件，如果不存在则从模板自动生成"""
+    if not os.path.exists(config_path):
+        config_model_path = os.path.join(os.path.dirname(__file__), 'config_model.json')
+        if os.path.exists(config_model_path):
+            import shutil
+            shutil.copy(config_model_path, config_path)
+            print(f"[INFO] 已从 config_model.json 自动生成 config.json")
+        else:
+            print(f"[WARNING] config_model.json 不存在，创建空配置文件")
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump({}, f)
+
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 config = load_config()
 app.config.update(config)
 
-# 安全配置：优先从环境变量读取
-secret_key = os.environ.get('SECRET_KEY', app.config.get('SECRET_KEY'))
-if not secret_key:
-    secret_key = 'rainmail_secret_key_2024'  # 默认密钥
+# 安全配置
+secret_key = app.config.get('SECRET_KEY', 'rainmail_secret_key_2024')
 app.secret_key = secret_key
 app.logger.info(f"Secret key 已设置")
 
 # Session 安全配置
-app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+app.config['SESSION_COOKIE_SECURE'] = app.config.get('SESSION_COOKIE_SECURE', False)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
@@ -101,8 +87,7 @@ app.jinja_env.globals['csrf_token'] = lambda: session.get('csrf_token', '')
 # 安全响应头配置
 # ============================================================================
 
-CSP_POLICY = os.environ.get(
-    'CSP_POLICY',
+CSP_POLICY = app.config.get('CSP_POLICY',
     "default-src 'self'; "
     "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; "
     "style-src 'self' 'unsafe-inline'; "
@@ -299,24 +284,24 @@ def get_csrf_token():
     """获取 CSRF token（用于 AJAX 请求）"""
     return jsonify({'csrf_token': generate_csrf_token()})
 
-# 敏感配置优先从环境变量读取
-TURNSTILE_SECRET_KEY = os.environ.get('TURNSTILE_SECRET_KEY', app.config.get('TURNSTILE_SECRET_KEY'))
-TURNSTILE_SITE_KEY = os.environ.get('TURNSTILE_SITE_KEY', app.config.get('TURNSTILE_SITE_KEY'))
-ALTCHA_HMAC_KEY = os.environ.get('ALTCHA_HMAC_KEY', app.config.get('ALTCHA_HMAC_KEY', ''))
-ALTCHA_DIFFICULTY = int(os.environ.get('ALTCHA_DIFFICULTY', app.config.get('ALTCHA_DIFFICULTY', 5)))
-ASK_TIMES = int(os.environ.get('TIMES', app.config.get('TIMES', 900)))
-LOCATION_ID = int(os.environ.get('LOCATION_ID', app.config.get('LOCATION_ID', 101280101)))
-LOCATION_NAME = os.environ.get('LOCATION_NAME', app.config.get('LOCATION_NAME', '广州'))
+# 验证码和位置配置
+TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
+TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
+ALTCHA_HMAC_KEY = app.config.get('ALTCHA_HMAC_KEY', '')
+ALTCHA_DIFFICULTY = app.config.get('ALTCHA_DIFFICULTY', 5)
+ASK_TIMES = app.config.get('times', 900)
+LOCATION_ID = app.config.get('LOCATION_ID', 101280101)
+LOCATION_NAME = app.config.get('LOCATION_NAME', '广州')
 
 # 管理员配置
-ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', app.config.get('admin_username', 'admin'))
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', app.config.get('admin_password', 'admin'))
+ADMIN_USERNAME = app.config.get('admin_username', 'admin')
+ADMIN_PASSWORD = app.config.get('admin_password')
 
 # AI 内容审核配置
-AI_MODERATION_API_KEY = os.environ.get('AI_MODERATION_API_KEY', app.config.get('AI_MODERATION', {}).get('API_KEY', ''))
+AI_MODERATION_API_KEY = app.config.get('AI_MODERATION', {}).get('API_KEY', '')
 
 # TOTP 配置
-TOTP_DECRYPT_PASSWORD = os.environ.get('TOTP_DECRYPT_PASSWORD', app.config.get('totp_decrypt_password', ''))
+TOTP_DECRYPT_PASSWORD = app.config.get('totp_decrypt_password', '')
 SENSITIVE_WORDS_SET = set()
 IPINFO_TOKEN = app.config.get('IPINFO_TOKEN') # ipinfo.io 访问令牌
 
@@ -346,13 +331,13 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # 邮件配置
-app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', app.config.get('MAIL_SERVER', 'smtp.gmail.com'))
-app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', app.config.get('MAIL_PORT', 587)))
-app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', app.config.get('MAIL_USE_TLS', True))
-app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', app.config.get('MAIL_USE_SSL', False))
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', app.config.get('MAIL_USERNAME', ''))
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', app.config.get('MAIL_PASSWORD', ''))
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.config.get('MAIL_DEFAULT_SENDER', 'RainMail <noreply@rainmail.dev>'))
+app.config['MAIL_SERVER'] = app.config.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = app.config.get('MAIL_PORT', 587)
+app.config['MAIL_USE_TLS'] = app.config.get('MAIL_USE_TLS', True)
+app.config['MAIL_USE_SSL'] = app.config.get('MAIL_USE_SSL', False)
+app.config['MAIL_USERNAME'] = app.config.get('MAIL_USERNAME', '')
+app.config['MAIL_PASSWORD'] = app.config.get('MAIL_PASSWORD', '')
+app.config['MAIL_DEFAULT_SENDER'] = app.config.get('MAIL_DEFAULT_SENDER', 'RainMail <noreply@rainmail.dev>')
 mail = Mail(app)
 
 # 速率限制配置

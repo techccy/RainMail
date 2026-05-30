@@ -50,15 +50,68 @@ document.addEventListener('DOMContentLoaded', function() {
     // 根据验证提供商选择不同的处理方式
     if (captchaProvider === 'recaptcha' || captchaProvider === 'recaptcha_v3') {
         // reCAPTCHA v3 - 无形验证
-        if (typeof grecaptcha !== 'undefined') {
-            grecaptcha.ready(function() {
-                // 晴天界面验证
+        const statusEl = document.getElementById('recaptcha-v3-status');
+        const refreshBtn = document.getElementById('refresh-captcha-btn');
+        const hiddenInput = document.getElementById('recaptcha-token-hidden');
+
+        // 刷新验证函数
+        window.refreshRecaptcha = function() {
+            if (typeof grecaptcha !== 'undefined') {
+                if (statusEl) {
+                    statusEl.innerHTML = '<span class="status-icon">⏳</span> 正在刷新验证...';
+                    statusEl.classList.remove('status-error');
+                }
+                if (refreshBtn) refreshBtn.style.display = 'none';
+
                 grecaptcha.execute(recaptchaSiteKey, {action: 'submit'})
                     .then(function(token) {
-                        const hiddenInput = document.getElementById('recaptcha-token-hidden');
                         if (hiddenInput) hiddenInput.value = token;
+                        if (statusEl) {
+                            statusEl.innerHTML = '<span class="status-icon">✓</span> 人机验证完成';
+                            statusEl.classList.add('status-success');
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('reCAPTCHA v3 刷新失败:', error);
+                        if (statusEl) {
+                            statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证失败，点击刷新重试';
+                            statusEl.classList.add('status-error');
+                        }
+                        if (refreshBtn) refreshBtn.style.display = 'inline-block';
+                    });
+            }
+        };
+
+        if (typeof grecaptcha !== 'undefined') {
+            grecaptcha.ready(function() {
+                grecaptcha.execute(recaptchaSiteKey, {action: 'submit'})
+                    .then(function(token) {
+                        if (hiddenInput) hiddenInput.value = token;
+                        if (statusEl) {
+                            statusEl.innerHTML = '<span class="status-icon">✓</span> 人机验证完成';
+                            statusEl.classList.add('status-success');
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('reCAPTCHA v3 执行失败:', error);
+                        if (statusEl) {
+                            statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证加载失败';
+                            statusEl.classList.add('status-error');
+                        }
+                        if (refreshBtn) refreshBtn.style.display = 'inline-block';
                     });
             });
+        } else {
+            if (statusEl) {
+                statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证服务未加载';
+                statusEl.classList.add('status-error');
+            }
+            if (refreshBtn) refreshBtn.style.display = 'inline-block';
+        }
+
+        // 绑定刷新按钮事件
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', window.refreshRecaptcha);
         }
     } else if (captchaProvider === 'cloudflare') {
         // 检查 Turnstile 是否加载完成
