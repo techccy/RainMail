@@ -465,36 +465,3 @@
     </footer>
 </body>
 </html>
-<script>
-// 等待页面加载完成
-document.addEventListener('DOMContentLoaded', function() {
-    const locationElem = document.getElementById('weather-location');
-    const textElem = document.getElementById('weather-text');
-    const refreshElem = document.getElementById('next-refresh');
-
-    // 如果元素存在，才执行
-    if (locationElem && textElem && refreshElem) {
-        fetchWeatherMeta();
-        setInterval(fetchWeatherMeta, 10000); // 每10秒更新一次
-    }
-});
-
-let lastRefreshTime = null;
-
-function fetchWeatherMeta() {
-    fetch('/api/weather/meta')
-        .then(response => response.json())
-        .then(data => {
-            // 更新 DOM
-            document.getElementById('weather-location').textContent = data.location;
-            document.getElementById('weather-text').textContent = data.weather_text;
-            document.getElementById('next-refresh').textContent = data.next_refresh_in_minutes; // 显示分钟数
-
-            // 记录上次成功获取时间（用于调试）
-            lastRefreshTime = new Date();
-        })
-        .catch(err => {
-            console.error('Failed to fetch weather meta:', err);
-        });
-}
-</script>

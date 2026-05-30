@@ -13,6 +13,45 @@ class RainMailApp {
         this.updateInterface();
         this.startWeatherPolling();
         this.detectCaptchaProvider();
+        this.initWeatherMeta(); // 初始化天气元信息
+    }
+
+    initWeatherMeta() {
+        // 初始化天气元信息显示
+        const locationElem = document.getElementById('weather-location');
+        const textElem = document.getElementById('weather-text');
+        const refreshElem = document.getElementById('next-refresh');
+
+        if (locationElem && textElem && refreshElem) {
+            this.fetchWeatherMeta();
+            setInterval(() => this.fetchWeatherMeta(), 10000); // 每10秒更新一次
+        }
+    }
+
+    fetchWeatherMeta() {
+        fetch('/api/weather/meta')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                const locationElem = document.getElementById('weather-location');
+                const textElem = document.getElementById('weather-text');
+                const refreshElem = document.getElementById('next-refresh');
+
+                if (locationElem) locationElem.textContent = data.location || '未知';
+                if (textElem) textElem.textContent = data.weather_text || '--';
+                if (refreshElem) refreshElem.textContent = data.next_refresh_in_minutes ?? '--';
+
+                console.log('Weather meta updated:', data);
+            })
+            .catch(err => {
+                console.error('Failed to fetch weather meta:', err);
+                const locationElem = document.getElementById('weather-location');
+                if (locationElem) locationElem.textContent = '获取失败';
+            });
     }
 
     detectCaptchaProvider() {
