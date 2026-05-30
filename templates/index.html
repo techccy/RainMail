@@ -9,7 +9,10 @@
     <script src="{{ url_for('static', filename='js/csrf.js') }}"></script>
 </head>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
-<body class="sunny-mode" data-captcha-provider="{{ captcha_provider }}" data-turnstile-site-key="{{ turnstile_site_key }}">
+{% if captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}
+<script src="https://www.google.com/recaptcha/api.js?render={{ recaptcha_site_key }}" async defer></script>
+{% endif %}
+<body class="sunny-mode" data-captcha-provider="{{ captcha_provider }}" data-turnstile-site-key="{{ turnstile_site_key }}" data-recaptcha-site-key="{{ recaptcha_site_key }}">
     <div id="weather-background"></div>
 
     <!-- 未登录时的登录入口 -->
@@ -102,6 +105,8 @@
                     {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
                         <div id="sunny-turnstile" class="cf-turnstile"></div>
                         <input type="hidden" name="cf-token-hidden" id="cf-token-hidden" value="">
+                    {% elif captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}
+                        <input type="hidden" name="recaptcha-token-hidden" id="recaptcha-token-hidden" value="">
                     {% elif captcha_provider == 'cha' %}
                         <div id="sunny-cha-container" class="cha-container">
                             <div class="cha-question" id="sunny-cha-question">加载中...</div>
@@ -180,6 +185,8 @@
                     {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
                         <div id="rainy-turnstile" class="cf-turnstile"></div>
                         <input type="hidden" name="cf-token-hidden" id="rainy-cf-token-hidden" value="">
+                    {% elif captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}
+                        <input type="hidden" name="recaptcha-token-hidden" id="recaptcha-token-hidden" value="">
                     {% elif captcha_provider == 'cha' %}
                         <div id="rainy-cha-container" class="cha-container">
                             <div class="cha-question" id="rainy-cha-question">加载中...</div>

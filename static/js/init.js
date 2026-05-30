@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const body = document.body;
     const captchaProvider = body.dataset.captchaProvider || '';
     const turnstileSiteKey = body.dataset.turnstileSiteKey || '';
+    const recaptchaSiteKey = body.dataset.recaptchaSiteKey || '';
 
     // 检测是否为移动设备
     function isMobileDevice() {
@@ -47,7 +48,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // 根据验证提供商选择不同的处理方式
-    if (captchaProvider === 'cloudflare') {
+    if (captchaProvider === 'recaptcha' || captchaProvider === 'recaptcha_v3') {
+        // reCAPTCHA v3 - 无形验证
+        if (typeof grecaptcha !== 'undefined') {
+            grecaptcha.ready(function() {
+                // 晴天界面验证
+                grecaptcha.execute(recaptchaSiteKey, {action: 'submit'})
+                    .then(function(token) {
+                        const hiddenInput = document.getElementById('recaptcha-token-hidden');
+                        if (hiddenInput) hiddenInput.value = token;
+                    });
+            });
+        }
+    } else if (captchaProvider === 'cloudflare') {
         // 检查 Turnstile 是否加载完成
         const checkTurnstile = setInterval(() => {
             if (typeof turnstile !== 'undefined') {

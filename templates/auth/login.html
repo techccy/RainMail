@@ -15,8 +15,11 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📮</text></svg>">
     <script src="{{ url_for('static', filename='js/csrf.js') }}"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+    {% if captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}
+    <script src="https://www.google.com/recaptcha/api.js?render={{ recaptcha_site_key }}" async defer></script>
+    {% endif %}
 </head>
-<body class="auth-page" data-captcha-provider="{{ captcha_provider }}" data-turnstile-site-key="{{ turnstile_site_key }}">
+<body class="auth-page" data-captcha-provider="{{ captcha_provider }}" data-turnstile-site-key="{{ turnstile_site_key }}" data-recaptcha-site-key="{{ recaptcha_site_key }}">
     <div id="weather-background"></div>
 
     <div class="container glass-effect fade-in auth-container">
@@ -41,6 +44,10 @@
             <div class="form-group">
                 <div id="login-turnstile" class="cf-turnstile"></div>
                 <input type="hidden" name="cf-token-hidden" id="cf-token-hidden" value="">
+            </div>
+            {% elif captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}
+            <div class="form-group">
+                <input type="hidden" name="recaptcha-token-hidden" id="recaptcha-token-hidden" value="">
             </div>
             {% elif captcha_provider == 'cha' %}
             <div class="form-group">

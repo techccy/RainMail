@@ -49,7 +49,17 @@ function initLoginPage(config) {
 
     // 初始化 CAPTCHA
     try {
-        if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
+        if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
+            // reCAPTCHA v3 - 无形验证
+            if (typeof grecaptcha !== 'undefined') {
+                grecaptcha.ready(function() {
+                    grecaptcha.execute(config.recaptchaSiteKey, {action: 'login'})
+                        .then(function(token) {
+                            document.getElementById('recaptcha-token-hidden').value = token;
+                        });
+                });
+            }
+        } else if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
             turnstileWidgetId = turnstile.render('#login-turnstile', {
                 sitekey: config.turnstileSiteKey,
                 callback: function(token) {
@@ -96,6 +106,8 @@ function initLoginPage(config) {
         // 获取 CAPTCHA 响应
         if (config.captchaProvider === 'cloudflare') {
             captchaResponse = document.getElementById('cf-token-hidden').value;
+        } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
+            captchaResponse = document.getElementById('recaptcha-token-hidden').value;
         } else if (config.captchaProvider === 'cha') {
             captchaResponse = document.getElementById('cha-answer').value;
         } else if (config.captchaProvider === 'altcha') {
@@ -129,6 +141,7 @@ function initLoginPage(config) {
                     email: email,
                     password: password,
                     ...(config.captchaProvider === 'cloudflare' ? { cf_token: captchaResponse } :
+                        config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3' ? { recaptcha_token: captchaResponse } :
                         config.captchaProvider === 'cha' ? { cha_answer: captchaResponse } :
                         { altcha_payload: captchaResponse })
                 })
@@ -201,7 +214,17 @@ function initRegisterPage(config) {
 
     // 初始化 CAPTCHA
     try {
-        if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
+        if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
+            // reCAPTCHA v3 - 无形验证
+            if (typeof grecaptcha !== 'undefined') {
+                grecaptcha.ready(function() {
+                    grecaptcha.execute(config.recaptchaSiteKey, {action: 'register'})
+                        .then(function(token) {
+                            document.getElementById('recaptcha-token-hidden').value = token;
+                        });
+                });
+            }
+        } else if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
             turnstileWidgetId = turnstile.render('#register-turnstile', {
                 sitekey: config.turnstileSiteKey,
                 callback: function(token) {
@@ -257,6 +280,8 @@ function initRegisterPage(config) {
         // 获取 CAPTCHA 响应
         if (config.captchaProvider === 'cloudflare') {
             captchaResponse = document.getElementById('cf-token-hidden').value;
+        } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
+            captchaResponse = document.getElementById('recaptcha-token-hidden').value;
         } else if (config.captchaProvider === 'cha') {
             captchaResponse = document.getElementById('cha-answer').value;
         } else if (config.captchaProvider === 'altcha') {
@@ -307,6 +332,7 @@ function initRegisterPage(config) {
                     password: password,
                     username: username,
                     ...(config.captchaProvider === 'cloudflare' ? { cf_token: captchaResponse } :
+                        config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3' ? { recaptcha_token: captchaResponse } :
                         config.captchaProvider === 'cha' ? { cha_answer: captchaResponse } :
                         { altcha_payload: captchaResponse })
                 })
@@ -459,7 +485,17 @@ function initAdminLoginPage(config) {
 
     // 初始化 CAPTCHA
     try {
-        if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
+        if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
+            // reCAPTCHA v3 - 无形验证
+            if (typeof grecaptcha !== 'undefined') {
+                grecaptcha.ready(function() {
+                    grecaptcha.execute(config.recaptchaSiteKey, {action: 'admin_login'})
+                        .then(function(token) {
+                            document.getElementById('recaptcha-token-hidden').value = token;
+                        });
+                });
+            }
+        } else if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
             // 显式渲染 Turnstile
             turnstileWidgetId = turnstile.render('#admin-turnstile', {
                 sitekey: config.turnstileSiteKey,
@@ -506,6 +542,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const body = document.body;
     const captchaProvider = body.getAttribute('data-captcha-provider');
     const turnstileSiteKey = body.getAttribute('data-turnstile-site-key');
+    const recaptchaSiteKey = body.getAttribute('data-recaptcha-site-key');
 
     if (!captchaProvider) {
         console.warn('未找到 captcha-provider 配置');
@@ -514,7 +551,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const config = {
         captchaProvider: captchaProvider,
-        turnstileSiteKey: turnstileSiteKey || ''
+        turnstileSiteKey: turnstileSiteKey || '',
+        recaptchaSiteKey: recaptchaSiteKey || ''
     };
 
     console.log('自动初始化, config:', config);

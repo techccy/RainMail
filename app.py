@@ -936,6 +936,43 @@ def validate_turnstile(turnstile_response, user_ip):
         app.logger.error(f"Turnstile 验证响应解析失败: {e}")
         return False
 
+def validate_recaptcha_v3(recaptcha_response, user_ip=None):
+    """
+    验证 Google reCAPTCHA v3 Token
+    """
+    secret_key = app.config.get('RECAPTCHA_V3_SECRET_KEY')
+    if not secret_key:
+        app.logger.error("RECAPTCHA_V3_SECRET_KEY 未在 config.yaml 中配置！")
+        return False
+
+    payload = {
+        'secret': secret_key,
+        'response': recaptcha_response
+    }
+    if user_ip:
+        payload['remoteip'] = user_ip
+
+    try:
+        response = requests.post('https://www.google.com/recaptcha/api/siteverify', data=payload, timeout=10)
+        result = response.json()
+
+        if result.get('success', False):
+            score = result.get('score', 0)
+            threshold = app.config.get('RECAPTCHA_V3_THRESHOLD', 0.5)
+            if score >= threshold:
+                app.logger.info(f"reCAPTCHA v3 验证成功，分数: {score}")
+                return True
+            else:
+                app.logger.warning(f"reCAPTCHA v3 分数过低: {score} < {threshold}")
+                return False
+        return False
+    except requests.RequestException as e:
+        app.logger.error(f"reCAPTCHA v3 验证请求失败: {e}")
+        return False
+    except ValueError as e:
+        app.logger.error(f"reCAPTCHA v3 验证响应解析失败: {e}")
+        return False
+
 def validate_cha(cha_response, session):
     """
     验证 CHA (Custom Human Authentication) 验证码
@@ -988,6 +1025,8 @@ def validate_captcha(captcha_response, user_ip=None, session=None):
 
     if captcha_provider == 'cloudflare':
         return validate_turnstile(captcha_response, user_ip)
+    elif captcha_provider == 'recaptcha' or captcha_provider == 'recaptcha_v3':
+        return validate_recaptcha_v3(captcha_response, user_ip)
     elif captcha_provider == 'cha':
         return validate_cha(captcha_response, session)
     elif captcha_provider == 'altcha':
@@ -1275,9 +1314,10 @@ def index():
 
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+    recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
     wechat_enabled = app.config.get('WECHAT_ENABLED', False)
 
-    return render_template('index.html', **dashboard_data, turnstile_site_key=site_key, captcha_provider=captcha_provider, wechat_enabled=wechat_enabled)
+    return render_template('index.html', **dashboard_data, turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, wechat_enabled=wechat_enabled)
 
 @app.route('/api/messages', methods=['GET', 'POST'])
 @limiter.limit("10 per minute", methods=['POST'])
@@ -1300,6 +1340,8 @@ def handle_messages():
             captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
             if captcha_provider == 'cloudflare':
                 captcha_response = request.json.get('cf_token')
+            elif captcha_provider in ('recaptcha', 'recaptcha_v3'):
+                captcha_response = request.json.get('recaptcha_token')
             elif captcha_provider == 'cha':
                 captcha_response = request.json.get('cha_answer')
             elif captcha_provider == 'altcha':
@@ -1751,12 +1793,15 @@ def admin_login():
         if check_honeypot(request.form):
             # 蜜罐被触发，假装登录成功但实际不登录
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+            recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
             cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
-            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
+            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
         # --- 新增：管理员登录人机验证 ---
         if captcha_provider == 'cloudflare':
             captcha_response = request.form.get('cf-turnstile-response')
+        elif captcha_provider in ('recaptcha', 'recaptcha_v3'):
+            captcha_response = request.form.get('recaptcha_token')
         elif captcha_provider == 'cha':
             captcha_response = request.form.get('cha_answer')
         elif captcha_provider == 'altcha':
@@ -1775,13 +1820,15 @@ def admin_login():
         if not captcha_response:
             # --- 修改：不再返回 JSON，而是渲染模板 ---
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+            recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
             cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
-            return render_template('admin_login.html', error='请完成人机验证', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
+            return render_template('admin_login.html', error='请完成人机验证', turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
         if not validate_captcha(captcha_response, user_ip, session):
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+            recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
             cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
-            return render_template('admin_login.html', error='人机验证失败，请刷新网页', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
+            return render_template('admin_login.html', error='人机验证失败，请刷新网页', turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, cha_question=cha_question)
         # --- 结束新增 ---
 
         # --- 修正：统一从环境变量或config获取管理员凭据 ---
@@ -1799,15 +1846,17 @@ def admin_login():
             # 提供更模糊的错误信息以增强安全性
             flash('登录凭据无效或双重认证失败')
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+            recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
             cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
 
             # 检测爆破行为
             show_warning = track_failed_login()
             warning_text = get_warning_text() if show_warning else ""
 
-            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question, warning=warning_text)
+            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, cha_question=cha_question, warning=warning_text)
 
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+    recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
 
     # 为 CHA 验证生成新问题 (CHA 或 Altcha 移动端回退都需要)
     if captcha_provider in ('cha', 'altcha'):
@@ -1819,7 +1868,7 @@ def admin_login():
     else:
         cha_question = None
 
-    return render_template('admin_login.html', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
+    return render_template('admin_login.html', turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
 @app.route('/admin/dashboard')
 @admin_required
@@ -2478,6 +2527,7 @@ def login_page():
     """用户登录页面"""
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+    recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
 
     # 为 CHA 验证生成新问题 (CHA 或 Altcha 移动端回退都需要)
     if captcha_provider in ('cha', 'altcha'):
@@ -2491,6 +2541,7 @@ def login_page():
 
     return render_template('auth/login.html',
                           turnstile_site_key=site_key,
+                          recaptcha_site_key=recaptcha_site_key,
                           captcha_provider=captcha_provider,
                           cha_question=cha_question)
 
@@ -2499,6 +2550,7 @@ def register_page():
     """用户注册页面"""
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+    recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
 
     # 为 CHA 验证生成新问题 (CHA 或 Altcha 移动端回退都需要)
     if captcha_provider in ('cha', 'altcha'):
@@ -2512,6 +2564,7 @@ def register_page():
 
     return render_template('auth/register.html',
                           turnstile_site_key=site_key,
+                          recaptcha_site_key=recaptcha_site_key,
                           captcha_provider=captcha_provider,
                           cha_question=cha_question)
 
@@ -2521,10 +2574,12 @@ def user_inbox_page():
     """用户收件箱页面"""
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+    recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
 
     return render_template('user/inbox.html',
                           captcha_provider=captcha_provider,
-                          turnstile_site_key=site_key)
+                          turnstile_site_key=site_key,
+                          recaptcha_site_key=recaptcha_site_key)
 
 @app.route('/user/settings')
 @login_required_user
@@ -2560,6 +2615,8 @@ def api_register():
         captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
         if captcha_provider == 'cloudflare':
             captcha_response = data.get('cf_token')
+        elif captcha_provider in ('recaptcha', 'recaptcha_v3'):
+            captcha_response = data.get('recaptcha_token')
         elif captcha_provider == 'cha':
             captcha_response = data.get('cha_answer')
         elif captcha_provider == 'altcha':
@@ -2674,6 +2731,8 @@ def api_login():
         captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
         if captcha_provider == 'cloudflare':
             captcha_response = data.get('cf_token')
+        elif captcha_provider in ('recaptcha', 'recaptcha_v3'):
+            captcha_response = data.get('recaptcha_token')
         elif captcha_provider == 'cha':
             captcha_response = data.get('cha_answer')
         elif captcha_provider == 'altcha':
