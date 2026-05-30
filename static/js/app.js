@@ -331,13 +331,7 @@ class RainMailApp {
             } else if (this.captchaProvider === 'cha') {
                 requestBody.cha_answer = captchaResponse;
             } else if (this.captchaProvider === 'altcha') {
-                // Altcha 模式：移动端使用 CHA，桌面端使用 Altcha
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                if (isMobile) {
-                    requestBody.cha_answer = captchaResponse;
-                } else {
-                    requestBody.altcha_payload = captchaResponse;
-                }
+                requestBody.altcha_payload = captchaResponse;
             }
 
             const response = await fetchWithCSRF('/api/messages', {
@@ -376,20 +370,8 @@ class RainMailApp {
 
                 // 如果使用 Altcha，重新加载挑战
                 if (this.captchaProvider === 'altcha') {
-                    // 移动端重新加载 CHA 问题，桌面端重新加载 Altcha 挑战
-                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                    if (isMobile) {
-                        const chaAnswerInput = inputId === 'message-input' ?
-                            document.getElementById('sunny-cha-answer') :
-                            document.getElementById('rainy-cha-answer');
-                        if (chaAnswerInput) {
-                            chaAnswerInput.value = '';
-                        }
-                        await this.loadCHAPuzzle(inputId === 'message-input' ? 'sunny-cha-question' : 'rainy-cha-question');
-                    } else {
-                        await this.loadAltchaChallenge(inputId === 'message-input' ? 'sunny-altcha-widget' : 'rainy-altcha-widget',
-                                                         inputId === 'message-input' ? 'sunny-altcha-payload' : 'rainy-altcha-payload');
-                    }
+                    await this.loadAltchaChallenge(inputId === 'message-input' ? 'sunny-altcha-widget' : 'rainy-altcha-widget',
+                                                     inputId === 'message-input' ? 'sunny-altcha-payload' : 'rainy-altcha-payload');
                 }
             } else {
                 // 检查是否需要登录

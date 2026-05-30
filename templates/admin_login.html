@@ -129,17 +129,10 @@
             </div>
             {% elif captcha_provider == 'altcha' %}
             <div class="form-group">
-                <!-- Altcha容器 - 桌面端使用 -->
                 <div id="admin-altcha-container" class="altcha-container">
                     <label>人机验证</label>
                     <div id="admin-altcha-widget"></div>
                     <input type="hidden" id="altcha-payload" name="altcha_payload" value="">
-                </div>
-                <!-- CHA容器 - 移动端使用，默认隐藏 -->
-                <div id="admin-cha-container" class="cha-container" style="display: none;">
-                    <label for="cha_answer">人机验证</label>
-                    <div id="cha-question-mobile" class="cha-question">{{ cha_question }}</div>
-                    <input type="text" id="cha_answer" name="cha_answer" placeholder="请输入答案" required>
                 </div>
             </div>
             {% endif %}

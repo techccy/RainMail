@@ -28,11 +28,6 @@ function showWarning(message) {
     warningElement.style.display = 'block';
 }
 
-// 检测是否为移动设备
-function isMobileDevice() {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-}
-
 // 初始化登录页面
 function initLoginPage(config) {
     console.log('initLoginPage 被调用, config:', config);
@@ -67,13 +62,6 @@ function initLoginPage(config) {
                 }
             });
         } else if (config.captchaProvider === 'altcha') {
-            // 所有设备统一使用 Altcha
-            const altchaContainer = document.getElementById('login-altcha-container');
-            const chaContainer = document.getElementById('login-cha-container');
-            const chaInput = document.getElementById('cha-answer');
-            if (chaContainer) chaContainer.style.display = 'none';
-            if (chaInput) chaInput.required = false;
-            if (altchaContainer) altchaContainer.style.display = 'block';
             initAltcha('login-altcha-widget', 'altcha-payload');
         }
     } catch (captchaError) {
@@ -232,13 +220,6 @@ function initRegisterPage(config) {
                 }
             });
         } else if (config.captchaProvider === 'altcha') {
-            // 所有设备统一使用 Altcha
-            const altchaContainer = document.getElementById('register-altcha-container');
-            const chaContainer = document.getElementById('register-cha-container');
-            const chaInput = document.getElementById('cha-answer');
-            if (chaContainer) chaContainer.style.display = 'none';
-            if (chaInput) chaInput.required = false;
-            if (altchaContainer) altchaContainer.style.display = 'block';
             initAltcha('register-altcha-widget', 'altcha-payload');
         }
     } catch (captchaError) {
@@ -499,13 +480,6 @@ function initAdminLoginPage(config) {
                 }
             });
         } else if (config.captchaProvider === 'altcha') {
-            // 所有设备统一使用 Altcha
-            const altchaContainer = document.getElementById('admin-altcha-container');
-            const chaContainer = document.getElementById('admin-cha-container');
-            const chaInput = document.getElementById('cha_answer');
-            if (chaContainer) chaContainer.style.display = 'none';
-            if (chaInput) chaInput.required = false;
-            if (altchaContainer) altchaContainer.style.display = 'block';
             initAltcha('admin-altcha-widget', 'altcha-payload');
         }
     } catch (captchaError) {
