@@ -1,4 +1,3 @@
-from curses import flash
 import threading
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, make_response, flash
 from flask_sqlalchemy import SQLAlchemy
@@ -83,7 +82,11 @@ config = load_config()
 app.config.update(config)
 
 # 安全配置：优先从环境变量读取
-app.secret_key = os.environ.get('SECRET_KEY', app.config.get('SECRET_KEY', 'rainmail_secret_key_2024'))
+secret_key = os.environ.get('SECRET_KEY', app.config.get('SECRET_KEY'))
+if not secret_key:
+    secret_key = 'rainmail_secret_key_2024'  # 默认密钥
+app.secret_key = secret_key
+app.logger.info(f"Secret key 已设置")
 
 # Session 安全配置
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
