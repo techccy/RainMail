@@ -16,7 +16,7 @@
     <script src="{{ url_for('static', filename='js/csrf.js') }}"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
-<body class="auth-page">
+<body class="auth-page" data-captcha-provider="{{ captcha_provider }}" data-turnstile-site-key="{{ turnstile_site_key }}">
     <div id="weather-background"></div>
 
     <div class="container glass-effect fade-in auth-container">
@@ -28,12 +28,12 @@
         <form id="login-form" class="auth-form">
             <div class="form-group">
                 <label for="email">邮箱</label>
-                <input type="email" id="email" name="email" required placeholder="请输入邮箱">
+                <input type="email" id="email" name="email" required placeholder="请输入邮箱" autocomplete="email">
             </div>
 
             <div class="form-group">
                 <label for="password">密码</label>
-                <input type="password" id="password" name="password" required placeholder="请输入密码">
+                <input type="password" id="password" name="password" required placeholder="请输入密码" autocomplete="current-password">
             </div>
 
             <!-- CAPTCHA -->
@@ -77,37 +77,5 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
-    <script>
-        // 初始化登录页面
-        document.addEventListener('DOMContentLoaded', function() {
-            const captchaProvider = '{{ captcha_provider }}';
-
-            if (typeof initLoginPage === 'function') {
-                initLoginPage({
-                    captchaProvider: captchaProvider,
-                    turnstileSiteKey: '{{ turnstile_site_key }}'
-                });
-            }
-
-            // 检查URL参数
-            const urlParams = new URLSearchParams(window.location.search);
-            const verified = urlParams.get('verified');
-            const error = urlParams.get('error');
-
-            if (verified === '1') {
-                const successMsg = document.getElementById('success-message');
-                successMsg.textContent = '✓ 邮箱验证成功，请登录';
-                successMsg.style.display = 'block';
-            } else if (error) {
-                const errorMsg = document.getElementById('error-message');
-                const errorMessages = {
-                    'invalid_token': '验证链接无效或已过期',
-                    'verification_failed': '验证失败，请重试'
-                };
-                errorMsg.textContent = errorMessages[error] || '验证失败';
-                errorMsg.style.display = 'block';
-            }
-        });
-    </script>
 </body>
 </html>

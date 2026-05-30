@@ -538,3 +538,64 @@ function initAdminLoginPage(config) {
     // CAPTCHA 验证在服务器端进行
     console.log('管理员登录表单初始化完成');
 }
+
+// ========================================
+// 自动初始化 - 页面加载时自动执行
+// ========================================
+document.addEventListener('DOMContentLoaded', function() {
+    // 从 body data 属性获取配置
+    const body = document.body;
+    const captchaProvider = body.getAttribute('data-captcha-provider');
+    const turnstileSiteKey = body.getAttribute('data-turnstile-site-key');
+
+    if (!captchaProvider) {
+        console.warn('未找到 captcha-provider 配置');
+        return;
+    }
+
+    const config = {
+        captchaProvider: captchaProvider,
+        turnstileSiteKey: turnstileSiteKey || ''
+    };
+
+    console.log('自动初始化, config:', config);
+
+    // 根据页面元素判断是哪个页面
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const adminForm = document.getElementById('admin-login-form');
+
+    if (loginForm && typeof initLoginPage === 'function') {
+        console.log('检测到登录页面，执行 initLoginPage');
+        initLoginPage(config);
+
+        // 检查URL参数
+        const urlParams = new URLSearchParams(window.location.search);
+        const verified = urlParams.get('verified');
+        const error = urlParams.get('error');
+
+        if (verified === '1') {
+            const successMsg = document.getElementById('success-message');
+            if (successMsg) {
+                successMsg.textContent = '✓ 邮箱验证成功，请登录';
+                successMsg.style.display = 'block';
+            }
+        } else if (error) {
+            const errorMsg = document.getElementById('error-message');
+            if (errorMsg) {
+                const errorMessages = {
+                    'invalid_token': '验证链接无效或已过期',
+                    'verification_failed': '验证失败，请重试'
+                };
+                errorMsg.textContent = errorMessages[error] || '验证失败';
+                errorMsg.style.display = 'block';
+            }
+        }
+    } else if (registerForm && typeof initRegisterPage === 'function') {
+        console.log('检测到注册页面，执行 initRegisterPage');
+        initRegisterPage(config);
+    } else if (adminForm && typeof initAdminLoginPage === 'function') {
+        console.log('检测到管理员登录页面，执行 initAdminLoginPage');
+        initAdminLoginPage(config);
+    }
+});

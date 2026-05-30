@@ -9,7 +9,7 @@
     <script src="{{ url_for('static', filename='js/csrf.js') }}"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
-<body class="auth-page">
+<body class="auth-page" data-captcha-provider="{{ captcha_provider }}" data-turnstile-site-key="{{ turnstile_site_key }}">
     <div id="weather-background"></div>
 
     <div class="container glass-effect fade-in auth-container">
@@ -21,7 +21,7 @@
         <form id="register-form" class="auth-form">
             <div class="form-group">
                 <label for="email">邮箱</label>
-                <input type="email" id="email" name="email" required placeholder="请输入邮箱">
+                <input type="email" id="email" name="email" required placeholder="请输入邮箱" autocomplete="email">
             </div>
 
             <div class="form-group">
@@ -31,13 +31,13 @@
 
             <div class="form-group">
                 <label for="password">密码</label>
-                <input type="password" id="password" name="password" required placeholder="至少6位">
+                <input type="password" id="password" name="password" required placeholder="至少6位" autocomplete="new-password">
                 <div class="password-strength" id="password-strength"></div>
             </div>
 
             <div class="form-group">
                 <label for="confirm-password">确认密码</label>
-                <input type="password" id="confirm-password" name="confirm-password" required placeholder="再次输入密码">
+                <input type="password" id="confirm-password" name="confirm-password" required placeholder="再次输入密码" autocomplete="new-password">
             </div>
 
             <!-- CAPTCHA -->
@@ -81,18 +81,5 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
-    <script>
-        // 初始化注册页面
-        document.addEventListener('DOMContentLoaded', function() {
-            const captchaProvider = '{{ captcha_provider }}';
-
-            if (typeof initRegisterPage === 'function') {
-                initRegisterPage({
-                    captchaProvider: captchaProvider,
-                    turnstileSiteKey: '{{ turnstile_site_key }}'
-                });
-            }
-        });
-    </script>
 </body>
 </html>
