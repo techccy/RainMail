@@ -47,9 +47,6 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# 添加 CSRF token 到 Jinja2 全局变量
-app.jinja_env.globals['csrf_token'] = lambda: session.get('csrf_token', '')
-
 log = logging.getLogger('werkwerkzeug')
 log.setLevel(logging.ERROR)
 
@@ -95,6 +92,9 @@ app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'f
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+
+# 添加 CSRF token 到 Jinja2 全局变量 (必须在 secret_key 设置之后)
+app.jinja_env.globals['csrf_token'] = lambda: session.get('csrf_token', '')
 
 # ============================================================================
 # 安全响应头配置
