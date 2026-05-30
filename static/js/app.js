@@ -301,7 +301,7 @@ class RainMailApp {
                 }
             }
 
-            const response = await fetch('/api/messages', {
+            const response = await fetchWithCSRF('/api/messages', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

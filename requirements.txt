@@ -17,3 +17,7 @@ Werkzeug>=3.0.0
 cryptography>=3.4.8
 # 微信消息加解密需要
 pycryptodome>=1.21.0
+# 安全相关依赖
+python-dotenv>=1.0.0      # 环境变量管理
+Flask-Limiter>=3.5.0     # API 速率限制
+bleach>=6.1.0            # XSS 防护 - HTML 清理

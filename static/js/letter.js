@@ -78,7 +78,7 @@ async function checkUnlockStatus() {
 
 async function sendHug() {
     try {
-        const response = await fetch(`/api/messages/${messageId}/hug`, {
+        const response = await fetchWithCSRF(`/api/messages/${messageId}/hug`, {
             method: 'POST'
         });
         const data = await response.json();
@@ -126,7 +126,7 @@ async function sendReply() {
     }
 
     try {
-        const response = await fetch(`/api/letters/${deliveryId}/reply`, {
+        const response = await fetchWithCSRF(`/api/letters/${deliveryId}/reply`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

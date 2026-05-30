@@ -188,7 +188,7 @@ async function saveConfig() {
     const formData = collectFormData();
 
     try {
-        const response = await fetch('/admin/api/config', {
+        const response = await fetchWithCSRF('/admin/api/config', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -261,7 +261,7 @@ async function importConfig() {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('/admin/api/config/import', {
+        const response = await fetchWithCSRF('/admin/api/config/import', {
             method: 'POST',
             body: formData
         });
@@ -295,7 +295,7 @@ async function testEmail() {
     showLoading(true);
 
     try {
-        const response = await fetch('/admin/api/config/test-email', {
+        const response = await fetchWithCSRF('/admin/api/config/test-email', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

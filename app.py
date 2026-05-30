@@ -3,6 +3,8 @@ import threading
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, make_response, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message as EmailMessage
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import requests
 import yaml
 import time
@@ -12,6 +14,7 @@ import re
 import psutil
 import os
 import hashlib
+import hmac
 import csv
 import secrets
 import base64
@@ -19,6 +22,7 @@ import json
 import random
 import string
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad, pad
 import struct
@@ -43,7 +47,10 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-log = logging.getLogger('werkzeug')
+# 添加 CSRF token 到 Jinja2 全局变量
+app.jinja_env.globals['csrf_token'] = lambda: session.get('csrf_token', '')
+
+log = logging.getLogger('werkwerkzeug')
 log.setLevel(logging.ERROR)
 
 # --- 新增：加载配置文件 ---
@@ -79,14 +86,156 @@ def load_config():
 
 config = load_config()
 app.config.update(config)
-app.secret_key = 'rainmail_secret_key_2024'
-TURNSTILE_SECRET_KEY = app.config.get('TURNSTILE_SECRET_KEY')
-TURNSTILE_SITE_KEY = app.config.get('TURNSTILE_SITE_KEY')
-ALTCHA_HMAC_KEY = app.config.get('ALTCHA_HMAC_KEY', '')
-ALTCHA_DIFFICULTY = app.config.get('ALTCHA_DIFFICULTY', 5)  # 默认难度为5
-ASK_TIMES = app.config.get('TIMES', 900) # 请求频率 (900秒)
-LOCATION_ID = app.config.get('LOCATION_ID', 101280101)  # 广东广州的和风天气位置ID
-LOCATION_NAME = app.config.get('LOCATION_NAME', '广州') # 服务器所在位置名称
+
+# 安全配置：优先从环境变量读取
+app.secret_key = os.environ.get('SECRET_KEY', app.config.get('SECRET_KEY', 'rainmail_secret_key_2024'))
+
+# Session 安全配置
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+
+# ============================================================================
+# 安全响应头配置
+# ============================================================================
+
+CSP_POLICY = os.environ.get(
+    'CSP_POLICY',
+    "default-src 'self'; "
+    "script-src 'self' https://challenges.cloudflare.com; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: https:; "
+    "connect-src 'self'; "
+    "font-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none';"
+)
+
+@app.after_request
+def add_security_headers(response):
+    """添加安全响应头"""
+    response.headers['Content-Security-Policy'] = CSP_POLICY
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    return response
+
+# ============================================================================
+# 密码管理（支持渐进式迁移）
+# ============================================================================
+
+def hash_admin_password(password):
+    """哈希管理员密码"""
+    return generate_password_hash(password)
+
+def verify_admin_password(password, stored_hash_or_plaintext):
+    """验证管理员密码（支持哈希和明文两种格式）"""
+    try:
+        if check_password_hash(stored_hash_or_plaintext, password):
+            return True, False
+    except Exception:
+        pass
+
+    if secrets.compare_digest(stored_hash_or_plaintext, password):
+        return True, False
+
+    return False, False
+
+def migrate_config_password():
+    """检测并迁移 config.json 中的明文密码"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        admin_password = config.get('admin_password', '')
+
+        if admin_password.startswith('pbkdf2:'):
+            return False
+
+        new_hash = hash_admin_password(admin_password)
+        config['admin_password'] = new_hash
+
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+
+        app.logger.info("管理员密码已从明文迁移到哈希")
+        return True
+
+    except Exception as e:
+        app.logger.error(f"密码迁移失败: {e}")
+        return False
+
+# 应用启动时尝试迁移密码
+migrate_config_password()
+
+# ============================================================================
+# CSRF 保护
+# ============================================================================
+
+def generate_csrf_token():
+    """生成 CSRF token"""
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+    return session['csrf_token']
+
+def validate_csrf_token(token):
+    """验证 CSRF token"""
+    if not token:
+        return False
+    session_token = session.get('csrf_token')
+    if not session_token:
+        return False
+    return hmac.compare_digest(session_token, token)
+
+def csrf_protect(f):
+    """CSRF 保护装饰器"""
+    def wrapper(*args, **kwargs):
+        if request.method in ['GET', 'HEAD', 'OPTIONS']:
+            return f(*args, **kwargs)
+
+        token = request.headers.get('X-CSRF-Token')
+        if not token:
+            token = request.form.get('csrf_token')
+        if not token:
+            token = request.json.get('csrf_token') if request.is_json else None
+
+        if not validate_csrf_token(token):
+            return jsonify({'error': 'CSRF token 验证失败'}), 403
+
+        return f(*args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
+
+@app.route('/api/csrf_token')
+def get_csrf_token():
+    """获取 CSRF token（用于 AJAX 请求）"""
+    return jsonify({'csrf_token': generate_csrf_token()})
+
+# 敏感配置优先从环境变量读取
+TURNSTILE_SECRET_KEY = os.environ.get('TURNSTILE_SECRET_KEY', app.config.get('TURNSTILE_SECRET_KEY'))
+TURNSTILE_SITE_KEY = os.environ.get('TURNSTILE_SITE_KEY', app.config.get('TURNSTILE_SITE_KEY'))
+ALTCHA_HMAC_KEY = os.environ.get('ALTCHA_HMAC_KEY', app.config.get('ALTCHA_HMAC_KEY', ''))
+ALTCHA_DIFFICULTY = int(os.environ.get('ALTCHA_DIFFICULTY', app.config.get('ALTCHA_DIFFICULTY', 5)))
+ASK_TIMES = int(os.environ.get('TIMES', app.config.get('TIMES', 900)))
+LOCATION_ID = int(os.environ.get('LOCATION_ID', app.config.get('LOCATION_ID', 101280101)))
+LOCATION_NAME = os.environ.get('LOCATION_NAME', app.config.get('LOCATION_NAME', '广州'))
+
+# 管理员配置
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', app.config.get('admin_username', 'admin'))
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', app.config.get('admin_password', 'admin'))
+
+# AI 内容审核配置
+AI_MODERATION_API_KEY = os.environ.get('AI_MODERATION_API_KEY', app.config.get('AI_MODERATION', {}).get('API_KEY', ''))
+
+# TOTP 配置
+TOTP_DECRYPT_PASSWORD = os.environ.get('TOTP_DECRYPT_PASSWORD', app.config.get('totp_decrypt_password', ''))
 SENSITIVE_WORDS_SET = set()
 IPINFO_TOKEN = app.config.get('IPINFO_TOKEN') # ipinfo.io 访问令牌
 
@@ -124,6 +273,18 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', app.config.get('MA
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', app.config.get('MAIL_PASSWORD', ''))
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.config.get('MAIL_DEFAULT_SENDER', 'RainMail <noreply@rainmail.dev>'))
 mail = Mail(app)
+
+# 速率限制配置
+def get_user_identifier():
+    """获取用户唯一标识符，优先使用真实 IP"""
+    return request.headers.get('CF-Connecting-IP', request.remote_addr)
+
+limiter = Limiter(
+    app=app,
+    key_func=get_user_identifier,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 # --- 爆破检测和警告系统 ---
 BRUTE_FORCE_THRESHOLD = 3  # 失败3次后显示警告
@@ -1038,6 +1199,8 @@ def index():
     return render_template('index.html', **dashboard_data, turnstile_site_key=site_key, captcha_provider=captcha_provider, wechat_enabled=wechat_enabled)
 
 @app.route('/api/messages', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=['POST'])
+@csrf_protect
 def handle_messages():
     if request.method == 'POST':
         # 提交新消息
@@ -1501,6 +1664,7 @@ def get_altcha_challenge():
 
 # 管理员路由
 @app.route('/admin', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")  # 管理员登录速率限制
 def admin_login():
     """管理员登录"""
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
@@ -1539,15 +1703,17 @@ def admin_login():
             return render_template('admin_login.html', error='人机验证失败，请刷新网页', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
         # --- 结束新增 ---
 
-        # --- 修正：统一从 config 获取管理员凭据 ---
-        admin_username_from_config = app.config.get('admin_username')
-        admin_password_from_config = app.config.get('admin_password')
+        # --- 修正：统一从环境变量或config获取管理员凭据 ---
+        admin_username_from_config = ADMIN_USERNAME
+        admin_password_from_config = ADMIN_PASSWORD
 
-        # 验证用户名和密码（已移除TOTP验证）
-        if username == admin_username_from_config and password == admin_password_from_config:
-            session['admin_logged_in'] = True
-            reset_failed_login()  # 登录成功，重置失败计数
-            return redirect(url_for('admin_dashboard'))
+        # 验证用户名和密码（支持哈希和明文）
+        if username == admin_username_from_config:
+            is_valid, _ = verify_admin_password(password, admin_password_from_config)
+            if is_valid:
+                session['admin_logged_in'] = True
+                reset_failed_login()  # 登录成功，重置失败计数
+                return redirect(url_for('admin_dashboard'))
         else:
             # 提供更模糊的错误信息以增强安全性
             flash('登录凭据无效或双重认证失败')
@@ -1587,6 +1753,7 @@ def admin_dashboard():
                          **dashboard_data)
 
 @app.route('/admin/force_rain', methods=['POST'])
+@csrf_protect
 @admin_required
 def admin_force_rain():
     """强制降雨"""
@@ -1604,6 +1771,7 @@ def admin_force_rain():
     })
 
 @app.route('/admin/delete_message/<int:message_id>', methods=['POST'])
+@csrf_protect
 @admin_required
 def admin_delete_message(message_id):
     """删除消息"""
@@ -1614,6 +1782,7 @@ def admin_delete_message(message_id):
     return jsonify({'success': True, 'message': '消息已删除'})
 
 @app.route('/admin/change_password', methods=['POST'])
+@csrf_protect
 @admin_required
 def admin_change_password():
     """更改管理员密码"""
@@ -1673,6 +1842,7 @@ def admin_get_users():
     })
 
 @app.route('/admin/api/verify_user/<int:user_id>', methods=['POST'])
+@csrf_protect
 @admin_required
 def admin_verify_user(user_id):
     """手动验证用户"""
@@ -1708,6 +1878,7 @@ def admin_get_user(user_id):
     })
 
 @app.route('/admin/api/update_user/<int:user_id>', methods=['PUT'])
+@csrf_protect
 @admin_required
 def admin_update_user(user_id):
     """更新用户信息"""
@@ -1734,6 +1905,7 @@ def admin_update_user(user_id):
     return jsonify({'success': True, 'message': '用户信息已更新'})
 
 @app.route('/admin/api/reset_password/<int:user_id>', methods=['POST'])
+@csrf_protect
 @admin_required
 def admin_reset_password(user_id):
     """重置用户密码"""
@@ -1752,6 +1924,7 @@ def admin_reset_password(user_id):
     return jsonify({'success': True, 'message': f'用户 {user.email} 的密码已重置'})
 
 @app.route('/admin/api/delete_user/<int:user_id>', methods=['POST'])
+@csrf_protect
 @admin_required
 def admin_delete_user(user_id):
     """删除用户"""
@@ -1870,6 +2043,7 @@ def api_get_config():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/admin/api/config', methods=['PUT'])
+@csrf_protect
 @admin_required
 def api_update_config():
     """更新配置"""
@@ -2041,19 +2215,14 @@ def api_export_config():
 
 @app.route('/admin/api/config/import', methods=['POST'])
 @admin_required
+@csrf_protect
 def api_import_config():
-    """导入配置 JSON 文件（与导出格式一致）"""
+    """导入配置 JSON 文件（增强安全性）"""
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
     backup_path = config_path + '.backup'
+    MAX_FILE_SIZE = 1 * 1024 * 1024  # 1MB
 
     try:
-        # 备份当前配置
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                backup_content = f.read()
-            with open(backup_path, 'w', encoding='utf-8') as f:
-                f.write(backup_content)
-
         # 检查文件上传
         if 'file' not in request.files:
             return jsonify({'success': False, 'error': '未找到上传文件'}), 400
@@ -2062,12 +2231,54 @@ def api_import_config():
         if file.filename == '':
             return jsonify({'success': False, 'error': '未选择文件'}), 400
 
-        if not file.filename.endswith('.json'):
+        # 文件大小检查
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+
+        if file_size > MAX_FILE_SIZE:
+            return jsonify({'success': False, 'error': f'文件大小超过限制 ({MAX_FILE_SIZE // 1024}KB)'}), 400
+
+        if file_size == 0:
+            return jsonify({'success': False, 'error': '文件为空'}), 400
+
+        # 文件名安全检查
+        filename = secure_filename(file.filename)
+        if not filename.endswith('.json'):
             return jsonify({'success': False, 'error': '只支持 JSON 格式文件'}), 400
 
-        # 读取并解析 JSON
-        content = file.read().decode('utf-8')
-        imported_config = json.loads(content)
+        # MIME 类型验证
+        allowed_mimes = ['application/json', 'text/plain']
+        if file.mimetype not in allowed_mimes:
+            return jsonify({'success': False, 'error': f'不支持的文件类型: {file.mimetype}'}), 400
+
+        # 读取并验证内容
+        content = file.read()
+        if len(content) < 2:
+            return jsonify({'success': False, 'error': '文件内容无效'}), 400
+
+        # Magic bytes 验证
+        if not content[0:1].decode('utf-8', errors='ignore').strip()[0] in ['{', '[']:
+            return jsonify({'success': False, 'error': '文件不是有效的 JSON 格式'}), 400
+
+        # 备份当前配置
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                backup_content = f.read()
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                f.write(backup_content)
+
+        # 解析 JSON
+        try:
+            imported_config = json.loads(content.decode('utf-8'))
+        except json.JSONDecodeError as e:
+            return jsonify({'success': False, 'error': f'JSON 解析失败: {str(e)}'}), 400
+
+        # 验证配置结构
+        required_fields = ['admin_username', 'admin_password']
+        for field in required_fields:
+            if field not in imported_config:
+                return jsonify({'success': False, 'error': f'配置缺少必需字段: {field}'}), 400
 
         # 如果是旧格式（包含config字段），提取config
         if 'config' in imported_config:
@@ -2077,23 +2288,29 @@ def api_import_config():
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(imported_config, f, ensure_ascii=False, indent=2)
 
+        app.logger.info(f"配置已由 {request.remote_addr} 导入")
         return jsonify({
             'success': True,
-            'message': f'配置已导入，备份已保存至 {backup_path}。部分更改需要重启服务后生效'
+            'message': f'配置已导入，备份已保存至 {os.path.basename(backup_path)}。部分更改需要重启服务后生效'
         })
 
     except json.JSONDecodeError:
         return jsonify({'success': False, 'error': 'JSON 解析失败'}), 400
     except Exception as e:
+        app.logger.error(f"配置导入失败: {e}")
         # 恢复备份
         if os.path.exists(backup_path):
-            with open(backup_path, 'r', encoding='utf-8') as f:
-                backup_content = f.read()
-            with open(config_path, 'w', encoding='utf-8') as f:
-                f.write(backup_content)
+            try:
+                with open(backup_path, 'r', encoding='utf-8') as f:
+                    backup_content = f.read()
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    f.write(backup_content)
+            except:
+                pass
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/admin/api/config/test-email', methods=['POST'])
+@csrf_protect
 @admin_required
 def api_test_email():
     """测试邮件配置"""
@@ -2236,6 +2453,7 @@ def user_settings_page():
     })
 
 @app.route('/api/auth/register', methods=['POST'])
+@limiter.limit("3 per hour")
 def api_register():
     """用户注册 API"""
     try:
@@ -2361,6 +2579,7 @@ def verify_email_page():
         return redirect('/auth/login?error=verification_failed')
 
 @app.route('/api/auth/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def api_login():
     """用户登录 API"""
     try:
@@ -2418,6 +2637,7 @@ def api_login():
         return jsonify({'error': '登录失败'}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
+@csrf_protect
 def api_logout():
     """用户登出 API"""
     session.pop('user_id', None)
@@ -2425,6 +2645,7 @@ def api_logout():
     return jsonify({'success': True, 'message': '登出成功'})
 
 @app.route('/api/auth/resend-verification', methods=['POST'])
+@csrf_protect
 def api_resend_verification():
     """重发验证邮件 API"""
     try:
@@ -2467,6 +2688,7 @@ def api_user_profile():
     return jsonify({'user': user.to_dict()})
 
 @app.route('/api/user/profile', methods=['PUT'])
+@csrf_protect
 @login_required_user
 def api_update_profile():
     """更新用户信息"""
@@ -2555,6 +2777,7 @@ def api_user_notifications():
     })
 
 @app.route('/api/user/notifications/<int:notif_id>', methods=['PUT'])
+@csrf_protect
 @login_required_user
 def api_mark_notification_read(notif_id):
     """标记通知为已读"""
@@ -2600,6 +2823,7 @@ def api_check_unlock(delivery_id):
     })
 
 @app.route('/api/letters/<int:delivery_id>/read', methods=['POST'])
+@csrf_protect
 def api_mark_letter_read(delivery_id):
     """标记信件为已读"""
     delivery = LetterDelivery.query.get_or_404(delivery_id)
@@ -2617,6 +2841,7 @@ def api_mark_letter_read(delivery_id):
     return jsonify({'success': True})
 
 @app.route('/api/letters/<int:delivery_id>/reply', methods=['POST'])
+@csrf_protect
 def api_reply_letter(delivery_id):
     """回复信件"""
     try:
@@ -2707,6 +2932,7 @@ def api_reply_letter(delivery_id):
         return jsonify({'error': '回复失败'}), 500
 
 @app.route('/api/messages/<int:message_id>/hug', methods=['POST'])
+@csrf_protect
 def api_hug_message(message_id):
     """给信件发送拥抱"""
     try:
