@@ -472,3 +472,69 @@ async function logout() {
         console.error('登出失败:', error);
     }
 }
+
+// 初始化管理员登录页面
+function initAdminLoginPage(config) {
+    console.log('initAdminLoginPage 被调用, config:', config);
+
+    const form = document.getElementById('admin-login-form');
+    const errorMessage = document.getElementById('error-message');
+
+    if (!form) {
+        console.error('管理员登录表单元素未找到');
+        return;
+    }
+
+    console.log('管理员登录表单元素已找到，准备绑定事件');
+
+    // 初始化 CAPTCHA
+    try {
+        if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
+            // 显式渲染 Turnstile
+            turnstileWidgetId = turnstile.render('#admin-turnstile', {
+                sitekey: config.turnstileSiteKey,
+                callback: function(token) {
+                    document.getElementById('cf-turnstile-response').value = token;
+                }
+            });
+        } else if (config.captchaProvider === 'altcha') {
+            console.log('管理员页面使用 Altcha 验证，isMobileDevice:', isMobileDevice());
+            // 移动端使用 CHA 回退
+            if (isMobileDevice()) {
+                const altchaContainer = document.getElementById('admin-altcha-container');
+                const chaContainer = document.getElementById('admin-cha-container');
+                const chaInput = document.getElementById('cha_answer');
+                if (altchaContainer) altchaContainer.style.display = 'none';
+                if (chaContainer) chaContainer.style.display = 'block';
+                if (chaInput) chaInput.required = true;
+            } else {
+                // 桌面端初始化 Altcha
+                const altchaContainer = document.getElementById('admin-altcha-container');
+                const chaContainer = document.getElementById('admin-cha-container');
+                const chaInput = document.getElementById('cha_answer');
+                if (chaContainer) chaContainer.style.display = 'none';
+                if (chaInput) chaInput.required = false;
+                if (altchaContainer) altchaContainer.style.display = 'block';
+                initAltcha('admin-altcha-widget', 'altcha-payload');
+            }
+        }
+    } catch (captchaError) {
+        console.error('CAPTCHA 初始化失败:', captchaError);
+    }
+
+    // showError 函数定义
+    function showError(message) {
+        console.log('showError 被调用:', message);
+        if (errorMessage) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+    }
+
+    // 表单提交 - 使用传统表单提交，不需要拦截
+    // CAPTCHA 验证在服务器端进行
+    console.log('管理员登录表单初始化完成');
+}

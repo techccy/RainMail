@@ -12,6 +12,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理员登录 - 雨天信箱</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔐</text></svg>">
+    <script src="{{ url_for('static', filename='js/csrf.js') }}"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <style>
         .admin-login {
             max-width: 400px;
@@ -43,12 +46,36 @@
             text-align: center;
             margin-bottom: 20px;
         }
+        /* 人机验证容器样式 */
+        .cha-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .cha-question {
+            background-color: #f0f8ff;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .altcha-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .cf-turnstile {
+            display: flex;
+            justify-content: center;
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body class="sunny-mode">
     <div class="container glass-effect admin-login">
-        <h2>管理员登录</h2>
-        
+        <h2>🔐 管理员登录</h2>
+
         {% if error %}
             <div class="alert alert-error">{{ error }}</div>
         {% endif %}
@@ -62,141 +89,77 @@
             {% endfor %}
           {% endif %}
         {% endwith %}
-        
-        <form method="POST">
+
+        <form id="admin-login-form" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label for="username">用户名</label>
                 <input type="text" id="username" name="username" required>
             </div>
-            
+
             <div class="form-group">
                 <label for="password">密码</label>
                 <input type="password" id="password" name="password" required>
             </div>
+
             <!-- 蜜罐字段 - 对浏览器隐藏，脚本会填充 -->
             <div style="position: absolute; left: -10000px; top: -10000px;">
                 <label for="website_confirm">username</label>
                 <input type="text" id="website_confirm" name="website_confirm" tabindex="-1" autocomplete="off">
             </div>
+
+            <!-- CAPTCHA -->
             {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
-            <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div>
+            <div class="form-group">
+                <div id="admin-turnstile" class="cf-turnstile"></div>
+                <input type="hidden" name="cf-turnstile-response" id="cf-turnstile-response" value="">
+            </div>
             {% elif captcha_provider == 'cha' %}
-            <div class="cha-container form-group">
+            <div class="form-group cha-container">
                 <label for="cha_answer">人机验证</label>
-                <div id="cha-question" style="background-color: #f0f8ff; padding: 10px; border-radius: 5px; margin-bottom: 10px; font-weight: bold;">{{ cha_question }}</div>
+                <div id="cha-question" class="cha-question">{{ cha_question }}</div>
                 <input type="text" id="cha_answer" name="cha_answer" placeholder="请输入答案" required>
             </div>
             {% elif captcha_provider == 'altcha' %}
-            <div class="altcha-container form-group">
-                <label>人机验证</label>
-                <div id="altcha-widget"></div>
-                <input type="hidden" id="altcha-payload" name="altcha_payload" value="">
+            <div class="form-group">
+                <!-- Altcha容器 - 桌面端使用 -->
+                <div id="admin-altcha-container" class="altcha-container">
+                    <label>人机验证</label>
+                    <div id="admin-altcha-widget"></div>
+                    <input type="hidden" id="altcha-payload" name="altcha_payload" value="">
+                </div>
+                <!-- CHA容器 - 移动端使用，默认隐藏 -->
+                <div id="admin-cha-container" class="cha-container" style="display: none;">
+                    <label for="cha_answer">人机验证</label>
+                    <div id="cha-question-mobile" class="cha-question">{{ cha_question }}</div>
+                    <input type="text" id="cha_answer" name="cha_answer" placeholder="请输入答案" required>
+                </div>
             </div>
             {% endif %}
+
+            <div class="error-message" id="error-message" style="display: none;"></div>
+
             <button type="submit" class="primary-btn" style="width: 100%">登录</button>
         </form>
+
+        <div style="text-align: center; margin-top: 20px;">
+            <a href="/" style="color: #666;">返回首页</a>
+        </div>
     </div>
 
-    {% if captcha_provider == 'cloudflare' %}
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-    {% endif %}
-
-    {% if captcha_provider == 'altcha' %}
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
     <script>
-    document.addEventListener('DOMContentLoaded', async function() {
-        await loadAltchaWidget('altcha-widget', 'altcha-payload');
-    });
+        // 初始化管理员登录页面
+        document.addEventListener('DOMContentLoaded', function() {
+            const captchaProvider = '{{ captcha_provider }}';
 
-    async function loadAltchaWidget(widgetId, payloadId) {
-        try {
-            const response = await fetch('/api/altcha/challenge');
-            const data = await response.json();
-
-            const widget = document.getElementById(widgetId);
-            widget.innerHTML = `
-                <div class="altcha-info">
-                    <p>🔐 人机验证</p>
-                    <p style="font-size: 12px; color: #666;">正在计算工作量证明...</p>
-                    <div class="altcha-progress" style="width: 100%; background: #f0f0f0; border-radius: 5px; margin: 10px 0;">
-                        <div id="${widgetId}-progress" style="width: 0%; height: 20px; background: #4CAF50; border-radius: 5px; transition: width 0.1s;"></div>
-                    </div>
-                    <p id="${widgetId}-status" style="font-size: 12px; color: #666;">初始化中...</p>
-                </div>
-            `;
-
-            // 执行工作量证明，使用服务器返回的目标前缀
-            await solveAltchaChallenge(data.challenge, data.salt, data.signature, data.target_prefix, data.max_number, widgetId, payloadId);
-
-        } catch (error) {
-            console.error('Failed to load Altcha challenge:', error);
-            document.getElementById(widgetId).innerHTML = '<p style="color: red;">加载失败，请刷新页面</p>';
-        }
-    }
-
-    async function solveAltchaChallenge(challenge, salt, signature, targetPrefix, maxNumber, widgetId, payloadId) {
-        const startTime = Date.now();
-        const progressEl = document.getElementById(`${widgetId}-progress`);
-        const statusEl = document.getElementById(`${widgetId}-status`);
-        const payloadEl = document.getElementById(payloadId);
-
-        const chunkSize = 10000;
-
-        for (let i = 0; i < maxNumber; i++) {
-            const testString = challenge + i;
-            const hash = await simpleSha256(testString);
-
-            // 更新进度
-            if (i % chunkSize === 0) {
-                const progress = Math.min((i / maxNumber) * 100, 100);
-                progressEl.style.width = progress + '%';
-                statusEl.textContent = `计算中... ${Math.floor(progress)}%`;
-                await new Promise(resolve => setTimeout(resolve, 0)); // 让 UI 有机会更新
-            }
-
-            // 使用服务器返回的 target_prefix 进行验证
-            // 客户端无法伪造这个值，因为它是通过 HMAC 签名的
-            if (hash.startsWith(targetPrefix)) {
-                // 找到解决方案
-                const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-                progressEl.style.width = '100%';
-                progressEl.style.background = '#4CAF50';
-
-                const widget = document.getElementById(widgetId);
-                widget.innerHTML = `
-                    <div class="altcha-success" style="text-align: center; padding: 10px; background: #e8f5e9; border-radius: 5px;">
-                        <p style="color: #4CAF50; margin: 0;">✓ 验证完成 (${elapsed}s)</p>
-                    </div>
-                `;
-
-                // 保存 payload，包含哈希结果供服务器验证
-                payloadEl.value = JSON.stringify({
-                    challenge: challenge,
-                    number: i,
-                    salt: salt,
-                    signature: signature,
-                    hash_result: hash
+            if (typeof initAdminLoginPage === 'function') {
+                initAdminLoginPage({
+                    captchaProvider: captchaProvider,
+                    turnstileSiteKey: '{{ turnstile_site_key }}'
                 });
-
-                return;
             }
-        }
-
-        // 未找到解决方案
-        statusEl.textContent = '验证失败，请刷新页面重试';
-        progressEl.style.background = '#f44336';
-    }
-
-    // 简化的 SHA-256 实现（使用 Web Crypto API）
-    async function simpleSha256(message) {
-        const msgBuffer = new TextEncoder().encode(message);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        return hashHex;
-    }
+        });
     </script>
-    {% endif %}
-
 </body>
 </html>

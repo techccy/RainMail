@@ -134,21 +134,53 @@ def hash_admin_password(password):
     """哈希管理员密码"""
     return generate_password_hash(password)
 
-def verify_admin_password(password, stored_hash_or_plaintext):
-    """验证管理员密码（支持哈希和明文两种格式）"""
-    try:
-        if check_password_hash(stored_hash_or_plaintext, password):
-            return True, False
-    except Exception:
-        pass
+def verify_admin_password(password, stored_hash):
+    """
+    验证管理员密码（仅支持哈希格式）
 
-    if secrets.compare_digest(stored_hash_or_plaintext, password):
-        return True, False
+    参数:
+        password: 用户输入的密码
+        stored_hash: 存储的哈希密码
+
+    返回:
+        (is_valid, needs_migration)
+        is_valid: 密码是否正确
+        needs_migration: 是否需要迁移（总是 False，因为只接受哈希）
+    """
+    if not stored_hash or not isinstance(stored_hash, str):
+        app.logger.warning("管理员密码格式无效：空值或非字符串")
+        return False, False
+
+    # Werkzeug 的哈希格式通常以这些前缀开头
+    hash_prefixes = ('pbkdf2:', 'scrypt:', 'sha256$')
+
+    if not any(stored_hash.startswith(prefix) for prefix in hash_prefixes):
+        # 不是哈希格式，记录安全警告
+        app.logger.warning(
+            f"检测到非哈希格式的管理员密码，前缀: '{stored_hash[:10]}'。"
+            f"出于安全考虑，系统仅接受哈希密码。"
+        )
+        return False, False
+
+    # 尝试验证哈希
+    try:
+        if check_password_hash(stored_hash, password):
+            return True, False
+    except Exception as e:
+        app.logger.error(f"密码哈希验证失败: {e}")
 
     return False, False
 
 def migrate_config_password():
-    """检测并迁移 config.json 中的明文密码"""
+    """
+    检测并迁移 config.json 中的明文密码到哈希格式
+
+    返回:
+        (success, was_migrated, message)
+        success: 操作是否成功
+        was_migrated: 是否进行了迁移
+        message: 状态消息
+    """
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
 
     try:
@@ -157,24 +189,72 @@ def migrate_config_password():
 
         admin_password = config.get('admin_password', '')
 
-        if admin_password.startswith('pbkdf2:'):
-            return False
+        if not admin_password:
+            return False, False, "管理员密码为空"
 
+        # 检查是否已经是哈希格式
+        hash_prefixes = ('pbkdf2:', 'scrypt:', 'sha256$')
+        if any(admin_password.startswith(prefix) for prefix in hash_prefixes):
+            return True, False, "密码已是哈希格式，无需迁移"
+
+        # 执行迁移
         new_hash = hash_admin_password(admin_password)
         config['admin_password'] = new_hash
 
+        # 写回文件
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
 
-        app.logger.info("管理员密码已从明文迁移到哈希")
-        return True
+        app.logger.info("管理员密码已从明文迁移到哈希格式")
+        return True, True, "密码迁移成功"
 
     except Exception as e:
         app.logger.error(f"密码迁移失败: {e}")
-        return False
+        return False, False, f"迁移失败: {str(e)}"
 
-# 应用启动时尝试迁移密码
-migrate_config_password()
+def verify_password_format_on_startup():
+    """
+    应用启动时验证管理员密码是否为哈希格式
+    如果不是，尝试迁移并记录结果
+    """
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        admin_password = config.get('admin_password', '')
+        hash_prefixes = ('pbkdf2:', 'scrypt:', 'sha256$')
+
+        if not any(admin_password.startswith(prefix) for prefix in hash_prefixes):
+            app.logger.warning(
+                "===========================================\n"
+                "安全警告：管理员密码不是哈希格式！\n"
+                "===========================================\n"
+                "系统正在尝试自动迁移...\n"
+            )
+
+            success, was_migrated, message = migrate_config_password()
+
+            if was_migrated:
+                app.logger.info(f"密码迁移完成：{message}")
+            else:
+                app.logger.error(
+                    "===========================================\n"
+                    "严重错误：密码迁移失败！\n"
+                    "===========================================\n"
+                    f"原因：{message}\n"
+                    "管理员登录可能无法正常工作。\n"
+                    "请手动将 config.json 中的 admin_password 替换为哈希值。"
+                )
+        else:
+            app.logger.info("管理员密码格式验证通过（哈希格式）")
+
+    except Exception as e:
+        app.logger.error(f"启动时密码验证失败: {e}")
+
+# 应用启动时验证并迁移密码格式
+verify_password_format_on_startup()
 
 # ============================================================================
 # CSRF 保护
@@ -1675,7 +1755,7 @@ def admin_login():
         if check_honeypot(request.form):
             # 蜜罐被触发，假装登录成功但实际不登录
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
-            cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
+            cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
             return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
         # --- 新增：管理员登录人机验证 ---
@@ -1684,7 +1764,11 @@ def admin_login():
         elif captcha_provider == 'cha':
             captcha_response = request.form.get('cha_answer')
         elif captcha_provider == 'altcha':
-            captcha_response = request.form.get('altcha_payload')
+            # Altcha模式：支持移动端使用 CHA 回退
+            if request.form.get('cha_answer'):
+                captcha_response = request.form.get('cha_answer')
+            else:
+                captcha_response = request.form.get('altcha_payload')
         else:
             captcha_response = None
 
@@ -1695,12 +1779,12 @@ def admin_login():
         if not captcha_response:
             # --- 修改：不再返回 JSON，而是渲染模板 ---
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
-            cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
+            cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
             return render_template('admin_login.html', error='请完成人机验证', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
         if not validate_captcha(captcha_response, user_ip, session):
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
-            cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
+            cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
             return render_template('admin_login.html', error='人机验证失败，请刷新网页', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
         # --- 结束新增 ---
 
@@ -1719,7 +1803,7 @@ def admin_login():
             # 提供更模糊的错误信息以增强安全性
             flash('登录凭据无效或双重认证失败')
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
-            cha_question = session.get('cha_question') if captcha_provider == 'cha' else None
+            cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
 
             # 检测爆破行为
             show_warning = track_failed_login()
@@ -1728,9 +1812,9 @@ def admin_login():
             return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question, warning=warning_text)
 
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
-    
-    # 为 CHA 验证生成新问题
-    if captcha_provider == 'cha':
+
+    # 为 CHA 验证生成新问题 (CHA 或 Altcha 移动端回退都需要)
+    if captcha_provider in ('cha', 'altcha'):
         question, answer = generate_cha_question()
         session['cha_question'] = question
         session['cha_answer'] = answer
@@ -1738,7 +1822,7 @@ def admin_login():
         cha_question = question
     else:
         cha_question = None
-    
+
     return render_template('admin_login.html', turnstile_site_key=site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
 @app.route('/admin/dashboard')
@@ -2116,7 +2200,9 @@ def api_update_config():
             if 'admin_password' in admin:
                 password = admin['admin_password']
                 if password and not str(password).startswith('****'):
-                    config['admin_password'] = password
+                    # 自动哈希新密码
+                    config['admin_password'] = hash_admin_password(password)
+                    app.logger.info("管理员密码已更新（已自动哈希）")
             if 'force_rain_duration' in admin:
                 config['force_rain_duration'] = int(admin['force_rain_duration'])
 
