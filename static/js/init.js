@@ -84,18 +84,9 @@ document.addEventListener('DOMContentLoaded', function() {
         loadCHAPuzzle('sunny-cha-question');
         loadCHAPuzzle('rainy-cha-question');
     } else if (captchaProvider === 'altcha') {
-        // 检测移动设备，使用 CHA 替代 Altcha
-        if (isMobileDevice()) {
-            // 移动端：隐藏 Altcha，显示并加载 CHA
-            document.querySelectorAll('[id$="-altcha-container"]').forEach(el => el.style.display = 'none');
-            document.querySelectorAll('[id$="-cha-container"]').forEach(el => el.style.display = 'block');
-            loadCHAPuzzle('sunny-cha-question');
-            loadCHAPuzzle('rainy-cha-question');
-        } else {
-            // 桌面端：正常加载 Altcha
-            loadAltchaWidget('sunny-altcha-widget', 'sunny-altcha-payload');
-            loadAltchaWidget('rainy-altcha-widget', 'rainy-altcha-payload');
-        }
+        // 所有设备统一使用 Altcha
+        loadAltchaWidget('sunny-altcha-widget', 'sunny-altcha-payload');
+        loadAltchaWidget('rainy-altcha-widget', 'rainy-altcha-payload');
     }
 
     async function loadCHAPuzzle(questionElementId) {

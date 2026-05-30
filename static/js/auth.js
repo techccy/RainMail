@@ -57,26 +57,14 @@ function initLoginPage(config) {
                 }
             });
         } else if (config.captchaProvider === 'altcha') {
-            console.log('使用 Altcha 验证，isMobileDevice:', isMobileDevice());
-            // 移动端使用CHA，桌面端使用Altcha
-            if (isMobileDevice()) {
-                // 隐藏Altcha容器，显示CHA容器
-                const altchaContainer = document.getElementById('login-altcha-container');
-                const chaContainer = document.getElementById('login-cha-container');
-                const chaInput = document.getElementById('cha-answer');
-                if (altchaContainer) altchaContainer.style.display = 'none';
-                if (chaContainer) chaContainer.style.display = 'block';
-                if (chaInput) chaInput.required = true;
-            } else {
-                // 桌面端初始化Altcha，隐藏CHA并移除required
-                const altchaContainer = document.getElementById('login-altcha-container');
-                const chaContainer = document.getElementById('login-cha-container');
-                const chaInput = document.getElementById('cha-answer');
-                if (chaContainer) chaContainer.style.display = 'none';
-                if (chaInput) chaInput.required = false;
-                if (altchaContainer) altchaContainer.style.display = 'block';
-                initAltcha('login-altcha-widget', 'altcha-payload');
-            }
+            // 所有设备统一使用 Altcha
+            const altchaContainer = document.getElementById('login-altcha-container');
+            const chaContainer = document.getElementById('login-cha-container');
+            const chaInput = document.getElementById('cha-answer');
+            if (chaContainer) chaContainer.style.display = 'none';
+            if (chaInput) chaInput.required = false;
+            if (altchaContainer) altchaContainer.style.display = 'block';
+            initAltcha('login-altcha-widget', 'altcha-payload');
         }
     } catch (captchaError) {
         console.error('CAPTCHA 初始化失败:', captchaError);
@@ -111,14 +99,9 @@ function initLoginPage(config) {
         } else if (config.captchaProvider === 'cha') {
             captchaResponse = document.getElementById('cha-answer').value;
         } else if (config.captchaProvider === 'altcha') {
-            // Altcha模式：移动端使用CHA，桌面端使用Altcha
-            if (isMobileDevice()) {
-                captchaResponse = document.getElementById('cha-answer').value;
-            } else {
-                captchaResponse = document.getElementById('altcha-payload').value;
-            }
+            captchaResponse = document.getElementById('altcha-payload').value;
         } else {
-            // 其他情况（包括 config.captchaProvider 为空）
+            // 其他情况
             captchaResponse = document.getElementById('cha-answer')?.value || '';
         }
 
@@ -147,7 +130,6 @@ function initLoginPage(config) {
                     password: password,
                     ...(config.captchaProvider === 'cloudflare' ? { cf_token: captchaResponse } :
                         config.captchaProvider === 'cha' ? { cha_answer: captchaResponse } :
-                        isMobileDevice() ? { cha_answer: captchaResponse } :
                         { altcha_payload: captchaResponse })
                 })
             });
@@ -227,25 +209,14 @@ function initRegisterPage(config) {
                 }
             });
         } else if (config.captchaProvider === 'altcha') {
-            console.log('使用 Altcha 验证，isMobileDevice:', isMobileDevice());
-            // 移动端使用CHA，桌面端使用Altcha
-            if (isMobileDevice()) {
-                const altchaContainer = document.getElementById('register-altcha-container');
-                const chaContainer = document.getElementById('register-cha-container');
-                const chaInput = document.getElementById('cha-answer');
-                if (altchaContainer) altchaContainer.style.display = 'none';
-                if (chaContainer) chaContainer.style.display = 'block';
-                if (chaInput) chaInput.required = true;
-            } else {
-                // 桌面端初始化Altcha，隐藏CHA并移除required
-                const altchaContainer = document.getElementById('register-altcha-container');
-                const chaContainer = document.getElementById('register-cha-container');
-                const chaInput = document.getElementById('cha-answer');
-                if (chaContainer) chaContainer.style.display = 'none';
-                if (chaInput) chaInput.required = false;
-                if (altchaContainer) altchaContainer.style.display = 'block';
-                initAltcha('register-altcha-widget', 'altcha-payload');
-            }
+            // 所有设备统一使用 Altcha
+            const altchaContainer = document.getElementById('register-altcha-container');
+            const chaContainer = document.getElementById('register-cha-container');
+            const chaInput = document.getElementById('cha-answer');
+            if (chaContainer) chaContainer.style.display = 'none';
+            if (chaInput) chaInput.required = false;
+            if (altchaContainer) altchaContainer.style.display = 'block';
+            initAltcha('register-altcha-widget', 'altcha-payload');
         }
     } catch (captchaError) {
         console.error('CAPTCHA 初始化失败:', captchaError);
@@ -337,7 +308,6 @@ function initRegisterPage(config) {
                     username: username,
                     ...(config.captchaProvider === 'cloudflare' ? { cf_token: captchaResponse } :
                         config.captchaProvider === 'cha' ? { cha_answer: captchaResponse } :
-                        isMobileDevice() ? { cha_answer: captchaResponse } :
                         { altcha_payload: captchaResponse })
                 })
             });
@@ -498,25 +468,14 @@ function initAdminLoginPage(config) {
                 }
             });
         } else if (config.captchaProvider === 'altcha') {
-            console.log('管理员页面使用 Altcha 验证，isMobileDevice:', isMobileDevice());
-            // 移动端使用 CHA 回退
-            if (isMobileDevice()) {
-                const altchaContainer = document.getElementById('admin-altcha-container');
-                const chaContainer = document.getElementById('admin-cha-container');
-                const chaInput = document.getElementById('cha_answer');
-                if (altchaContainer) altchaContainer.style.display = 'none';
-                if (chaContainer) chaContainer.style.display = 'block';
-                if (chaInput) chaInput.required = true;
-            } else {
-                // 桌面端初始化 Altcha
-                const altchaContainer = document.getElementById('admin-altcha-container');
-                const chaContainer = document.getElementById('admin-cha-container');
-                const chaInput = document.getElementById('cha_answer');
-                if (chaContainer) chaContainer.style.display = 'none';
-                if (chaInput) chaInput.required = false;
-                if (altchaContainer) altchaContainer.style.display = 'block';
-                initAltcha('admin-altcha-widget', 'altcha-payload');
-            }
+            // 所有设备统一使用 Altcha
+            const altchaContainer = document.getElementById('admin-altcha-container');
+            const chaContainer = document.getElementById('admin-cha-container');
+            const chaInput = document.getElementById('cha_answer');
+            if (chaContainer) chaContainer.style.display = 'none';
+            if (chaInput) chaInput.required = false;
+            if (altchaContainer) altchaContainer.style.display = 'block';
+            initAltcha('admin-altcha-widget', 'altcha-payload');
         }
     } catch (captchaError) {
         console.error('CAPTCHA 初始化失败:', captchaError);

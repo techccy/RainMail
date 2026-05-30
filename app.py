@@ -991,14 +991,7 @@ def validate_captcha(captcha_response, user_ip=None, session=None):
     elif captcha_provider == 'cha':
         return validate_cha(captcha_response, session)
     elif captcha_provider == 'altcha':
-        # 检测响应类型：JSON 格式为 Altcha PoW，纯数字为 CHA
-        try:
-            json.loads(captcha_response)
-            # JSON 解析成功，是 Altcha PoW
-            return validate_altcha(captcha_response)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            # JSON 解析失败，可能是 CHA 答案（移动端回退）
-            return validate_cha(captcha_response, session)
+        return validate_altcha(captcha_response)
     else:
         app.logger.error(f"未知的验证提供商: {captcha_provider}")
         return False
@@ -1683,12 +1676,8 @@ def get_cha_question():
     """获取 CHA 验证问题"""
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
 
-    # 检测是否为移动设备
-    user_agent = request.headers.get('User-Agent', '')
-    is_mobile = bool(re.search(r'Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini', user_agent, re.IGNORECASE))
-
-    # 允许移动设备在 Altcha 模式下使用 CHA
-    if captcha_provider != 'cha' and not (captcha_provider == 'altcha' and is_mobile):
+    # 只在 CHA 模式下允许
+    if captcha_provider != 'cha':
         return jsonify({'error': 'CHA 验证未启用'}), 400
 
     question, answer = generate_cha_question()
