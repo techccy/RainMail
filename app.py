@@ -40,12 +40,8 @@ weather_request_lock = threading.Lock()
 # 临时存储正在进行的天气请求的结果
 pending_weather_result = None
 
-app = Flask(__name__)
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-app = Flask(__name__)
 
 log = logging.getLogger('werkwerkzeug')
 log.setLevel(logging.ERROR)
