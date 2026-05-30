@@ -104,10 +104,10 @@ app.jinja_env.globals['csrf_token'] = lambda: session.get('csrf_token', '')
 CSP_POLICY = os.environ.get(
     'CSP_POLICY',
     "default-src 'self'; "
-    "script-src 'self' https://challenges.cloudflare.com; "
+    "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: https:; "
-    "connect-src 'self'; "
+    "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; "
     "font-src 'self'; "
     "object-src 'none'; "
     "base-uri 'self'; "
