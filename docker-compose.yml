@@ -21,6 +21,7 @@ services:
     volumes:
       - rainmail_data:/data
       - rainmail_instance:/app/instance
+      - ./config.json:/app/config.json
 
     # tmpfs用于运行时写入
     tmpfs:
