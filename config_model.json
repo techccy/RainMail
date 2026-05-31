@@ -46,7 +46,6 @@
   "WECHAT_TEMPLATE_ID": "",
   "PRIVATE_DELIVERY_REQUIRE_LOGIN": false,
   "VERIFY_DURATION_MINUTES": 15,
-  "SECRET_KEY": "change-me-to-random-secret-key",
   "SESSION_COOKIE_SECURE": false,
   "CSP_POLICY": "default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
 }
