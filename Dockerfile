@@ -9,11 +9,13 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # 安装系统依赖
 RUN apt-get update && apt-get install -y \
     sqlite3 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制项目文件
 COPY requirements.txt .
-COPY config.yaml .
+COPY config.json .
+COPY config_model.json .
 COPY app.py .
 COPY run.py .
 COPY templates/ ./templates/
@@ -22,8 +24,15 @@ COPY static/ ./static/
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 创建数据库目录
-RUN mkdir -p /data && chmod 777 /data
+# 创建非root用户
+RUN useradd -m -u 1000 rainmail && \
+    chown -R rainmail:rainmail /app
+
+# 切换到非root用户
+USER rainmail
+
+# 创建数据目录（通过tmpfs挂载）
+RUN mkdir -p /data
 
 # 暴露端口
 EXPOSE 5024

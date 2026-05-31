@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  rainmail:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rainmail:latest
+    container_name: rainmail
+
+    # 端口映射：仅开放5024
+    ports:
+      - "5024:5024"
+
+    # 使用默认bridge网络，不使用host网络
+    # 这样容器无法访问宿主机网络
+
+    # 环境变量
+    environment:
+      - TZ=Asia/Shanghai
+
+    # 数据卷挂载：SQLite数据库持久化
+    volumes:
+      - rainmail_data:/data
+      - rainmail_instance:/app/instance
+
+    # tmpfs用于运行时写入
+    tmpfs:
+      - /tmp
+
+    # 重启策略
+    restart: unless-stopped
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5024/api/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+    # 资源限制（防止资源耗尽攻击）
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+# 定义数据卷
+volumes:
+  rainmail_data:
+    driver: local
+  rainmail_instance:
+    driver: local
