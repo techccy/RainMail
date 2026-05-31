@@ -81,6 +81,30 @@ function initLoginPage(config) {
             });
         } else if (config.captchaProvider === 'altcha') {
             initAltcha('login-altcha-widget', 'altcha-payload');
+        } else if (config.captchaProvider === 'cha') {
+            // CHA 验证码 - 支持刷新
+            const chaQuestionEl = document.getElementById('cha-question');
+            if (chaQuestionEl) {
+                const refreshBtn = document.createElement('button');
+                refreshBtn.type = 'button';
+                refreshBtn.className = 'refresh-captcha-btn';
+                refreshBtn.textContent = '🔄 刷新验证';
+                refreshBtn.onclick = async () => {
+                    try {
+                        const response = await fetch('/api/cha/question');
+                        const data = await response.json();
+                        if (response.ok && data.question) {
+                            chaQuestionEl.textContent = data.question;
+                        } else {
+                            chaQuestionEl.textContent = '加载失败，请重试';
+                        }
+                    } catch (error) {
+                        console.error('刷新 CHA 失败:', error);
+                        chaQuestionEl.textContent = '加载失败，请重试';
+                    }
+                };
+                chaQuestionEl.parentNode.appendChild(refreshBtn);
+            }
         }
     } catch (captchaError) {
         console.error('CAPTCHA 初始化失败:', captchaError);
@@ -257,6 +281,30 @@ function initRegisterPage(config) {
             });
         } else if (config.captchaProvider === 'altcha') {
             initAltcha('register-altcha-widget', 'altcha-payload');
+        } else if (config.captchaProvider === 'cha') {
+            // CHA 验证码 - 支持刷新
+            const chaQuestionEl = document.getElementById('cha-question');
+            if (chaQuestionEl) {
+                const refreshBtn = document.createElement('button');
+                refreshBtn.type = 'button';
+                refreshBtn.className = 'refresh-captcha-btn';
+                refreshBtn.textContent = '🔄 刷新验证';
+                refreshBtn.onclick = async () => {
+                    try {
+                        const response = await fetch('/api/cha/question');
+                        const data = await response.json();
+                        if (response.ok && data.question) {
+                            chaQuestionEl.textContent = data.question;
+                        } else {
+                            chaQuestionEl.textContent = '加载失败，请重试';
+                        }
+                    } catch (error) {
+                        console.error('刷新 CHA 失败:', error);
+                        chaQuestionEl.textContent = '加载失败，请重试';
+                    }
+                };
+                chaQuestionEl.parentNode.appendChild(refreshBtn);
+            }
         }
     } catch (captchaError) {
         console.error('CAPTCHA 初始化失败:', captchaError);

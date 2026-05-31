@@ -1701,20 +1701,24 @@ def api_wechat_status():
 @app.route('/api/cha/question')
 def get_cha_question():
     """获取 CHA 验证问题"""
-    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+    try:
+        captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
 
-    # 只在 CHA 模式下允许
-    if captcha_provider != 'cha':
-        return jsonify({'error': 'CHA 验证未启用'}), 400
+        # 只在 CHA 模式下允许
+        if captcha_provider != 'cha':
+            return jsonify({'error': 'CHA 验证未启用'}), 400
 
-    question, answer = generate_cha_question()
-    session['cha_answer'] = answer
-    session['cha_timestamp'] = time.time()
+        question, answer = generate_cha_question()
+        session['cha_answer'] = answer
+        session['cha_timestamp'] = time.time()
 
-    return jsonify({
-        'question': question,
-        'timestamp': session['cha_timestamp']
-    })
+        return jsonify({
+            'question': question,
+            'timestamp': session['cha_timestamp']
+        })
+    except Exception as e:
+        app.logger.error(f"生成 CHA 问题失败: {str(e)}")
+        return jsonify({'error': '生成验证问题失败'}), 500
 
 @app.route('/api/altcha/challenge')
 def get_altcha_challenge():

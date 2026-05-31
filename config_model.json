@@ -12,6 +12,7 @@
   "TURNSTILE_SECRET_KEY": "0x-your-secret-key",
   "TURNSTILE_SITE_KEY": "0x-your-site-key",
   "CAPTCHA_PROVIDER": "cloudflare",
+  "SECRET_KEY": "rainmail_secret_key_2024",
   "RECAPTCHA_V3_SITE_KEY": "",
   "RECAPTCHA_V3_SECRET_KEY": "",
   "RECAPTCHA_V3_THRESHOLD": 0.5,

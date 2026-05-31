@@ -159,6 +159,11 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const response = await fetch('/api/cha/question');
             const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || '请求失败');
+            }
+
             document.getElementById(questionElementId).textContent = data.question;
         } catch (error) {
             console.error('Failed to load CHA puzzle:', error);
