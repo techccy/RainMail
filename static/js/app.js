@@ -24,7 +24,7 @@ class RainMailApp {
 
         if (locationElem && textElem && refreshElem) {
             this.fetchWeatherMeta();
-            setInterval(() => this.fetchWeatherMeta(), 10000); // 每10秒更新一次
+            setInterval(() => this.fetchWeatherMeta(), 30000); // 每30秒更新一次，天气缓存1小时才刷新
         }
     }
 

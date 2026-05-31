@@ -2458,6 +2458,7 @@ def api_test_email():
         return jsonify({'success': False, 'error': f'邮件发送失败: {str(e)}'}), 500
 
 @app.route('/api/weather/meta')
+@limiter.limit("120 per hour")  # 每30秒1次足够，因为天气缓存1小时才更新
 def weather_meta():
     """返回天气元信息：上次更新时间、地点、天气文本、倒计时等"""
     # 获取访问者城市
