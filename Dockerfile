@@ -28,11 +28,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd -m -u 1000 rainmail && \
     chown -R rainmail:rainmail /app
 
+# 创建数据目录并设置权限
+RUN mkdir -p /data && \
+    chown -R rainmail:rainmail /data
+
 # 切换到非root用户
 USER rainmail
-
-# 创建数据目录（通过tmpfs挂载）
-RUN mkdir -p /data
 
 # 暴露端口
 EXPOSE 5024
