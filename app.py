@@ -326,7 +326,7 @@ else:
     print(f"[INFO] 总共加载了 {len(API_PAIRS)} 组天气API。")
 
 # 数据库配置
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rainmail.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/rainmail.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
