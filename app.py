@@ -1775,7 +1775,8 @@ def get_altcha_challenge():
 @limiter.limit("5 per minute")  # 管理员登录速率限制
 def admin_login():
     """管理员登录"""
-    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
+    # 管理员登录强制使用 Cloudflare Turnstile
+    captcha_provider = 'cloudflare'
     
     if request.method == 'POST':
         # --- 蜜罐检测 ---
