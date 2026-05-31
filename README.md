@@ -32,8 +32,50 @@
 - **多种验证**：支持Cloudflare Turnstile、Altcha、自定义数学验证
 - **密码安全**：哈希存储，邮箱验证机制
 
-## 快速开始
+## 快速开始（docker）
 
+### 第一步：为该容器创建一个专属网络
+
+创建一个新的 bridge 网络，专门给这个需要被隔离的容器使用。
+
+```bash
+# 创建一个名为 isolated_net 的网络
+docker network create isolated_net
+
+```
+
+### 第二步：找出这个专属网络对应的宿主机网卡名称
+
+Docker 创建自定义网络时，会在宿主机上生成一个对应的虚拟网桥接口（网卡），名称通常为 `br-<网络ID的前缀>`。
+
+```bash
+# 1. 查看 isolated_net 的 Network ID
+docker network ls | grep isolated_net
+# 假设输出类似： 8a9b2c3d4e5f   isolated_net   bridge    local
+
+# 2. 前缀是 8a9b2c3d4e5f，所以对应的网卡名字通常是 br-8a9b2c3d4e5f
+# 你可以通过 ip a 命令验证这个网卡是否存在
+ip a | grep br-8a9b2c3d4e5f
+
+```
+
+### 第三步：在 DOCKER-USER 链中仅针对该网卡添加拦截规则
+
+假设你宿主机的内网网段是 `192.168.1.0/24`，现在我们只丢弃从 `br-8a9b2c3d4e5f`（即那个特定网络）发往内网的数据包：
+
+```bash
+iptables -I DOCKER-USER -i br-8a9b2c3d4e5f -d 192.168.1.0/24 -j DROP
+
+```
+
+*如果你有多个内网网段（如 `10.0.0.0/8` 等），可以重复执行上述命令替换 `-d` 后面的 IP 段。*
+
+```bash
+docker compose up -d --build
+
+```
+
+## 常规部署方案
 ### 环境要求
 
 - Python 3.8+
