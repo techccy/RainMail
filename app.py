@@ -94,6 +94,7 @@ CSP_POLICY = app.config.get('CSP_POLICY',
     "img-src 'self' data: https:; "
     "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; "
     "font-src 'self'; "
+    "frame-src 'self' https://challenges.cloudflare.com; "
     "object-src 'none'; "
     "base-uri 'self'; "
     "form-action 'self'; "
