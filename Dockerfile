@@ -21,6 +21,8 @@ COPY run.py .
 COPY templates/ ./templates/
 COPY static/ ./static/
 
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
