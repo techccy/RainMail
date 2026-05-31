@@ -573,14 +573,23 @@ function initAdminLoginPage(config) {
                     statusEl.classList.add('status-error');
                 }
             }
-        } else if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
-            // 显式渲染 Turnstile
-            turnstileWidgetId = turnstile.render('#admin-turnstile', {
-                sitekey: config.turnstileSiteKey,
-                callback: function(token) {
-                    document.getElementById('cf-turnstile-response').value = token;
+        } else if (config.captchaProvider === 'cloudflare') {
+            // 等待 Turnstile 库加载完成
+            const initTurnstile = () => {
+                if (typeof turnstile !== 'undefined') {
+                    console.log('Turnstile 库已加载，开始渲染');
+                    turnstileWidgetId = turnstile.render('#admin-turnstile', {
+                        sitekey: config.turnstileSiteKey,
+                        callback: function(token) {
+                            document.getElementById('cf-turnstile-response').value = token;
+                        }
+                    });
+                } else {
+                    console.log('等待 Turnstile 库加载...');
+                    setTimeout(initTurnstile, 100);
                 }
-            });
+            };
+            initTurnstile();
         } else if (config.captchaProvider === 'altcha') {
             initAltcha('admin-altcha-widget', 'altcha-payload');
         }
