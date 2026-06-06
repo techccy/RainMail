@@ -199,9 +199,14 @@ def migrate_config_password():
 def verify_password_format_on_startup():
     """
     应用启动时验证管理员密码是否为哈希格式
-    如果不是，尝试迁移并记录结果
+    注意：由于配置现在从环境变量加载，此函数仅在 config.json 存在时执行
     """
     config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+
+    # 如果 config.json 不存在，说明配置已迁移到环境变量
+    if not os.path.exists(config_path):
+        app.logger.info("配置从环境变量加载，跳过 config.json 密码格式验证")
+        return
 
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
@@ -2392,10 +2397,9 @@ def mask_sensitive_value(key, value):
 @admin_required
 def api_get_config():
     """获取配置（敏感字段脱敏）"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        # 直接使用已加载的全局 config 变量（来自环境变量）
+        # 不再尝试读取已弃用的 config.json 文件
 
         # 构建分类配置
         categorized_config = {
@@ -2473,13 +2477,9 @@ def api_update_config():
 @app.route('/admin/api/config/export')
 @admin_required
 def api_export_config():
-    """导出配置为 JSON 文件（与后端config.json格式一致）"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    """导出当前配置为 JSON 文件（来自环境变量）"""
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-
-        # 直接导出配置，与后端config.json格式完全一致
+        # 导出当前已加载的全局 config 变量（来自环境变量）
         response = make_response(json.dumps(config, ensure_ascii=False, indent=2))
         response.headers['Content-Type'] = 'application/json'
         response.headers['Content-Disposition'] = f'attachment; filename=rainmail_config_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
@@ -2492,97 +2492,12 @@ def api_export_config():
 @admin_required
 @csrf_protect
 def api_import_config():
-    """导入配置 JSON 文件（增强安全性）"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-    backup_path = config_path + '.backup'
-    MAX_FILE_SIZE = 1 * 1024 * 1024  # 1MB
-
-    try:
-        # 检查文件上传
-        if 'file' not in request.files:
-            return jsonify({'success': False, 'error': '未找到上传文件'}), 400
-
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'success': False, 'error': '未选择文件'}), 400
-
-        # 文件大小检查
-        file.seek(0, os.SEEK_END)
-        file_size = file.tell()
-        file.seek(0)
-
-        if file_size > MAX_FILE_SIZE:
-            return jsonify({'success': False, 'error': f'文件大小超过限制 ({MAX_FILE_SIZE // 1024}KB)'}), 400
-
-        if file_size == 0:
-            return jsonify({'success': False, 'error': '文件为空'}), 400
-
-        # 文件名安全检查
-        filename = secure_filename(file.filename)
-        if not filename.endswith('.json'):
-            return jsonify({'success': False, 'error': '只支持 JSON 格式文件'}), 400
-
-        # MIME 类型验证
-        allowed_mimes = ['application/json', 'text/plain']
-        if file.mimetype not in allowed_mimes:
-            return jsonify({'success': False, 'error': f'不支持的文件类型: {file.mimetype}'}), 400
-
-        # 读取并验证内容
-        content = file.read()
-        if len(content) < 2:
-            return jsonify({'success': False, 'error': '文件内容无效'}), 400
-
-        # Magic bytes 验证
-        if not content[0:1].decode('utf-8', errors='ignore').strip()[0] in ['{', '[']:
-            return jsonify({'success': False, 'error': '文件不是有效的 JSON 格式'}), 400
-
-        # 备份当前配置
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                backup_content = f.read()
-            with open(backup_path, 'w', encoding='utf-8') as f:
-                f.write(backup_content)
-
-        # 解析 JSON
-        try:
-            imported_config = json.loads(content.decode('utf-8'))
-        except json.JSONDecodeError as e:
-            return jsonify({'success': False, 'error': f'JSON 解析失败: {str(e)}'}), 400
-
-        # 验证配置结构
-        required_fields = ['admin_username', 'admin_password']
-        for field in required_fields:
-            if field not in imported_config:
-                return jsonify({'success': False, 'error': f'配置缺少必需字段: {field}'}), 400
-
-        # 如果是旧格式（包含config字段），提取config
-        if 'config' in imported_config:
-            imported_config = imported_config['config']
-
-        # 写入配置文件
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(imported_config, f, ensure_ascii=False, indent=2)
-
-        app.logger.info(f"配置已由 {request.remote_addr} 导入")
-        return jsonify({
-            'success': True,
-            'message': f'配置已导入，备份已保存至 {os.path.basename(backup_path)}。部分更改需要重启服务后生效'
-        })
-
-    except json.JSONDecodeError:
-        return jsonify({'success': False, 'error': 'JSON 解析失败'}), 400
-    except Exception as e:
-        app.logger.error(f"配置导入失败: {e}")
-        # 恢复备份
-        if os.path.exists(backup_path):
-            try:
-                with open(backup_path, 'r', encoding='utf-8') as f:
-                    backup_content = f.read()
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    f.write(backup_content)
-            except:
-                pass
-        return jsonify({'success': False, 'error': str(e)}), 500
+    """导入配置 JSON 文件"""
+    # 由于配置现在从环境变量加载，不允许通过 API 导入
+    return jsonify({
+        'success': False,
+        'message': '配置现在从环境变量（.env 文件）加载，无法通过 API 导入。请编辑 .env 文件来修改配置。'
+    }), 400
 
 @app.route('/admin/api/config/test-email', methods=['POST'])
 @csrf_protect

@@ -3,17 +3,15 @@ from dotenv import load_dotenv
 
 def load_config_from_env():
     """
-    从环境变量加载所有配置，必须提供 .env 文件
+    从环境变量加载所有配置，优先从环境变量读取
+    如果 .env 文件存在则加载，否则直接使用已注入的环境变量
 
     如果必要的环境变量缺失，抛出异常
     """
-    # 1. 加载 .env 文件
+    # 1. 尝试加载 .env 文件（如果存在）
     env_path = os.path.join(os.path.dirname(__file__), '.env')
-    if not os.path.exists(env_path):
-        raise FileNotFoundError(
-            "配置文件 .env 不存在！请复制 .env.example 为 .env 并填入配置值。"
-        )
-    load_dotenv(env_path)
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
 
     config = {}
 
