@@ -17,11 +17,14 @@ services:
     environment:
       - TZ=Asia/Shanghai
 
+    # 从 .env 文件加载配置（必需）
+    env_file:
+      - .env
+
     # 数据卷挂载：SQLite数据库持久化
     volumes:
       - rainmail_data:/data
       - rainmail_instance:/app/instance
-      - ./config.json:/app/config.json
 
     # tmpfs用于运行时写入
     tmpfs:

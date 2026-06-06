@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y \
 
 # 复制项目文件
 COPY requirements.txt .
-COPY config.json .
-COPY config_model.json .
+COPY config_loader.py .
+COPY .env.example .
 COPY app.py .
 COPY run.py .
 COPY templates/ ./templates/

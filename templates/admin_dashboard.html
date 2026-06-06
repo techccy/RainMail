@@ -209,7 +209,10 @@
     <div class="container glass-effect admin-dashboard">
         <div class="admin-header">
             <h1>管理后台</h1>
-            <a href="{{ url_for('admin_logout') }}" class="logout-btn">退出登录</a>
+            <form action="{{ url_for('admin_logout') }}" method="POST" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="logout-btn">退出登录</button>
+            </form>
         </div>
 
         <!-- 统计信息 -->

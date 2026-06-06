@@ -751,4 +751,15 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('检测到管理员登录页面，执行 initAdminLoginPage');
         initAdminLoginPage(config);
     }
+
+    // 初始化登出按钮（所有页面通用）
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn && typeof logout === 'function') {
+        logoutBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('登出按钮被点击');
+            logout();
+        });
+        console.log('登出按钮事件监听器已绑定');
+    }
 });

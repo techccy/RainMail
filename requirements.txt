@@ -6,7 +6,6 @@ app
 flask
 flask-sqlalchemy
 psutil
-pyotp
 qrcode
 pillow
 # 新增依赖：情感投递系统

@@ -5,7 +5,6 @@ from flask_mail import Mail, Message as EmailMessage
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import requests
-import yaml
 import time
 import logging
 from datetime import datetime, timedelta
@@ -48,23 +47,22 @@ log = logging.getLogger('werkwerkzeug')
 log.setLevel(logging.ERROR)
 
 # --- 配置文件加载 ---
-config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+from config_loader import load_config_from_env, READ_ONLY_CONFIG_KEYS
 
 def load_config():
-    """加载JSON配置文件，如果不存在则从模板自动生成"""
-    if not os.path.exists(config_path):
-        config_model_path = os.path.join(os.path.dirname(__file__), 'config_model.json')
-        if os.path.exists(config_model_path):
-            import shutil
-            shutil.copy(config_model_path, config_path)
-            print(f"[INFO] 已从 config_model.json 自动生成 config.json")
-        else:
-            print(f"[WARNING] config_model.json 不存在，创建空配置文件")
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump({}, f)
-
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    """从环境变量加载所有配置，必须提供 .env 文件"""
+    try:
+        config = load_config_from_env()
+        print("[INFO] 配置已从环境变量加载")
+        return config
+    except FileNotFoundError as e:
+        print(f"[ERROR] {e}")
+        print("[INFO] 请执行: cp .env.example .env")
+        print("[INFO] 然后编辑 .env 文件填入配置值")
+        raise
+    except ValueError as e:
+        print(f"[ERROR] {e}")
+        raise
 
 config = load_config()
 app.config.update(config)
@@ -339,8 +337,6 @@ ADMIN_PASSWORD = app.config.get('admin_password')
 # AI 内容审核配置
 AI_MODERATION_API_KEY = app.config.get('AI_MODERATION', {}).get('API_KEY', '')
 
-# TOTP 配置
-TOTP_DECRYPT_PASSWORD = app.config.get('totp_decrypt_password', '')
 SENSITIVE_WORDS_SET = set()
 IPINFO_TOKEN = app.config.get('IPINFO_TOKEN') # ipinfo.io 访问令牌
 
@@ -1996,14 +1992,17 @@ def get_altcha_challenge():
 # 管理员路由
 @app.route('/admin', methods=['GET', 'POST'])
 @limiter.limit("5 per minute")  # 管理员登录速率限制
+@csrf_protect  # CSRF 保护
 def admin_login():
     """管理员登录"""
     # 从配置读取验证提供商，支持全局 none 配置
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
-    
+    app.logger.info(f"[管理员登录] 访问 /admin, 方法: {request.method}, CAPTCHA提供商: {captcha_provider}")
+
     if request.method == 'POST':
         # --- 蜜罐检测 ---
         if check_honeypot(request.form):
+            app.logger.warning(f"[管理员登录] 蜜罐被触发，IP: {request.remote_addr}")
             # 蜜罐被触发，假装登录成功但实际不登录
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
             recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
@@ -2033,8 +2032,11 @@ def admin_login():
         username = request.form.get('username')
         password = request.form.get('password')
 
+        app.logger.info(f"[管理员登录] 登录尝试 - 用户名: {username}, IP: {user_ip}, CAPTCHA响应: {'有' if captcha_response else '无'}")
+
         # none 模式跳过空响应检查
         if captcha_provider != 'none' and not captcha_response:
+            app.logger.warning(f"[管理员登录] CAPTCHA响应为空")
             # --- 修改：不再返回 JSON，而是渲染模板 ---
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
             recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
@@ -2042,6 +2044,7 @@ def admin_login():
             return render_template('admin_login.html', error='请完成人机验证', turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
         if not validate_captcha(captcha_response, user_ip, session):
+            app.logger.warning(f"[管理员登录] CAPTCHA验证失败 - 提供商: {captcha_provider}")
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
             recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
             cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
@@ -2052,30 +2055,37 @@ def admin_login():
         admin_username_from_config = ADMIN_USERNAME
         admin_password_from_config = ADMIN_PASSWORD
 
+        app.logger.info(f"[管理员登录] 验证凭据 - 配置用户名: {admin_username_from_config}, 密码前缀: {admin_password_from_config[:10] if admin_password_from_config else 'None'}...")
+
         # 检查账户锁定状态（使用用户名作为标识）
         is_locked, locked_until = check_login_locked(username, 'email')
         if is_locked:
             lock_time = locked_until.strftime("%H:%M:%S")
+            app.logger.warning(f"[管理员登录] 账户已锁定 - 用户名: {username}, 解锁时间: {lock_time}")
             flash(f'账户已被临时锁定，请 {lock_time}后再试')
             return render_template('admin_login.html', error='账户已锁定', turnstile_site_key=app.config.get('TURNSTILE_SITE_KEY', ''), captcha_provider=captcha_provider)
 
         # 检查 IP 锁定状态
         is_ip_locked, ip_locked_until = check_login_locked(user_ip, 'ip')
-        if is_locked:
+        if is_ip_locked:
             lock_time = ip_locked_until.strftime("%H:%M:%S")
+            app.logger.warning(f"[管理员登录] IP已锁定 - IP: {user_ip}, 解锁时间: {lock_time}")
             flash(f'IP 地址已被临时锁定，请 {lock_time}后再试')
             return render_template('admin_login.html', error='IP 已锁定', turnstile_site_key=app.config.get('TURNSTILE_SITE_KEY', ''), captcha_provider=captcha_provider)
 
         # 验证用户名和密码（支持哈希和明文）
         if username == admin_username_from_config:
             is_valid, _ = verify_admin_password(password, admin_password_from_config)
+            app.logger.info(f"[管理员登录] 密码验证结果: {is_valid}")
             if is_valid:
                 session['admin_logged_in'] = True
                 reset_failed_login(username, 'email')  # 登录成功，重置失败计数
                 reset_failed_login(user_ip, 'ip')  # 重置 IP 失败计数
-                return redirect(url_for('admin_dashboard'))
+                app.logger.info(f"[管理员登录] 登录成功 - 用户名: {username}, IP: {user_ip}")
+                return redirect(url_for('admin_dashboard))
 
         # 登录失败，记录失败尝试
+        app.logger.warning(f"[管理员登录] 登录失败 - 用户名: {username}, IP: {user_ip}")
         should_lock_email, _ = track_failed_login(username, 'email')
         should_lock_ip, remaining_ip = track_failed_login(user_ip, 'ip')
 
@@ -2204,10 +2214,12 @@ def admin_change_password():
         'message': '密码已更新（请在config.yaml中手动更新）'
     })
 
-@app.route('/admin/logout')
+@app.route('/admin/logout', methods=['POST'])
+@csrf_protect
 def admin_logout():
     """管理员登出"""
     session.pop('admin_logged_in', None)
+    app.logger.info('[管理员登出] 管理员已登出')
     return redirect(url_for('admin_login'))
 
 @app.route('/admin/api/users')
@@ -2453,155 +2465,11 @@ def api_get_config():
 @admin_required
 def api_update_config():
     """更新配置"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-    backup_path = config_path + '.backup'
-
-    try:
-        # 备份当前配置
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                backup_content = f.read()
-            with open(backup_path, 'w', encoding='utf-8') as f:
-                f.write(backup_content)
-
-        # 读取当前配置
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-
-        # 获取提交的配置
-        data = request.get_json()
-        updates = data.get('config', {})
-
-        # 更新天气配置
-        if 'weather' in updates:
-            weather = updates['weather']
-            for i in range(1, 5):
-                host_key = f'HEFENG_HOST{i}'
-                key_key = f'HEFENG_KEY{i}'
-                if host_key in weather:
-                    config[host_key] = weather[host_key]
-                # 如果密码值以****开头，说明用户没有修改，保留原值
-                if key_key in weather:
-                    if weather[key_key] and not str(weather[key_key]).startswith('****'):
-                        config[key_key] = weather[key_key]
-            if 'times' in weather:
-                config['times'] = int(weather['times'])
-
-        # 更新人机验证配置
-        if 'captcha' in updates:
-            captcha = updates['captcha']
-            for key in ['TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'CAPTCHA_PROVIDER',
-                       'ALTCHA_HMAC_KEY', 'ALTCHA_DIFFICULTY', 'VERIFY_DURATION_MINUTES']:
-                if key in captcha:
-                    value = captcha[key]
-                    # 敏感字段脱敏检查
-                    if key in ['TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'ALTCHA_HMAC_KEY']:
-                        if value and not str(value).startswith('****'):
-                            config[key] = value
-                    elif key in ['ALTCHA_DIFFICULTY']:
-                        config[key] = int(value) if value else 3
-                    elif key in ['VERIFY_DURATION_MINUTES']:
-                        config[key] = int(value) if value else 15
-                    else:
-                        config[key] = value
-
-        # 更新位置配置
-        if 'location' in updates:
-            location = updates['location']
-            if 'LOCATION_NAME' in location:
-                config['LOCATION_NAME'] = location['LOCATION_NAME']
-            if 'LOCATION_ID' in location:
-                config['LOCATION_ID'] = int(location['LOCATION_ID'])
-
-        # 更新管理员配置
-        if 'admin' in updates:
-            admin = updates['admin']
-            if 'admin_username' in admin:
-                config['admin_username'] = admin['admin_username']
-            if 'admin_password' in admin:
-                password = admin['admin_password']
-                if password and not str(password).startswith('****'):
-                    # 自动哈希新密码
-                    config['admin_password'] = hash_admin_password(password)
-                    app.logger.info("管理员密码已更新（已自动哈希）")
-            if 'force_rain_duration' in admin:
-                config['force_rain_duration'] = int(admin['force_rain_duration'])
-
-        # 更新邮件配置
-        if 'mail' in updates:
-            mail = updates['mail']
-            for key in ['MAIL_ENABLED', 'MAIL_SERVER', 'MAIL_PORT', 'MAIL_USE_TLS',
-                       'MAIL_USERNAME', 'MAIL_PASSWORD', 'MAIL_DEFAULT_SENDER']:
-                if key in mail:
-                    value = mail[key]
-                    if key == 'MAIL_ENABLED':
-                        config[key] = bool(value)
-                    elif key == 'MAIL_PASSWORD':
-                        if value and not str(value).startswith('****'):
-                            config[key] = value
-                    elif key == 'MAIL_PORT':
-                        config[key] = int(value) if value else 587
-                    elif key == 'MAIL_USE_TLS':
-                        config[key] = bool(value)
-                    else:
-                        config[key] = value
-
-        # 更新AI审查配置
-        ai_mod = config.get('AI_MODERATION', {})
-        if 'ai_moderation' in updates:
-            ai = updates['ai_moderation']
-            if 'API_KEY' in ai:
-                api_key = ai['API_KEY']
-                if api_key and not str(api_key).startswith('****'):
-                    ai_mod['API_KEY'] = api_key
-            if 'BASE_URL' in ai:
-                ai_mod['BASE_URL'] = ai['BASE_URL']
-            if 'MODEL' in ai:
-                ai_mod['MODEL'] = ai['MODEL']
-            if 'SYSTEM_PROMPT' in ai:
-                ai_mod['SYSTEM_PROMPT'] = ai['SYSTEM_PROMPT']
-        config['AI_MODERATION'] = ai_mod
-
-        # 更新微信配置
-        if 'wechat' in updates:
-            wechat = updates['wechat']
-            if 'WECHAT_ENABLED' in wechat:
-                config['WECHAT_ENABLED'] = bool(wechat['WECHAT_ENABLED'])
-            if 'WECHAT_APP_ID' in wechat:
-                config['WECHAT_APP_ID'] = wechat['WECHAT_APP_ID']
-            if 'WECHAT_APP_SECRET' in wechat:
-                secret = wechat['WECHAT_APP_SECRET']
-                if secret and not str(secret).startswith('****'):
-                    config['WECHAT_APP_SECRET'] = secret
-            if 'WECHAT_TOKEN' in wechat:
-                config['WECHAT_TOKEN'] = wechat['WECHAT_TOKEN']
-            if 'WECHAT_ENCODING_AES_KEY' in wechat:
-                key = wechat['WECHAT_ENCODING_AES_KEY']
-                if key and not str(key).startswith('****'):
-                    config['WECHAT_ENCODING_AES_KEY'] = key
-            if 'WECHAT_TEMPLATE_ID' in wechat:
-                config['WECHAT_TEMPLATE_ID'] = wechat['WECHAT_TEMPLATE_ID']
-
-        # 更新投递配置
-        if 'delivery' in updates:
-            delivery = updates['delivery']
-            if 'PRIVATE_DELIVERY_REQUIRE_LOGIN' in delivery:
-                config['PRIVATE_DELIVERY_REQUIRE_LOGIN'] = bool(delivery['PRIVATE_DELIVERY_REQUIRE_LOGIN'])
-
-        # 写入配置文件（JSON格式）
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-
-        return jsonify({'success': True, 'message': '配置已保存，部分更改需要重启服务后生效'})
-
-    except Exception as e:
-        # 恢复备份
-        if os.path.exists(backup_path):
-            with open(backup_path, 'r', encoding='utf-8') as f:
-                backup_content = f.read()
-            with open(config_path, 'w', encoding='utf-8') as f:
-                f.write(backup_content)
-        return jsonify({'success': False, 'error': str(e)}), 500
+    # 由于配置现在从环境变量加载，不允许通过 API 修改
+    return jsonify({
+        'success': False,
+        'message': '配置现在从环境变量（.env 文件）加载，无法通过 API 修改。请编辑 .env 文件来修改配置。'
+    }), 400
 
 @app.route('/admin/api/config/export')
 @admin_required
