@@ -112,7 +112,9 @@
             </div>
 
             <!-- CAPTCHA -->
-            {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
+            {% if captcha_provider == 'none' %}
+            <!-- 人机验证已禁用 -->
+            {% elif captcha_provider == 'cloudflare' and turnstile_site_key %}
             <div class="form-group">
                 <div id="admin-turnstile" class="cf-turnstile"></div>
                 <input type="hidden" name="cf-turnstile-response" id="cf-turnstile-response" value="">

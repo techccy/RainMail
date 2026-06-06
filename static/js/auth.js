@@ -145,29 +145,32 @@ function initLoginPage(config) {
 
         console.log('表单数据 - email:', email, 'password长度:', password?.length);
 
-        // 获取 CAPTCHA 响应
-        if (config.captchaProvider === 'cloudflare') {
-            captchaResponse = document.getElementById('cf-token-hidden').value;
-        } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
-            captchaResponse = document.getElementById('recaptcha-token-hidden').value;
-        } else if (config.captchaProvider === 'cha') {
-            captchaResponse = document.getElementById('cha-answer').value;
-        } else if (config.captchaProvider === 'altcha') {
-            captchaResponse = document.getElementById('altcha-payload').value;
-        } else {
-            // 其他情况
-            captchaResponse = document.getElementById('cha-answer')?.value || '';
-        }
+        // none 模式跳过验证
+        if (config.captchaProvider !== 'none') {
+            // 获取 CAPTCHA 响应
+            if (config.captchaProvider === 'cloudflare') {
+                captchaResponse = document.getElementById('cf-token-hidden').value;
+            } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
+                captchaResponse = document.getElementById('recaptcha-token-hidden').value;
+            } else if (config.captchaProvider === 'cha') {
+                captchaResponse = document.getElementById('cha-answer').value;
+            } else if (config.captchaProvider === 'altcha') {
+                captchaResponse = document.getElementById('altcha-payload').value;
+            } else {
+                // 其他情况
+                captchaResponse = document.getElementById('cha-answer')?.value || '';
+            }
 
-        console.log('captchaResponse:', captchaResponse ? '有值' : '空');
+            console.log('captchaResponse:', captchaResponse ? '有值' : '空');
+
+            if (!captchaResponse) {
+                showError('请完成人机验证');
+                return;
+            }
+        }
 
         if (!email || !password) {
             showError('请填写所有必填项');
-            return;
-        }
-
-        if (!captchaResponse) {
-            showError('请完成人机验证');
             return;
         }
 
@@ -366,21 +369,29 @@ function initRegisterPage(config) {
 
         console.log('表单数据 - email:', email, 'username:', username, 'password长度:', password?.length);
 
-        // 获取 CAPTCHA 响应
-        if (config.captchaProvider === 'cloudflare') {
-            captchaResponse = document.getElementById('cf-token-hidden').value;
-        } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
-            captchaResponse = document.getElementById('recaptcha-token-hidden').value;
-        } else if (config.captchaProvider === 'cha') {
-            captchaResponse = document.getElementById('cha-answer').value;
-        } else if (config.captchaProvider === 'altcha') {
-            captchaResponse = document.getElementById('altcha-payload').value;
-        } else {
-            // 其他情况
-            captchaResponse = document.getElementById('cha-answer')?.value || '';
-        }
+        // none 模式跳过验证
+        if (config.captchaProvider !== 'none') {
+            // 获取 CAPTCHA 响应
+            if (config.captchaProvider === 'cloudflare') {
+                captchaResponse = document.getElementById('cf-token-hidden').value;
+            } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
+                captchaResponse = document.getElementById('recaptcha-token-hidden').value;
+            } else if (config.captchaProvider === 'cha') {
+                captchaResponse = document.getElementById('cha-answer').value;
+            } else if (config.captchaProvider === 'altcha') {
+                captchaResponse = document.getElementById('altcha-payload').value;
+            } else {
+                // 其他情况
+                captchaResponse = document.getElementById('cha-answer')?.value || '';
+            }
 
-        console.log('captchaResponse:', captchaResponse ? '有值' : '空');
+            console.log('captchaResponse:', captchaResponse ? '有值' : '空');
+
+            if (!captchaResponse) {
+                showError('请完成人机验证');
+                return;
+            }
+        }
 
         // 验证
         if (!email || !password || !confirmPassword) {
@@ -395,11 +406,6 @@ function initRegisterPage(config) {
 
         if (password.length < 6) {
             showError('密码长度至少6位');
-            return;
-        }
-
-        if (!captchaResponse) {
-            showError('请完成人机验证');
             return;
         }
 
@@ -651,6 +657,12 @@ function initAdminLoginPage(config) {
 
     // 表单提交拦截 - 验证 CAPTCHA 是否完成
     form.addEventListener('submit', function(e) {
+        // none 模式跳过验证检查
+        if (config.captchaProvider === 'none') {
+            console.log('CAPTCHA 配置为 none，跳过验证');
+            return true;
+        }
+
         let captchaResponse = '';
 
         // 获取 CAPTCHA 响应

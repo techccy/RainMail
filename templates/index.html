@@ -186,7 +186,9 @@
                     <div class="privacy-statement" style="margin: 10px 0; font-size: 0.9rem; color: #666; text-align: left;">
                         提交即表示同意我们的<a href="/privacy-policy-cn" target="_blank" style="color: #0d6efd; text-decoration: underline;">隐私条款</a>
                     </div>
-                    {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
+                    {% if captcha_provider == 'none' %}
+                    <!-- 人机验证已禁用 -->
+                    {% elif captcha_provider == 'cloudflare' and turnstile_site_key %}
                         <div id="rainy-turnstile" class="cf-turnstile"></div>
                         <input type="hidden" name="cf-token-hidden" id="rainy-cf-token-hidden" value="">
                     {% elif captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}

@@ -1223,6 +1223,10 @@ def validate_captcha(captcha_response, user_ip=None, session=None):
     """
     captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
 
+    # none 模式：跳过所有验证
+    if captcha_provider == 'none':
+        return True
+
     if captcha_provider == 'cloudflare':
         return validate_turnstile(captcha_response, user_ip)
     elif captcha_provider == 'recaptcha' or captcha_provider == 'recaptcha_v3':
@@ -1546,12 +1550,15 @@ def handle_messages():
                 captcha_response = request.json.get('cha_answer')
             elif captcha_provider == 'altcha':
                 captcha_response = request.json.get('altcha_payload')
+            elif captcha_provider == 'none':
+                captcha_response = 'skip'
             else:
                 captcha_response = None
 
             user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
 
-            if not captcha_response:
+            # none 模式跳过空响应检查
+            if captcha_provider != 'none' and not captcha_response:
                 return jsonify({"error": "请完成人机验证"}), 400
 
             if not validate_captcha(captcha_response, user_ip, session):
@@ -1991,8 +1998,8 @@ def get_altcha_challenge():
 @limiter.limit("5 per minute")  # 管理员登录速率限制
 def admin_login():
     """管理员登录"""
-    # 管理员登录强制使用 Cloudflare Turnstile
-    captcha_provider = 'cloudflare'
+    # 从配置读取验证提供商，支持全局 none 配置
+    captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
     
     if request.method == 'POST':
         # --- 蜜罐检测 ---
@@ -2016,6 +2023,9 @@ def admin_login():
                 captcha_response = request.form.get('cha_answer')
             else:
                 captcha_response = request.form.get('altcha_payload')
+        elif captcha_provider == 'none':
+            # none 模式：跳过验证
+            captcha_response = 'skip'
         else:
             captcha_response = None
 
@@ -2023,7 +2033,8 @@ def admin_login():
         username = request.form.get('username')
         password = request.form.get('password')
 
-        if not captcha_response:
+        # none 模式跳过空响应检查
+        if captcha_provider != 'none' and not captcha_response:
             # --- 修改：不再返回 JSON，而是渲染模板 ---
             site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
             recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
@@ -2891,6 +2902,8 @@ def api_register():
                 captcha_response = data.get('cha_answer')
             else:
                 captcha_response = data.get('altcha_payload')
+        elif captcha_provider == 'none':
+            captcha_response = 'skip'
         else:
             captcha_response = None
 
@@ -3007,6 +3020,8 @@ def api_login():
                 captcha_response = data.get('cha_answer')
             else:
                 captcha_response = data.get('altcha_payload')
+        elif captcha_provider == 'none':
+            captcha_response = 'skip'
         else:
             captcha_response = None
 
