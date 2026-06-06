@@ -70,24 +70,6 @@ iptables -I DOCKER-USER -i br-8a9b2c3d4e5f -d 192.168.1.0/24 -j DROP
 
 *如果你有多个内网网段（如 `10.0.0.0/8` 等），可以重复执行上述命令替换 `-d` 后面的 IP 段。*
 
-```bash
-docker compose up -d --build
-
-```
-
-## 常规部署方案
-### 环境要求
-
-- Python 3.8+
-- pip
-- 网络连接（用于天气API）
-
-### 安装运行
-
-1. **安装依赖**
-   ```bash
-   pip install -r requirements.txt
-   ```
 
 ### 获取天气API密钥
 
@@ -191,23 +173,13 @@ WECHAT_APP_SECRET: ""  # 微信公众号 AppSecret
 ```
 
 2. **启动应用**
-   ```bash
-   nohup python run.py &
-   nohup python curl.py &
-   ```
+```bash
+docker compose up -d --build
+
+```
 
 3. **访问应用**
    打开浏览器访问: http://localhost:5024
-
-## 使用Docker运行
-
-```bash
-# 构建镜像
-docker build -t rainmail .
-
-# 运行容器
-docker run -p 5024:5024 rainmail
-```
 
 ## 项目结构
 

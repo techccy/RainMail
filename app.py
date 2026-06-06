@@ -239,8 +239,46 @@ def verify_password_format_on_startup():
     except Exception as e:
         app.logger.error(f"启动时密码验证失败: {e}")
 
+def check_config_file_security():
+    """
+    检查 config.json 文件权限，发出安全警告
+    """
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+
+    if not os.path.exists(config_path):
+        return
+
+    # 检查文件权限（Unix-like 系统）
+    try:
+        import stat
+        file_stat = os.stat(config_path)
+        file_mode = file_stat.st_mode
+
+        # 检查是否其他用户可读 (o+r)
+        if file_mode & stat.S_IROTH:
+            app.logger.warning(
+                f"⚠️  安全警告: config.json 文件可被其他用户读取! "
+                f"建议运行: chmod 600 {config_path}"
+            )
+
+        # 检查是否在 web 根目录下
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        web_accessible_patterns = ['/public', '/static', '/www', '/htdocs']
+        for pattern in web_accessible_patterns:
+            if pattern in app_dir:
+                app.logger.warning(
+                    f"⚠️  安全警告: 应用可能部署在 Web 可访问目录下 ({app_dir})。"
+                    f"建议将 config.json 移出 Web 根目录。"
+                )
+                break
+    except Exception:
+        pass  # Windows 或其他系统可能不支持
+
 # 应用启动时验证并迁移密码格式
 verify_password_format_on_startup()
+
+# 应用启动时检查配置文件安全性
+check_config_file_security()
 
 # ============================================================================
 # CSRF 保护
@@ -366,16 +404,142 @@ def get_warning_text():
         app.logger.error(f"读取警告文件失败: {e}")
         return ""
 
-def track_failed_login():
-    """跟踪登录失败次数，返回是否应显示警告"""
-    failed = session.get('failed_attempts', 0)
-    session['failed_attempts'] = failed + 1
-    app.logger.warning(f"登录失败次数: {failed + 1}, IP: {request.remote_addr}")
-    return failed + 1 >= BRUTE_FORCE_THRESHOLD
+def verify_letter_access(delivery):
+    """
+    验证当前用户是否有权访问指定信件投递记录
 
-def reset_failed_login():
-    """重置登录失败计数"""
-    session.pop('failed_attempts', None)
+    Args:
+        delivery: LetterDelivery 对象
+
+    Returns:
+        (has_access, error_response)
+        has_access: bool - 是否有访问权限
+        error_response: tuple - 如果无权限，返回 (json_response, status_code)
+    """
+    # 如果是注册用户的信件
+    if delivery.recipient_user_id:
+        if 'user_id' not in session or session['user_id'] != delivery.recipient_user_id:
+            return False, (jsonify({'error': '无权访问此信件'}), 403)
+
+    # 如果是匿名用户的信件（通过邮件接收）
+    elif delivery.recipient_email:
+        # 匿名用户的信件只能通过正确的 unlock_token 访问
+        # 检查 session 中是否有正确的解锁记录
+        unlocked_deliveries = session.get('unlocked_deliveries', [])
+        if delivery.id not in unlocked_deliveries:
+            return False, (jsonify({'error': '此信件需要解锁后才能访问'}), 403)
+
+    # 既没有 user_id 也没有 email，说明是异常数据，拒绝访问
+    else:
+        return False, (jsonify({'error': '无效的信件记录'}), 403)
+
+    return True, None
+
+def track_failed_login(identifier, identifier_type='email'):
+    """
+    记录登录失败，返回是否应锁定
+
+    Args:
+        identifier: 用户标识（email 或 IP）
+        identifier_type: 标识类型 'email' 或 'ip'
+
+    Returns:
+        (should_lock, remaining_attempts)
+        should_lock: bool - 是否应该锁定
+        remaining_attempts: int - 剩余尝试次数
+    """
+    BRUTE_FORCE_THRESHOLD = 5
+    LOCK_DURATION_MINUTES = 30
+
+    # 查找或创建记录
+    attempt = FailedLoginAttempt.query.filter_by(
+        identifier=identifier,
+        identifier_type=identifier_type
+    ).first()
+
+    if not attempt:
+        attempt = FailedLoginAttempt(
+            identifier=identifier,
+            identifier_type=identifier_type,
+            attempt_count=1
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        return False, BRUTE_FORCE_THRESHOLD - 1
+
+    # 检查是否已在锁定期
+    if attempt.is_locked and attempt.locked_until and attempt.locked_until > datetime.now():
+        return True, 0
+
+    # 如果锁定已过期，重置计数
+    if attempt.is_locked and attempt.locked_until and attempt.locked_until <= datetime.now():
+        attempt.is_locked = False
+        attempt.attempt_count = 1
+        attempt.last_attempt_at = datetime.now()
+        db.session.commit()
+        return False, BRUTE_FORCE_THRESHOLD - 1
+
+    # 增加失败计数
+    attempt.attempt_count += 1
+    attempt.last_attempt_at = datetime.now()
+
+    remaining = BRUTE_FORCE_THRESHOLD - attempt.attempt_count
+
+    # 达到阈值，锁定
+    if attempt.attempt_count >= BRUTE_FORCE_THRESHOLD:
+        attempt.is_locked = True
+        attempt.locked_until = datetime.now() + timedelta(minutes=LOCK_DURATION_MINUTES)
+        db.session.commit()
+        app.logger.warning(f"登录失败过多，锁定 {identifier_type}:{identifier} 直到 {attempt.locked_until}")
+        return True, 0
+
+    db.session.commit()
+    return False, max(0, remaining)
+
+def check_login_locked(identifier, identifier_type='email'):
+    """
+    检查指定标识是否被锁定
+
+    Returns:
+        (is_locked, locked_until)
+    """
+    attempt = FailedLoginAttempt.query.filter_by(
+        identifier=identifier,
+        identifier_type=identifier_type
+    ).first()
+
+    if not attempt or not attempt.is_locked:
+        return False, None
+
+    # 检查锁定是否已过期
+    if attempt.locked_until and attempt.locked_until <= datetime.now():
+        attempt.is_locked = False
+        db.session.commit()
+        return False, None
+
+    return True, attempt.locked_until
+
+def reset_failed_login(identifier=None, identifier_type='email'):
+    """
+    登录成功后重置失败计数
+
+    Args:
+        identifier: 用户标识（如果不提供，使用旧的 Session 方式以保持兼容性）
+        identifier_type: 标识类型 'email' 或 'ip'
+    """
+    # 如果提供了 identifier，使用新的数据库方式
+    if identifier:
+        attempt = FailedLoginAttempt.query.filter_by(
+            identifier=identifier,
+            identifier_type=identifier_type
+        ).first()
+
+        if attempt:
+            db.session.delete(attempt)
+            db.session.commit()
+    else:
+        # 兼容旧的 Session 方式
+        session.pop('failed_attempts', None)
 
 # def load_sensitive_words_from_csv(file_path):
 #     """
@@ -404,7 +568,27 @@ def reset_failed_login():
 #         print(f"错误：CSV 文件 {file_path} 中缺少必要的列: {e}")
 #         SENSITIVE_WORDS_SET = set()
 
+# 基础敏感词列表（可扩展）
+BASE_SENSITIVE_KEYWORDS = [
+    '赌博', '彩票', '博彩', '充值', '代打',
+    '加微信', '加QQ', '兼职刷单',
+]
+
+def basic_keyword_check(content):
+    """基础关键词过滤，作为 AI 审计的补充"""
+    content_lower = content.lower()
+    for keyword in BASE_SENSITIVE_KEYWORDS:
+        if keyword in content_lower:
+            app.logger.warning(f"触发敏感词拦截: {keyword}")
+            return True
+    return False
+
 def ai_moderation_check(content):
+    """
+    使用 AI 进行内容安全审计
+
+    返回: True 表示应该拦截（内容不安全），False 表示放行
+    """
     ai_config = app.config.get('AI_MODERATION')
     if not ai_config or not ai_config.get('API_KEY'):
         return False
@@ -414,14 +598,26 @@ def ai_moderation_check(content):
         "Content-Type": "application/json"
     }
 
+    # 使用结构化 JSON 输出
+    system_prompt = """你是一个内容安全审核助手。请判断用户输入是否包含以下内容：
+1. 违法、暴力、色情内容
+2. 垃圾广告或恶意链接
+3. 政治敏感或极端言论
+4. 人身攻击或歧视性言论
+
+请严格按照以下 JSON 格式回复，不要添加任何其他文字：
+{"decision": "REJECT"}  表示内容不安全，应该拦截
+{"decision": "PASS"}    表示内容安全，可以通过
+"""
+
     payload = {
         "model": ai_config.get('MODEL', 'deepseek-chat'),
         "messages": [
-            {"role": "system", "content": ai_config['SYSTEM_PROMPT']},
-            {"role": "user", "content": content}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"请审核以下内容：\n\n{content}"}
         ],
         "temperature": 0.0,
-        "max_tokens": 800 # 稍微给一点空间让它输出结果
+        "max_tokens": 100
     }
 
     try:
@@ -432,30 +628,34 @@ def ai_moderation_check(content):
             timeout=5
         )
         res_data = response.json()
-        raw_output = res_data['choices'][0]['message']['content'].upper()
+        raw_output = res_data['choices'][0]['message']['content'].strip()
 
         app.logger.info(f"AI Raw Response: [{raw_output}]")
 
-        # 从后往前找 True 和 False 出现的位置
-        pos_true = raw_output.rfind("TRUE")
-        pos_false = raw_output.rfind("FALSE")
+        # 尝试解析 JSON 响应
+        try:
+            result = json.loads(raw_output)
+            decision = result.get('decision', '').upper()
 
-        # 逻辑判断：
-        # 1. 如果都没找到，说明敏感词中了
-        if pos_true == -1 and pos_false == -1:
-            app.logger.warning("AI未返回明确指令，默认放行")
-            return True
+            if decision == 'REJECT':
+                app.logger.info("AI 判别结果：拦截")
+                return True
+            elif decision == 'PASS':
+                app.logger.info("AI 判别结果：通过")
+                return False
+            else:
+                # 决策字段不明确，默认拦截（安全优先）
+                app.logger.warning(f"AI 返回了不明确的决策: {decision}，默认拦截")
+                return True
 
-        # 2. 谁的位置索引（Index）更大，说明谁更靠后出现
-        if pos_true > pos_false:
-            app.logger.info("判别结果：拦截 (True 靠后)")
+        except json.JSONDecodeError:
+            # JSON 解析失败，可能被注入攻击，默认拦截
+            app.logger.warning(f"AI 响应 JSON 解析失败: [{raw_output}]，默认拦截")
             return True
-        else:
-            app.logger.info("判别结果：通过 (False 靠后)")
-            return False
 
     except Exception as e:
         app.logger.error(f"AI 审计请求异常: {e}")
+        # AI 服务异常时，默认放行以避免影响正常使用
         return False
 
 # 定义消息模型
@@ -557,6 +757,20 @@ class MessageReply(db.Model):
     reply_type = db.Column(db.String(20), default='text')  # 'text' 或 'hug'
     replier_user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     replier_email = db.Column(db.String(120))  # 匿名回复者邮箱
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+# --- 登录失败尝试记录模型 ---
+class FailedLoginAttempt(db.Model):
+    """记录登录失败尝试，用于防止暴力破解"""
+    __tablename__ = 'failed_login_attempt'
+
+    id = db.Column(db.Integer, primary_key=True)
+    identifier = db.Column(db.String(255), nullable=False, index=True)  # email 或 IP
+    identifier_type = db.Column(db.String(10), nullable=False)  # 'email' 或 'ip'
+    attempt_count = db.Column(db.Integer, default=1)
+    last_attempt_at = db.Column(db.DateTime, default=datetime.now)
+    is_locked = db.Column(db.Boolean, default=False)
+    locked_until = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.now)
 
 # --- 新增：通知模型 ---
@@ -1343,8 +1557,9 @@ def handle_messages():
             if not validate_captcha(captcha_response, user_ip, session):
                 return jsonify({"error": "人机验证失败，请刷新网页"}), 400
 
-            if ai_moderation_check(content):
-              app.logger.warning(f"AI 语义拦截: {content}")
+            # 先进行基础关键词过滤，再进行 AI 审计
+            if basic_keyword_check(content) or ai_moderation_check(content):
+              app.logger.warning(f"内容拦截: {content}")
               return jsonify({"error": "内容未通过系统安全审查", "blocked": True}), 400
 
             # 过滤XSS
@@ -1826,25 +2041,43 @@ def admin_login():
         admin_username_from_config = ADMIN_USERNAME
         admin_password_from_config = ADMIN_PASSWORD
 
+        # 检查账户锁定状态（使用用户名作为标识）
+        is_locked, locked_until = check_login_locked(username, 'email')
+        if is_locked:
+            lock_time = locked_until.strftime("%H:%M:%S")
+            flash(f'账户已被临时锁定，请 {lock_time}后再试')
+            return render_template('admin_login.html', error='账户已锁定', turnstile_site_key=app.config.get('TURNSTILE_SITE_KEY', ''), captcha_provider=captcha_provider)
+
+        # 检查 IP 锁定状态
+        is_ip_locked, ip_locked_until = check_login_locked(user_ip, 'ip')
+        if is_locked:
+            lock_time = ip_locked_until.strftime("%H:%M:%S")
+            flash(f'IP 地址已被临时锁定，请 {lock_time}后再试')
+            return render_template('admin_login.html', error='IP 已锁定', turnstile_site_key=app.config.get('TURNSTILE_SITE_KEY', ''), captcha_provider=captcha_provider)
+
         # 验证用户名和密码（支持哈希和明文）
         if username == admin_username_from_config:
             is_valid, _ = verify_admin_password(password, admin_password_from_config)
             if is_valid:
                 session['admin_logged_in'] = True
-                reset_failed_login()  # 登录成功，重置失败计数
+                reset_failed_login(username, 'email')  # 登录成功，重置失败计数
+                reset_failed_login(user_ip, 'ip')  # 重置 IP 失败计数
                 return redirect(url_for('admin_dashboard'))
+
+        # 登录失败，记录失败尝试
+        should_lock_email, _ = track_failed_login(username, 'email')
+        should_lock_ip, remaining_ip = track_failed_login(user_ip, 'ip')
+
+        if should_lock_ip:
+            flash('登录失败次数过多，IP 地址已被临时锁定30分钟')
         else:
-            # 提供更模糊的错误信息以增强安全性
-            flash('登录凭据无效或双重认证失败')
-            site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
-            recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
-            cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
+            flash(f'用户名或密码错误。还剩 {max(0, 5 - should_lock_email - 1)} 次尝试机会' if not should_lock_email else '账户已被临时锁定')
 
-            # 检测爆破行为
-            show_warning = track_failed_login()
-            warning_text = get_warning_text() if show_warning else ""
+        site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
+        recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
+        cha_question = session.get('cha_question') if captcha_provider in ('cha', 'altcha') else None
 
-            return render_template('admin_login.html', error='用户名或密码错误', turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, cha_question=cha_question, warning=warning_text)
+        return render_template('admin_login.html', error='登录失败', turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
     site_key = app.config.get('TURNSTILE_SITE_KEY', '') if captcha_provider == 'cloudflare' else ''
     recaptcha_site_key = app.config.get('RECAPTCHA_V3_SITE_KEY', '') if captcha_provider in ('recaptcha', 'recaptcha_v3') else ''
@@ -1872,6 +2105,47 @@ def admin_dashboard():
     return render_template('admin_dashboard.html',
                          messages=messages,
                          **dashboard_data)
+
+@app.route('/admin/config/security-check')
+@admin_required
+def api_config_security_check():
+    """检查配置安全状态（管理员权限）"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+
+    issues = []
+
+    # 检查文件权限
+    try:
+        import stat
+        file_stat = os.stat(config_path)
+        if file_stat.st_mode & stat.S_IROTH:
+            issues.append({
+                'type': 'file_permissions',
+                'severity': 'high',
+                'message': 'config.json 可被其他用户读取',
+                'fix': f'chmod 600 {config_path}'
+            })
+    except Exception as e:
+        issues.append({
+            'type': 'file_check_error',
+            'severity': 'warning',
+            'message': f'无法检查文件权限: {e}'
+        })
+
+    # 检查密码格式
+    admin_password = ADMIN_PASSWORD
+    if admin_password and not any(admin_password.startswith(p) for p in ('pbkdf2:', 'scrypt:', 'sha256$')):
+        issues.append({
+            'type': 'plaintext_password',
+            'severity': 'critical',
+            'message': '管理员密码为明文存储',
+            'fix': '请重新登录或手动迁移密码'
+        })
+
+    return jsonify({
+        'has_issues': len(issues) > 0,
+        'issues': issues
+    })
 
 @app.route('/admin/force_rain', methods=['POST'])
 @csrf_protect
@@ -2740,14 +3014,35 @@ def api_login():
         if not validate_captcha(captcha_response, user_ip, session):
             return jsonify({'error': '人机验证失败'}), 400
 
+        # 检查账户锁定状态
+        is_locked, locked_until = check_login_locked(email, 'email')
+        if is_locked:
+            return jsonify({
+                'error': '账户已被临时锁定',
+                'locked_until': locked_until.isoformat() if locked_until else None
+            }), 429
+
+        # 检查 IP 锁定状态
+        is_ip_locked, ip_locked_until = check_login_locked(user_ip, 'ip')
+        if is_ip_locked:
+            return jsonify({
+                'error': 'IP 地址已被临时锁定',
+                'locked_until': ip_locked_until.isoformat() if ip_locked_until else None
+            }), 429
+
         # 查找用户
         user = User.query.filter_by(email=email).first()
         if not user or not user.check_password(password):
-            # 检测爆破行为
-            show_warning = track_failed_login()
+            # 记录失败尝试
+            should_lock, remaining = track_failed_login(email, 'email')
+            track_failed_login(user_ip, 'ip')
+
             response = {'error': '邮箱或密码错误'}
-            if show_warning:
-                response['warning'] = get_warning_text()
+            if remaining is not None and remaining > 0:
+                response['remaining_attempts'] = remaining
+            if should_lock:
+                response['locked'] = True
+                response['error'] = '登录失败次数过多，账户已被临时锁定30分钟'
             return jsonify(response), 401
 
         # 更新最后登录时间
@@ -2757,7 +3052,8 @@ def api_login():
         # 设置会话
         session['user_id'] = user.id
         session['user_email'] = user.email
-        reset_failed_login()  # 登录成功，重置失败计数
+        reset_failed_login(email, 'email')  # 登录成功，重置失败计数
+        reset_failed_login(user_ip, 'ip')  # 重置 IP 失败计数
 
         return jsonify({
             'success': True,
@@ -2946,12 +3242,28 @@ def view_letter(token):
                           message=message,
                           is_unlocked=is_unlocked)
 
-@app.route('/api/letters/<int:delivery_id>/unlock')
+@app.route('/api/letters/<int:delivery_id>/unlock', methods=['POST'])
+@csrf_protect
 def api_check_unlock(delivery_id):
-    """检查信件是否已解锁"""
+    """检查并验证信件解锁令牌"""
     delivery = LetterDelivery.query.get_or_404(delivery_id)
+    token = request.json.get('token', '')
+
+    if delivery.unlock_token != token:
+        return jsonify({'valid': False}), 200
+
+    # 解锁成功，更新状态
+    delivery.delivery_status = 'delivered'
+    delivery.unlocked_at = datetime.now()
+    db.session.commit()
+
+    # 将解锁记录存入 session，用于后续权限验证
+    if 'unlocked_deliveries' not in session:
+        session['unlocked_deliveries'] = []
+    session['unlocked_deliveries'].append(delivery.id)
 
     return jsonify({
+        'valid': True,
         'unlocked': delivery.delivery_status in ['delivered', 'read'],
         'status': delivery.delivery_status
     })
@@ -2962,10 +3274,10 @@ def api_mark_letter_read(delivery_id):
     """标记信件为已读"""
     delivery = LetterDelivery.query.get_or_404(delivery_id)
 
-    # 检查权限
-    if delivery.recipient_user_id:
-        if 'user_id' not in session or session['user_id'] != delivery.recipient_user_id:
-            return jsonify({'error': '无权访问此信件'}), 403
+    # 使用统一的权限验证函数
+    has_access, error_response = verify_letter_access(delivery)
+    if not has_access:
+        return error_response
 
     if delivery.delivery_status != 'read':
         delivery.delivery_status = 'read'
@@ -2989,10 +3301,10 @@ def api_reply_letter(delivery_id):
         if delivery.delivery_status not in ['delivered', 'read']:
             return jsonify({'error': '信件未解锁'}), 403
 
-        # 检查权限
-        if delivery.recipient_user_id:
-            if 'user_id' not in session or session['user_id'] != delivery.recipient_user_id:
-                return jsonify({'error': '无权访问此信件'}), 403
+        # 使用统一的权限验证函数
+        has_access, error_response = verify_letter_access(delivery)
+        if not has_access:
+            return error_response
 
         data = request.get_json()
         reply_content = data.get('content', '').strip()

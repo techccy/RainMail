@@ -72,13 +72,25 @@ function initLoginPage(config) {
                     statusEl.classList.add('status-error');
                 }
             }
-        } else if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
-            turnstileWidgetId = turnstile.render('#login-turnstile', {
-                sitekey: config.turnstileSiteKey,
-                callback: function(token) {
-                    document.getElementById('cf-token-hidden').value = token;
+        } else if (config.captchaProvider === 'cloudflare') {
+            const initTurnstile = () => {
+                if (typeof turnstile !== 'undefined') {
+                    console.log('Turnstile 库已加载，开始渲染登录页 widget');
+                    turnstileWidgetId = turnstile.render('#login-turnstile', {
+                        sitekey: config.turnstileSiteKey,
+                        callback: function(token) {
+                            console.log('登录页 Turnstile 验证成功');
+                            document.getElementById('cf-token-hidden').value = token;
+                        },
+                        'error-callback': function() {
+                            console.error('登录页 Turnstile 验证失败');
+                        }
+                    });
+                } else {
+                    setTimeout(initTurnstile, 100);
                 }
-            });
+            };
+            initTurnstile();
         } else if (config.captchaProvider === 'altcha') {
             initAltcha('login-altcha-widget', 'altcha-payload');
         } else if (config.captchaProvider === 'cha') {
@@ -272,13 +284,25 @@ function initRegisterPage(config) {
                     statusEl.classList.add('status-error');
                 }
             }
-        } else if (config.captchaProvider === 'cloudflare' && typeof turnstile !== 'undefined') {
-            turnstileWidgetId = turnstile.render('#register-turnstile', {
-                sitekey: config.turnstileSiteKey,
-                callback: function(token) {
-                    document.getElementById('cf-token-hidden').value = token;
+        } else if (config.captchaProvider === 'cloudflare') {
+            const initTurnstile = () => {
+                if (typeof turnstile !== 'undefined') {
+                    console.log('Turnstile 库已加载，开始渲染注册页 widget');
+                    turnstileWidgetId = turnstile.render('#register-turnstile', {
+                        sitekey: config.turnstileSiteKey,
+                        callback: function(token) {
+                            console.log('注册页 Turnstile 验证成功');
+                            document.getElementById('cf-token-hidden').value = token;
+                        },
+                        'error-callback': function() {
+                            console.error('注册页 Turnstile 验证失败');
+                        }
+                    });
+                } else {
+                    setTimeout(initTurnstile, 100);
                 }
-            });
+            };
+            initTurnstile();
         } else if (config.captchaProvider === 'altcha') {
             initAltcha('register-altcha-widget', 'altcha-payload');
         } else if (config.captchaProvider === 'cha') {
@@ -574,22 +598,38 @@ function initAdminLoginPage(config) {
                 }
             }
         } else if (config.captchaProvider === 'cloudflare') {
-            // 等待 Turnstile 库加载完成
+            // 使用 window.onload 确保 Turnstile 库已完全加载
             const initTurnstile = () => {
                 if (typeof turnstile !== 'undefined') {
                     console.log('Turnstile 库已加载，开始渲染');
+                    const container = document.getElementById('admin-turnstile');
+                    if (!container) {
+                        console.error('Turnstile 容器元素未找到');
+                        return;
+                    }
                     turnstileWidgetId = turnstile.render('#admin-turnstile', {
                         sitekey: config.turnstileSiteKey,
                         callback: function(token) {
+                            console.log('Turnstile 验证成功，token 已获取');
                             document.getElementById('cf-turnstile-response').value = token;
+                        },
+                        'error-callback': function() {
+                            console.error('Turnstile 验证失败');
+                            showError('人机验证失败，请刷新页面');
                         }
                     });
                 } else {
-                    console.log('等待 Turnstile 库加载...');
-                    setTimeout(initTurnstile, 100);
+                    console.warn('Turnstile 库未加载，将延迟初始化');
+                    // 延迟初始化，等待库加载
+                    setTimeout(initTurnstile, 200);
                 }
             };
-            initTurnstile();
+            // 使用 window.onload 确保 script 标签加载完成
+            if (document.readyState === 'complete') {
+                initTurnstile();
+            } else {
+                window.addEventListener('load', initTurnstile);
+            }
         } else if (config.captchaProvider === 'altcha') {
             initAltcha('admin-altcha-widget', 'altcha-payload');
         }
@@ -609,8 +649,32 @@ function initAdminLoginPage(config) {
         }
     }
 
-    // 表单提交 - 使用传统表单提交，不需要拦截
-    // CAPTCHA 验证在服务器端进行
+    // 表单提交拦截 - 验证 CAPTCHA 是否完成
+    form.addEventListener('submit', function(e) {
+        let captchaResponse = '';
+
+        // 获取 CAPTCHA 响应
+        if (config.captchaProvider === 'cloudflare') {
+            captchaResponse = document.getElementById('cf-turnstile-response').value;
+        } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
+            captchaResponse = document.getElementById('recaptcha-token-hidden').value;
+        } else if (config.captchaProvider === 'cha') {
+            captchaResponse = document.getElementById('cha-answer').value;
+        } else if (config.captchaProvider === 'altcha') {
+            captchaResponse = document.getElementById('altcha-payload').value;
+        }
+
+        // 如果 CAPTCHA 未完成，阻止提交并显示错误
+        if (!captchaResponse) {
+            e.preventDefault();
+            showError('请完成人机验证');
+            return false;
+        }
+
+        // CAPTCHA 已完成，允许表单正常提交
+        console.log('CAPTCHA 验证通过，提交表单');
+    });
+
     console.log('管理员登录表单初始化完成');
 }
 
