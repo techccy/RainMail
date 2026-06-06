@@ -594,8 +594,8 @@ def ai_moderation_check(content):
         "Content-Type": "application/json"
     }
 
-    # 使用结构化 JSON 输出
-    system_prompt = """你是一个内容安全审核助手。请判断用户输入是否包含以下内容：
+    # 使用配置中的系统提示词或默认值
+    system_prompt = ai_config.get('SYSTEM_PROMPT', """你是一个内容安全审核助手。请判断用户输入是否包含以下内容：
 1. 违法、暴力、色情内容
 2. 垃圾广告或恶意链接
 3. 政治敏感或极端言论
@@ -604,7 +604,7 @@ def ai_moderation_check(content):
 请严格按照以下 JSON 格式回复，不要添加任何其他文字：
 {"decision": "REJECT"}  表示内容不安全，应该拦截
 {"decision": "PASS"}    表示内容安全，可以通过
-"""
+""")
 
     payload = {
         "model": ai_config.get('MODEL', 'deepseek-chat'),
@@ -1744,13 +1744,10 @@ def wechat_message():
 
             if event == 'subscribe':
                 # 用户关注事件
-                reply_content = """欢迎关注雨天信箱！
-
-在这里，你可以：
-• 发送匿名信件
-• 收到回复时获得通知
-
-点击下方菜单或访问 https://rainmail.dev 开始使用"""
+                app_url = app.config.get('APP_URL', 'https://rainmail.dev')
+                subscribe_reply = app.config.get('WECHAT_SUBSCRIBE_REPLY',
+                    '欢迎关注雨天信箱！\n\n在这里，你可以：\n• 发送匿名信件\n• 收到回复时获得通知\n\n点击下方菜单或访问 {app_url} 开始使用')
+                reply_content = subscribe_reply.format(app_url=app_url)
 
                 return _send_wechat_reply(to_user, from_user, reply_content, timestamp, nonce, encrypt_type, token, encoding_aes_key, app_id)
 
@@ -1765,15 +1762,17 @@ def wechat_message():
             content = msg_root.find('Content').text if msg_root.find('Content') is not None else ''
 
             # 简单自动回复
+            app_url = app.config.get('APP_URL', 'https://rainmail.dev')
             if content in ['绑定', 'bind', '登录', 'login']:
-                reply_content = """请点击链接完成账号绑定：
-
-https://rainmail.dev/user/settings
-
-绑定后即可收到信件回复通知。"""
+                bind_instruction = app.config.get('WECHAT_BIND_INSTRUCTION',
+                    '请点击链接完成账号绑定：\n\n{app_url}/user/settings\n\n绑定后即可收到信件回复通知。')
+                reply_content = bind_instruction.format(app_url=app_url)
                 return _send_wechat_reply(to_user, from_user, reply_content, timestamp, nonce, encrypt_type, token, encoding_aes_key, app_id)
             else:
-                reply_content = "感谢您的来信！请访问 https://rainmail.dev 发送信件。"
+                # 其他文本的默认回复
+                app_url = app.config.get('APP_URL', 'https://rainmail.dev')
+                default_reply = app.config.get('WECHAT_DEFAULT_REPLY', '感谢您的来信！请访问 {app_url} 发送信件。')
+                reply_content = default_reply.format(app_url=app_url)
                 return _send_wechat_reply(to_user, from_user, reply_content, timestamp, nonce, encrypt_type, token, encoding_aes_key, app_id)
 
         return 'success'
@@ -2082,7 +2081,7 @@ def admin_login():
                 reset_failed_login(username, 'email')  # 登录成功，重置失败计数
                 reset_failed_login(user_ip, 'ip')  # 重置 IP 失败计数
                 app.logger.info(f"[管理员登录] 登录成功 - 用户名: {username}, IP: {user_ip}")
-                return redirect(url_for('admin_dashboard))
+                return redirect(url_for('admin_dashboard'))
 
         # 登录失败，记录失败尝试
         app.logger.warning(f"[管理员登录] 登录失败 - 用户名: {username}, IP: {user_ip}")
@@ -2599,9 +2598,9 @@ def api_test_email():
 
         # 创建测试邮件
         msg = EmailMessage(
-            subject='雨天信箱 - 邮件配置测试',
+            subject=app.config.get('EMAIL_TEST_SUBJECT', '雨天信箱 - 邮件配置测试'),
             recipients=[test_email],
-            body='这是一封测试邮件，如果您收到此邮件，说明邮件配置正确。\n\n雨天信箱系统'
+            body=app.config.get('EMAIL_TEST_BODY', '这是一封测试邮件，如果您收到此邮件，说明邮件配置正确。\n\n雨天信箱系统')
         )
 
         # 发送邮件
@@ -3291,18 +3290,19 @@ def send_reply_notification(user, original_message, reply):
     if not app.config.get('MAIL_USERNAME'):
         return
 
+    app_name_cn = app.config.get('APP_NAME_CN', '雨天信箱')
     msg = EmailMessage(
         subject='📨 你的信收到了回复',
         recipients=[user.email],
         html=f'''
-        <h2>📨 雨天信箱</h2>
+        <h2>📨 {app_name_cn}</h2>
         <p>亲爱的 {user.username or user.email.split('@')[0]}，</p>
         <p>你之前发送的信件收到了回复！</p>
         <p><strong>原信件内容：</strong></p>
         <p>{original_message.content[:100]}...</p>
         <p><strong>回复内容：</strong></p>
         <p>{reply.reply_content if reply.reply_type == 'text' else '🤗 发送了一个拥抱'}</p>
-        <p>登录雨天信箱查看更多详情。</p>
+        <p>登录{app_name_cn}查看更多详情。</p>
         '''
     )
 
@@ -3410,11 +3410,12 @@ def send_verification_email(user):
     verify_url = f"{request.host_url}verify-email?token={user.verification_token}"
 
     # 创建邮件
+    app_name = app.config.get('APP_NAME', 'RainMail')
     msg = EmailMessage(
-        subject='验证你的 RainMail 邮箱',
+        subject=app.config.get('EMAIL_VERIFY_SUBJECT', '验证你的 RainMail 邮箱'),
         recipients=[user.email],
         html=f'''
-        <h2>欢迎加入 RainMail</h2>
+        <h2>欢迎加入 {app_name}</h2>
         <p>请点击下面的链接验证你的邮箱：</p>
         <p><a href="{verify_url}">验证邮箱</a></p>
         <p>如果链接无法点击，请复制以下 URL 到浏览器：</p>
@@ -3453,11 +3454,12 @@ def send_new_letter_notification(delivery):
     # 构建查看链接
     view_url = f"{request.host_url}letters/{delivery.unlock_token}"
 
+    app_name_cn = app.config.get('APP_NAME_CN', '雨天信箱')
     msg = EmailMessage(
-        subject='📮 远方有一封信正在等你',
+        subject=app.config.get('EMAIL_NEW_LETTER_SUBJECT', '📮 远方有一封信正在等你'),
         recipients=[recipient_email],
         html=f'''
-        <h2>🌧️ 雨天信箱</h2>
+        <h2>🌧️ {app_name_cn}</h2>
         <p>亲爱的 {recipient_name}，</p>
         <p>有一封来自远方的信正在等你。</p>
         <p>但这封信需要等待雨天才能解锁...</p>
@@ -3500,11 +3502,12 @@ def send_letter_unlocked_notification(delivery):
     # 构建查看链接
     view_url = f"{request.host_url}letters/{delivery.unlock_token}"
 
+    app_name_cn = app.config.get('APP_NAME_CN', '雨天信箱')
     msg = EmailMessage(
-        subject='🌧️ 雨来了，信已解锁',
+        subject=app.config.get('EMAIL_UNLOCKED_SUBJECT', '🌧️ 雨来了，信已解锁'),
         recipients=[recipient_email],
         html=f'''
-        <h2>🌧️ 雨天信箱</h2>
+        <h2>🌧️ {app_name_cn}</h2>
         <p>亲爱的 {recipient_name}，</p>
         <p>雨天已至，你的信件已解锁！</p>
         <p><a href="{view_url}">点击阅读信件</a></p>
@@ -3554,8 +3557,8 @@ def weather_unlock_worker():
                             notification = Notification(
                                 user_id=delivery.recipient_user_id,
                                 notification_type='letter_unlocked',
-                                title='🌧️ 信件已解锁',
-                                content='雨天已至，你有一封来自远方的信已解锁，快去查看吧！',
+                                title=app.config.get('NOTIFICATION_LETTER_UNLOCKED_TITLE', '🌧️ 信件已解锁'),
+                                content=app.config.get('NOTIFICATION_LETTER_UNLOCKED_CONTENT', '雨天已至，你有一封来自远方的信已解锁，快去查看吧！'),
                                 related_id=delivery.message_id
                             )
                             db.session.add(notification)
