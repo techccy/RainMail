@@ -68,6 +68,7 @@ def load_config_from_env():
         # 管理员配置
         'ADMIN_USERNAME': 'admin_username',
         'ADMIN_PASSWORD': 'admin_password',
+        'ADMIN_PATH_PREFIX': 'admin_path_prefix',
 
         # AI 内容审核
         'AI_MODERATION_API_KEY': 'AI_MODERATION.API_KEY',

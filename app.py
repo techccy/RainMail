@@ -338,6 +338,7 @@ LOCATION_NAME = app.config.get('LOCATION_NAME', '广州')
 # 管理员配置
 ADMIN_USERNAME = app.config.get('admin_username', 'admin')
 ADMIN_PASSWORD = app.config.get('admin_password')
+ADMIN_PATH_PREFIX = (app.config.get('admin_path_prefix', 'admin') or 'admin').strip('/')
 
 # AI 内容审核配置
 AI_MODERATION_API_KEY = app.config.get('AI_MODERATION', {}).get('API_KEY', '')
@@ -1492,6 +1493,11 @@ def get_dashboard_data(city='广州'): # 默认为广州
         'city': city # 添加城市信息
     }
 
+def admin_route(rule, **kwargs):
+    """管理员路由装饰器，自动添加配置的前缀"""
+    full_rule = f'/{ADMIN_PATH_PREFIX}/{rule.lstrip("/")}'
+    return app.route(full_rule, **kwargs)
+
 def admin_required(f):
     """管理员权限装饰器"""
     def wrapper(*args, **kwargs):
@@ -1509,6 +1515,11 @@ def login_required_user(f):
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
+
+@app.context_processor
+def inject_admin_prefix():
+    """注入管理员路径前缀到所有模板"""
+    return {'admin_path_prefix': ADMIN_PATH_PREFIX}
 
 @app.route('/')
 def index():
@@ -1994,7 +2005,7 @@ def get_altcha_challenge():
     })
 
 # 管理员路由
-@app.route('/admin', methods=['GET', 'POST'])
+@admin_route('', methods=['GET', 'POST'])
 @limiter.limit("5 per minute")  # 管理员登录速率限制
 @csrf_protect  # CSRF 保护
 def admin_login():
@@ -2119,7 +2130,7 @@ def admin_login():
 
     return render_template('admin_login.html', turnstile_site_key=site_key, recaptcha_site_key=recaptcha_site_key, captcha_provider=captcha_provider, cha_question=cha_question)
 
-@app.route('/admin/dashboard')
+@admin_route('dashboard')
 @admin_required
 def admin_dashboard():
     """管理员仪表盘"""
@@ -2131,7 +2142,7 @@ def admin_dashboard():
                          messages=messages,
                          **dashboard_data)
 
-@app.route('/admin/config/security-check')
+@admin_route('config/security-check')
 @admin_required
 def api_config_security_check():
     """检查配置安全状态（管理员权限）"""
@@ -2172,7 +2183,7 @@ def api_config_security_check():
         'issues': issues
     })
 
-@app.route('/admin/force_rain', methods=['POST'])
+@admin_route('force_rain', methods=['POST'])
 @csrf_protect
 @admin_required
 def admin_force_rain():
@@ -2190,7 +2201,7 @@ def admin_force_rain():
         'until': force_rain_until.strftime('%Y-%m-%d %H:%M:%S')
     })
 
-@app.route('/admin/delete_message/<int:message_id>', methods=['POST'])
+@admin_route('delete_message/<int:message_id>', methods=['POST'])
 @csrf_protect
 @admin_required
 def admin_delete_message(message_id):
@@ -2201,7 +2212,7 @@ def admin_delete_message(message_id):
 
     return jsonify({'success': True, 'message': '消息已删除'})
 
-@app.route('/admin/change_password', methods=['POST'])
+@admin_route('change_password', methods=['POST'])
 @csrf_protect
 @admin_required
 def admin_change_password():
@@ -2218,7 +2229,7 @@ def admin_change_password():
         'message': '密码已更新（请在config.yaml中手动更新）'
     })
 
-@app.route('/admin/logout', methods=['POST'])
+@admin_route('logout', methods=['POST'])
 @csrf_protect
 def admin_logout():
     """管理员登出"""
@@ -2226,7 +2237,7 @@ def admin_logout():
     app.logger.info('[管理员登出] 管理员已登出')
     return redirect(url_for('admin_login'))
 
-@app.route('/admin/api/users')
+@admin_route('api/users')
 @admin_required
 def admin_get_users():
     """获取所有用户列表，支持搜索和分页"""
@@ -2263,7 +2274,7 @@ def admin_get_users():
         'current_page': page
     })
 
-@app.route('/admin/api/verify_user/<int:user_id>', methods=['POST'])
+@admin_route('api/verify_user/<int:user_id>', methods=['POST'])
 @csrf_protect
 @admin_required
 def admin_verify_user(user_id):
@@ -2278,7 +2289,7 @@ def admin_verify_user(user_id):
 
     return jsonify({'success': True, 'message': f'用户 {user.email} 已验证'})
 
-@app.route('/admin/api/user/<int:user_id>')
+@admin_route('api/user/<int:user_id>')
 @admin_required
 def admin_get_user(user_id):
     """获取单个用户详情"""
@@ -2299,7 +2310,7 @@ def admin_get_user(user_id):
         }
     })
 
-@app.route('/admin/api/update_user/<int:user_id>', methods=['PUT'])
+@admin_route('api/update_user/<int:user_id>', methods=['PUT'])
 @csrf_protect
 @admin_required
 def admin_update_user(user_id):
@@ -2326,7 +2337,7 @@ def admin_update_user(user_id):
     db.session.commit()
     return jsonify({'success': True, 'message': '用户信息已更新'})
 
-@app.route('/admin/api/reset_password/<int:user_id>', methods=['POST'])
+@admin_route('api/reset_password/<int:user_id>', methods=['POST'])
 @csrf_protect
 @admin_required
 def admin_reset_password(user_id):
@@ -2345,7 +2356,7 @@ def admin_reset_password(user_id):
 
     return jsonify({'success': True, 'message': f'用户 {user.email} 的密码已重置'})
 
-@app.route('/admin/api/delete_user/<int:user_id>', methods=['POST'])
+@admin_route('api/delete_user/<int:user_id>', methods=['POST'])
 @csrf_protect
 @admin_required
 def admin_delete_user(user_id):
@@ -2368,7 +2379,7 @@ def admin_delete_user(user_id):
 
     return jsonify({'success': True, 'message': '用户已删除'})
 
-@app.route('/admin/settings')
+@admin_route('settings')
 @admin_required
 def admin_settings():
     """管理员设置页面"""
@@ -2393,7 +2404,7 @@ def mask_sensitive_value(key, value):
                 return '****'
     return value
 
-@app.route('/admin/api/config')
+@admin_route('api/config')
 @admin_required
 def api_get_config():
     """获取配置（敏感字段脱敏）"""
@@ -2463,7 +2474,7 @@ def api_get_config():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/admin/api/config', methods=['PUT'])
+@admin_route('api/config', methods=['PUT'])
 @csrf_protect
 @admin_required
 def api_update_config():
@@ -2474,7 +2485,7 @@ def api_update_config():
         'message': '配置现在从环境变量（.env 文件）加载，无法通过 API 修改。请编辑 .env 文件来修改配置。'
     }), 400
 
-@app.route('/admin/api/config/export')
+@admin_route('api/config/export')
 @admin_required
 def api_export_config():
     """导出当前配置为 JSON 文件（来自环境变量）"""
@@ -2488,7 +2499,7 @@ def api_export_config():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/admin/api/config/import', methods=['POST'])
+@admin_route('api/config/import', methods=['POST'])
 @admin_required
 @csrf_protect
 def api_import_config():
@@ -2499,7 +2510,7 @@ def api_import_config():
         'message': '配置现在从环境变量（.env 文件）加载，无法通过 API 导入。请编辑 .env 文件来修改配置。'
     }), 400
 
-@app.route('/admin/api/config/test-email', methods=['POST'])
+@admin_route('api/config/test-email', methods=['POST'])
 @csrf_protect
 @admin_required
 def api_test_email():

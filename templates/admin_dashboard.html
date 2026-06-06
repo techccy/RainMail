@@ -6,6 +6,9 @@
     <title>管理后台 - 雨天信箱</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="{{ url_for('static', filename='js/csrf.js') }}"></script>
+    <script>
+    window.ADMIN_PATH_PREFIX = '{{ admin_path_prefix }}';
+    </script>
     <style>
         .admin-dashboard {
             max-width: 1200px;
@@ -329,7 +332,7 @@
             currentPage = page;
             currentSearch = search;
             try {
-                const url = `/admin/api/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(search)}`;
+                const url = `/${window.ADMIN_PATH_PREFIX}/api/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(search)}`;
                 const response = await fetch(url);
                 const data = await response.json();
                 const tbody = document.getElementById('users-table-body');
@@ -432,7 +435,7 @@
             };
 
             try {
-                const response = await fetch(`/admin/api/update_user/${userId}`, {
+                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/update_user/${userId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(updateData)
@@ -484,7 +487,7 @@
             }
 
             try {
-                const response = await fetch(`/admin/api/reset_password/${userId}`, {
+                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/reset_password/${userId}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({password: newPassword})
@@ -504,7 +507,7 @@
             if (!confirm(`确定要删除用户 ${email} 吗？\n\n此操作将删除该用户的所有数据，包括：\n- 发送的消息\n- 信件投递记录\n- 通知记录\n- 微信绑定\n\n此操作不可恢复！`)) return;
 
             try {
-                const response = await fetch(`/admin/api/delete_user/${userId}`, {
+                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/delete_user/${userId}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'}
                 });
@@ -524,7 +527,7 @@
             if (!confirm(`确定要验证用户 ${email} 吗？`)) return;
 
             try {
-                const response = await fetch(`/admin/api/verify_user/${userId}`, {
+                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/verify_user/${userId}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'}
                 });
@@ -542,7 +545,7 @@
 
         async function forceRain() {
             try {
-                const response = await fetch('/admin/force_rain', {
+                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/force_rain`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -560,7 +563,7 @@
             if (!confirm('确定要删除这条消息吗？')) return;
             
             try {
-                const response = await fetch(`/admin/delete_message/${messageId}`, {
+                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/delete_message/${messageId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -585,7 +588,7 @@
                 formData.append('new_password', newPassword);
                 formData.append('confirm_password', confirmPassword);
                 
-                fetch('/admin/change_password', {
+                fetch(`/${window.ADMIN_PATH_PREFIX}/change_password`, {
                     method: 'POST',
                     body: formData
                 })

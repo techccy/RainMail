@@ -53,7 +53,7 @@ function initPasswordToggle() {
 async function loadConfig() {
     showLoading(true);
     try {
-        const response = await fetch('/admin/api/config');
+        const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/config`);
         const data = await response.json();
 
         if (data.success) {
@@ -188,7 +188,7 @@ async function saveConfig() {
     const formData = collectFormData();
 
     try {
-        const response = await fetchWithCSRF('/admin/api/config', {
+        const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/config`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -225,7 +225,7 @@ function resetConfig() {
 async function exportConfig() {
     showLoading(true);
     try {
-        const response = await fetch('/admin/api/config/export');
+        const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/config/export`);
 
         if (response.ok) {
             const blob = await response.blob();
@@ -261,7 +261,7 @@ async function importConfig() {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetchWithCSRF('/admin/api/config/import', {
+        const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/config/import`, {
             method: 'POST',
             body: formData
         });
@@ -295,7 +295,7 @@ async function testEmail() {
     showLoading(true);
 
     try {
-        const response = await fetchWithCSRF('/admin/api/config/test-email', {
+        const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/config/test-email`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
