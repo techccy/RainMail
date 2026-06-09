@@ -658,7 +658,7 @@ def ai_moderation_check(content):
     except Exception as e:
         app.logger.error(f"AI 审计请求异常: {e}")
         # AI 服务异常时，默认放行以避免影响正常使用
-        return False
+        return True
 
 # 定义消息模型
 class Message(db.Model):

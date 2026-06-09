@@ -160,44 +160,19 @@ class RainMailApp {
                     emailInput.value = this.userEmail;
                     emailInput.readOnly = true;
                     emailInput.placeholder = `使用登录邮箱: ${this.userEmail}`;
-                    // 取消强制公开
-                    publicCheckbox.disabled = false;
                 } else {
                     // 未登录用户，显示邮箱输入框
                     emailContainer.style.display = 'block';
                     emailInput.readOnly = false;
                     emailInput.placeholder = '请输入您的邮箱地址';
                     emailInput.value = '';
-                    // 取消强制公开
-                    publicCheckbox.disabled = false;
                 }
             } else {
                 // 取消勾选邮件通知
                 emailContainer.style.display = 'none';
                 emailInput.value = '';
-
-                if (!this.isLoggedIn) {
-                    // 未登录用户取消邮件通知，强制勾选公开
-                    publicCheckbox.checked = true;
-                    publicCheckbox.disabled = true;
-                }
             }
         });
-
-        // "被回复后公开"取消事件
-        publicCheckbox.addEventListener('change', (e) => {
-            if (!e.target.checked && !this.isLoggedIn && !emailCheckbox.checked) {
-                // 未登录用户试图取消公开且未勾选邮件通知
-                alert('登录或填写邮箱');
-                e.target.checked = true;
-            }
-        });
-
-        // 初始化：如果未登录且未勾选邮件通知，强制勾选公开
-        if (!this.isLoggedIn && !emailCheckbox.checked) {
-            publicCheckbox.checked = true;
-            publicCheckbox.disabled = true;
-        }
     }
 
     updateCharCount(textarea) {
