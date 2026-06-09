@@ -18,9 +18,16 @@
 - **消息分类**：支持普通消息、私密投递、情感信件三种类型
 - **消息互动**：点赞、拥抱、回复等社交互动功能
 
+### 消息分享
+- **公开分享**：每条消息生成唯一的 16 位标识符
+- **分享链接**：通过 `/m/<unique_id>` 公开访问消息详情
+- **二维码**：自动生成消息二维码，便于移动端分享
+- **社交传播**：支持将秘密分享到社交媒体
+
 ### 管理功能
 - **用户管理**：管理员可编辑用户信息、重置密码、删除用户
 - **验证管理**：管理员可批准用户邮箱验证
+- **僵尸用户清理**：清理未验证的僵尸用户
 - **消息审核**：删除违规消息
 - **系统监控**：统计信息、CPU温度、降雨概率等
 - **强制降雨**：可手动开启60分钟雨天模式
@@ -28,9 +35,10 @@
 ### 安全特性
 - **XSS防护**：输入内容过滤和转义
 - **SQL注入防护**：参数化查询
-- **AI内容审查**：集成AI智能内容审核
-- **多种验证**：支持Cloudflare Turnstile、Altcha、自定义数学验证
+- **AI内容审查**：集成AI智能内容审核，支持消息和回复内容审核
+- **多种验证**：支持Cloudflare Turnstile、Altcha、自定义数学验证，可选禁用
 - **密码安全**：哈希存储，邮箱验证机制
+- **安全文档**：详细的 Cloudflare WAF 防护配置（参见 [Cloudflare.md](Cloudflare.md)）
 
 ## 快速开始（docker）
 
@@ -103,76 +111,65 @@ iptables -I DOCKER-USER -i br-8a9b2c3d4e5f -d 192.168.1.0/24 -j DROP
    - 配置 `ALTCHA_DIFFICULTY`（默认为3，数值越大计算越难）
    - 生成密钥示例：`python -c "import secrets; print(secrets.token_urlsafe(32))"`
 
-### 基础配置
+### 环境变量配置
 
-配置文件支持 `config.json`（优先）和 `config.yaml` 两种格式。
-
-复制模板并修改配置文件：
+使用 `.env` 文件进行配置，复制模板并填入实际值：
 
 ```bash
-cp config_model.yaml config.yaml
-# 或者转换为 JSON 格式
-cp config_model.yaml config.json
+cp .env.example .env
+# 编辑 .env 文件，填入实际配置值
+nano .env
 ```
 
-**配置文件示例：**
+**关键环境变量说明：**
 
-```yaml
-# 和风天气API配置（支持1-4组轮换）
-HEFENG_HOST1: "a"  # 和风天气API主机地址1
-HEFENG_HOST2: "b"  # 和风天气API主机地址2（可选）
-HEFENG_HOST3: "c"  # 和风天气API主机地址3（可选）
-HEFENG_HOST4: "d"  # 和风天气API主机地址4（可选）
-HEFENG_KEY1: "APIKEY1"  # 和风天气API密钥1
-HEFENG_KEY2: "APIKEY2"  # 和风天气API密钥2（可选）
-HEFENG_KEY3: "APIKEY3"  # 和风天气API密钥3（可选）
-HEFENG_KEY4: "APIKEY4"  # 和风天气API密钥4（可选）
+```bash
+# Flask 配置（必需）
+SECRET_KEY=your-secret-key-here           # Flask会话密钥，可通过 openssl rand -hex 32 生成
 
-times: 60  # 请求频率，单位为秒
+# 邮件配置
+MAIL_SERVER=smtp.gmail.com                # SMTP服务器地址
+MAIL_PORT=587                             # SMTP端口（587=TLS, 465=SSL）
+MAIL_USE_TLS=true                         # 是否使用TLS
+MAIL_USERNAME=your-email@gmail.com        # SMTP用户名
+MAIL_PASSWORD=your-app-password           # SMTP密码（Gmail需使用应用专用密码）
+MAIL_DEFAULT_SENDER=RainMail <noreply@rainmail.dev>  # 默认发件人
 
 # 人机验证配置
-TURNSTILE_SECRET_KEY: "0x"  # Cloudflare Turnstile Secret Key
-TURNSTILE_SITE_KEY: "0x"  # Cloudflare Turnstile Site Key
-CAPTCHA_PROVIDER: "altcha"  # 验证方式: cloudflare, cha, altcha
-ALTCHA_HMAC_KEY: "your-hmac-key-here"  # Altcha HMAC 密钥
-ALTCHA_DIFFICULTY: 1  # Altcha 难度（1-10）
+CAPTCHA_PROVIDER=altcha                   # 验证方式: altcha, cloudflare, recaptcha, cha, none
+TURNSTILE_SITE_KEY=your-site-key         # Cloudflare Turnstile Site Key
+TURNSTILE_SECRET_KEY=your-secret-key     # Cloudflare Turnstile Secret Key
+ALTCHA_HMAC_KEY=your-hmac-key             # Altcha HMAC 密钥
+ALTCHA_DIFFICULTY=3                       # Altcha 难度（1-5）
+
+# 和风天气 API 配置（支持多组轮换）
+HEFENG_HOST1=your-hefeng-host1           # 和风天气API主机地址1
+HEFENG_KEY1=your-api-key1                # 和风天气API密钥1
+HEFENG_HOST2=your-hefeng-host2            # 备用API（可选）
+HEFENG_KEY2=your-api-key2                # 备用API密钥（可选）
 
 # 位置配置
-LOCATION_NAME: "广州"  # 服务器所在地
-LOCATION_ID: 101280101  # 和风天气位置ID
+LOCATION_ID=101280101                    # 和风天气位置ID（101280101=广州）
+LOCATION_NAME=广州                        # 城市名称
 
 # 管理员配置
-admin_username: techccy  # 管理员登录账号
-admin_password: ""  # 管理员登录密码
-force_rain_duration: 10  # 强制降雨持续时间（分钟）
-totp_decrypt_password: "password"  # TOTP密钥加密密码
-
-# 邮件配置（情感投递系统）
-MAIL_SERVER: "smtp.gmail.com"  # SMTP服务器地址
-MAIL_PORT: 587  # SMTP端口
-MAIL_USE_TLS: true  # 是否使用TLS
-MAIL_USERNAME: "your-email@gmail.com"  # SMTP用户名
-MAIL_PASSWORD: "your-app-password"  # SMTP密码
-MAIL_DEFAULT_SENDER: "RainMail <noreply@rainmail.dev>"  # 默认发件人
-VERIFY_DURATION_MINUTES: 15  # 邮箱验证码有效期（分钟）
+ADMIN_PATH_PREFIX=admin                  # 管理员路径前缀（建议修改为不易猜测的字符串）
+ADMIN_USERNAME=admin                     # 管理员用户名
+ADMIN_PASSWORD=your-scrypt-hash-here     # 管理员密码（必须是哈希格式，不能是明文）
+# 生成哈希方法：python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your-password'))"
 
 # AI 内容审查配置
-AI_MODERATION:
-  API_KEY: "YOUR_API_KEY"  # AI审核API密钥
-  BASE_URL: "YOUR_BASE_URL"  # AI审核API base url
-  MODEL: "MODEL"  # AI审核模型（推荐使用 deepseek 等国内小型模型）
-  SYSTEM_PROMPT: >
-    你是一个内容审查助手。请分析用户提交的内容是否包含暴力、色情、政治敏感或人身攻击。
-    如果内容违规，请只返回 "True"；
-    如果内容安全，请只返回 "False"。
-    不要返回任何其他文字。
+AI_MODERATION_API_KEY=your-ai-api-key    # AI服务API密钥
+AI_MODERATION_BASE_URL=https://integrate.api.nvidia.com/v1  # AI服务基础URL
+AI_MODERATION_MODEL=deepseek-ai/deepseek-r1-distill-llama-8b  # AI模型名称
 
-# 微信配置（预留功能，暂未实现）
-WECHAT_APP_ID: ""  # 微信公众号 AppID
-WECHAT_APP_SECRET: ""  # 微信公众号 AppSecret
+# 其他配置
+TIMES=3600                               # 天气缓存时间（秒）
+FORCE_RAIN_DURATION=10                   # 强制降雨持续时间（分钟）
+VERIFY_DURATION_MINUTES=15               # 邮箱验证码有效期（分钟）
 ```
 
-2. **启动应用**
+**2. 启动应用**
 ```bash
 docker compose up -d --build
 
@@ -186,48 +183,50 @@ docker compose up -d --build
 ```
 RainMail/
 ├── .gitignore
-├── Dockerfile                # Docker 部署配置
-├── LICENSE                   # 许可证文件
-├── README.md                 # 项目文档
-├── app.py                    # Flask 主应用文件
-├── config_model.yaml         # 配置文件模板
-├── config.yaml               # YAML 配置文件
-├── config.json               # JSON 配置文件（优先）
-├── install.sh                # 安装脚本
-├── requirements.txt          # Python 依赖列表
-├── run.py                    # 启动脚本
-├── curl.py                   # 天气检查脚本
-├── test_app.py               # 功能测试文件
-├── totp_secret.json          # TOTP 密钥存储
-├── migrations/               # 数据库迁移文件
+├── .env.example               # 环境变量配置模板
+├── Dockerfile                 # Docker 部署配置
+├── LICENSE                    # 许可证文件
+├── README.md                  # 项目文档
+├── Cloudflare.md              # Cloudflare 安全防护配置文档
+├── app.py                     # Flask 主应用文件
+├── config_loader.py           # 环境变量配置加载器
+├── install.sh                 # 安装脚本
+├── requirements.txt            # Python 依赖列表
+├── run.py                     # 启动脚本
+├── curl.py                    # 天气检查脚本
+├── test_app.py                # 功能测试文件
+├── totp_secret.json           # TOTP 密钥存储
+├── migrations/                # 数据库迁移文件
 │   └── add_message_columns.sql
-├── instance/                 # 数据库目录
-│   └── rainmail.db           # SQLite 数据库
-├── resources/                # 静态资源
-│   └── all.csv               # 敏感词库
-├── static/                   # 前端静态资源
-│   ├── techccy.png           # Logo
+├── instance/                  # 数据库目录
+│   └── rainmail.db            # SQLite 数据库
+├── resources/                 # 静态资源
+│   └── all.csv                # 敏感词库
+├── static/                    # 前端静态资源
+│   ├── techccy.png            # Logo
 │   ├── css/
-│   │   └── style.css         # 样式表
+│   │   └── style.css          # 样式表
 │   └── js/
-│       ├── app.js            # 前端逻辑
+│       ├── app.js             # 前端逻辑
 │       ├── html2canvas.min.js # 截图库
-│       └── qrcode.min.js     # 二维码生成
-└── templates/                # HTML 模板
-    ├── index.html            # 主页
-    ├── admin_dashboard.html  # 管理员面板
-    ├── admin_login.html      # 管理员登录
-    ├── admin_settings.html   # 管理员设置
-    ├── auth/                 # 用户认证
-    │   ├── login.html        # 登录页
-    │   └── register.html     # 注册页
-    ├── user/                 # 用户功能
-    │   ├── inbox.html        # 收件箱
-    │   ├── letter.html       # 情感投递页
-    │   ├── settings.html     # 用户设置
-    │   ├── profile.html      # 用户资料
-    │   └── sent.html         # 已发送
-    ├── privacy_policy.html   # 隐私条款（英文）
+│       └── qrcode.min.js      # 二维码生成
+└── templates/                 # HTML 模板
+    ├── index.html             # 主页
+    ├── admin_dashboard.html   # 管理员面板
+    ├── admin_login.html       # 管理员登录
+    ├── admin_settings.html    # 管理员设置
+    ├── auth/                  # 用户认证
+    │   ├── login.html         # 登录页
+    │   └── register.html      # 注册页
+    ├── user/                  # 用户功能
+    │   ├── inbox.html         # 收件箱
+    │   ├── letter.html        # 情感投递页
+    │   ├── settings.html      # 用户设置
+    │   ├── profile.html       # 用户资料
+    │   └── sent.html          # 已发送
+    ├── public/                # 公开页面
+    │   └── message.html       # 公开消息详情页
+    ├── privacy_policy.html    # 隐私条款（英文）
     └── privacy_policy_cn.html # 隐私条款（中文）
 ```
 
@@ -292,6 +291,11 @@ Body: {"content": "消息内容", "message_type": "normal"}
 POST /api/messages/<id>/like    # 点赞消息
 POST /api/messages/<id>/hug     # 拥抱消息
 POST /api/messages/<id>/reply   # 回复消息
+```
+
+### 公开消息
+```
+GET /m/<unique_id>              # 公开访问消息详情（通过唯一标识符）
 ```
 
 ### 用户认证
