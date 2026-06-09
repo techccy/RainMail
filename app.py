@@ -87,13 +87,10 @@ app.jinja_env.globals['csrf_token'] = lambda: session.get('csrf_token', '')
 
 CSP_POLICY = app.config.get('CSP_POLICY',
     "default-src 'self'; "
-    "script-src 'self' "
-    "'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com "
-    "https://www.google.com https://www.gstatic.com https://recaptcha.net; "
+    "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://www.google.com https://www.gstatic.com https://recaptcha.net; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: https:; "
-    "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com "
-    "https://www.google.com https://recaptcha.net; "
+    "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://www.google.com https://recaptcha.net; "
     "font-src 'self'; "
     "frame-src 'self' https://challenges.cloudflare.com https://www.google.com; "
     "object-src 'none'; "
