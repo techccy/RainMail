@@ -433,10 +433,10 @@ function initRegisterPage(config) {
             console.log('注册响应数据:', data);
 
             if (data.success) {
-                showSuccess(data.message + '，即将跳转到登录页面...');
+                showSuccess(data.message + ' 请在1小时内完成邮箱验证，即将跳转...');
                 setTimeout(() => {
                     window.location.href = '/auth/login';
-                }, 3000);
+                }, 4000);
             } else {
                 showError(data.error || '注册失败');
             }

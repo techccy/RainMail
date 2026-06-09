@@ -55,7 +55,15 @@ class RainMailApp {
     }
 
     detectCaptchaProvider() {
-        // 检测页面使用的验证提供商
+        // 优先从 body 的 data-captcha-provider 属性读取后端配置
+        const bodyProvider = document.body.dataset.captchaProvider;
+        if (bodyProvider) {
+            this.captchaProvider = bodyProvider;
+            console.log(`Using CAPTCHA provider from config: ${bodyProvider}`);
+            return;
+        }
+
+        // 回退到 DOM 元素检测（兼容旧版本）
         const chaContainer = document.querySelector('.cha-container');
         const turnstileWidget = document.querySelector('.cf-turnstile');
         const altchaContainer = document.querySelector('.altcha-container');
@@ -325,6 +333,9 @@ class RainMailApp {
                 alert('人机验证未完成或已过期，请点击刷新验证按钮');
                 return;
             }
+        } else if (this.captchaProvider === 'none') {
+            // 跳过人机验证
+            console.log('CAPTCHA disabled, skipping validation');
         }
 
         this.showProcessingOverlay();
@@ -350,6 +361,9 @@ class RainMailApp {
                 requestBody.cha_answer = captchaResponse;
             } else if (this.captchaProvider === 'altcha') {
                 requestBody.altcha_payload = captchaResponse;
+            } else if (this.captchaProvider === 'none') {
+                // 无需添加验证字段
+                console.log('CAPTCHA disabled, no token needed');
             }
 
             const response = await fetchWithCSRF('/api/messages', {
@@ -720,6 +734,7 @@ class RainMailApp {
                     <!DOCTYPE html>
                     <html>
                     <head>
+                        <meta charset="UTF-8">
                         <meta name="viewport" content="width=device-width, initial-scale=1.0">
                         <title>保存存票</title>
                         <style>

@@ -1118,3 +1118,21 @@ body.has-user-bar .container {
 .rainy-mode .refresh-captcha-btn:hover {
     background: #ff9800;
 }
+
+/* 验证时间提示样式 */
+.info-notice {
+    background: rgba(52, 152, 219, 0.15);
+    border: 1px solid rgba(52, 152, 219, 0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: #3498db;
+}
+
+.notice-icon {
+    font-size: 18px;
+}

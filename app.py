@@ -3346,7 +3346,10 @@ def send_verification_email(user):
         <p><a href="{verify_url}">验证邮箱</a></p>
         <p>如果链接无法点击，请复制以下 URL 到浏览器：</p>
         <p>{verify_url}</p>
-        <p>此链接将在 24 小时后失效。</p>
+        <p style="color: #e74c3c;"><strong>⚠️ 重要提示：</strong></p>
+        <p style="color: #e74c3c;">请在注册后 <strong>1小时内</strong> 完成验证，否则您的账户将被自动删除以防止垃圾注册。</p>
+        <hr>
+        <p style="font-size: 12px; color: #7f8c8d;">此链接永久有效，验证后即可正常使用。</p>
         '''
     )
 
@@ -3558,6 +3561,33 @@ def email_queue_worker():
         # 等待1分钟
         time.sleep(60)
 
+def unverified_users_cleanup_worker():
+    """未验证用户清理任务 - 每10分钟运行一次"""
+    app.logger.info("[UnverifiedCleanupWorker] 启动未验证用户清理")
+
+    cleanup_minutes = app.config.get('UNVERIFIED_USER_CLEANUP_MINUTES', 60)
+
+    while True:
+        try:
+            expiry_threshold = datetime.now() - timedelta(minutes=cleanup_minutes)
+
+            unverified_users = User.query.filter(
+                User.is_verified == False,
+                User.created_at < expiry_threshold
+            ).all()
+
+            if unverified_users:
+                for user in unverified_users:
+                    app.logger.info(f"[UnverifiedCleanupWorker] 删除未验证用户: {user.email}")
+                    db.session.delete(user)
+                db.session.commit()
+                app.logger.info(f"[UnverifiedCleanupWorker] 清理了 {len(unverified_users)} 个未验证用户")
+        except Exception as e:
+            app.logger.error(f"[UnverifiedCleanupWorker] 清理任务出错: {e}")
+            db.session.rollback()
+
+        time.sleep(600)
+
 def start_background_workers():
     """启动后台任务"""
     # 启动天气解锁任务
@@ -3569,6 +3599,11 @@ def start_background_workers():
     email_thread = threading.Thread(target=email_queue_worker, daemon=True)
     email_thread.start()
     app.logger.info("[BackgroundWorkers] 邮件队列任务已启动")
+
+    # 启动未验证用户清理任务
+    cleanup_thread = threading.Thread(target=unverified_users_cleanup_worker, daemon=True)
+    cleanup_thread.start()
+    app.logger.info("[BackgroundWorkers] 未验证用户清理任务已启动")
 
 if __name__ == '__main__':
     # 启动后台任务
