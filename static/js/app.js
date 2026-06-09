@@ -708,6 +708,25 @@ class RainMailApp {
             const clonedCard = cardElement.cloneNode(true);
             tempContainer.appendChild(clonedCard);
 
+            // 在克隆的卡片中重新生成二维码（canvas内容不会被cloneNode复制）
+            const clonedQrContainer = clonedCard.querySelector('#qr-code-container');
+            if (clonedQrContainer) {
+                // 获取原始卡片中的分享链接
+                const shareUrl = cardElement.querySelector('#card-share-url')?.href || '';
+                if (shareUrl) {
+                    clonedQrContainer.innerHTML = ''; // 清空
+                    // 在克隆的容器中重新生成二维码
+                    new QRCode(clonedQrContainer, {
+                        text: shareUrl,
+                        width: 128,
+                        height: 128,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                }
+            }
+
             // 添加打印样式
             clonedCard.className = clonedCard.className + ' print-version';
 
