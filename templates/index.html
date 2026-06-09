@@ -21,10 +21,10 @@
     </div>
 
     <!-- 用户信息栏 -->
-    <div class="user-bar" id="user-bar" style="display: none;">
+    <div class="user-bar hidden" id="user-bar">
         <div class="user-info">
             <span class="user-greeting">你好，<span id="user-name">用户</span></span>
-            <span class="notification-badge" id="notification-badge" style="display: none;">
+            <span class="notification-badge hidden" id="notification-badge">
                 <span id="notification-count">0</span>
             </span>
         </div>
@@ -42,7 +42,7 @@
             <div class="status-indicator status-sunny" id="current-weather">🌤️ 晴天模式</div>
         </header>
             <!-- 新增：天气元信息显示区 -->
-        <div id="weather-meta" style="text-align: center; margin: 11px 0; font-size: 15px; color: #555;">
+        <div id="weather-meta" class="weather-meta">
         📍 <span id="weather-location">加载中...</span> | 
         🌦️ <span id="weather-text">--</span> |
         🕒 <span id="next-refresh">--</span> 分钟后刷新
@@ -53,7 +53,7 @@
             <div class="message-form">
                 <h2>✉️ 写下你的想法</h2>
                 <!-- 蜜罐字段 - 对浏览器隐藏，脚本会填充 -->
-                <div style="position: absolute; left: -10000px; top: -10000px;">
+                <div class="honeypot-field">
                     <input type="text" id="website-hp" name="website" tabindex="-1" autocomplete="off">
                 </div>
                 <div class="form-group">
@@ -82,13 +82,13 @@
                         </div>
 
                         <!-- 私发选项 -->
-                        <div id="private-options" class="private-options" style="display: none;">
+                        <div id="private-options" class="private-options hidden">
                             <h5>回复通知方式</h5>
                             <label class="checkbox-option">
                                 <input type="checkbox" class="email-notification-checkbox" name="reply-notification" value="email">
                                 <span>收到回复时邮件通知我</span>
                             </label>
-                            <div class="sender-email-container" style="display: none;">
+                            <div class="sender-email-container hidden">
                                 <input type="email" class="sender-email-input" placeholder="请输入您的邮箱地址">
                                 <small>我们将通过此邮箱通知您收到回复</small>
                             </div>
@@ -99,8 +99,8 @@
                         </div>
                     </div>
 
-                    <div class="privacy-statement" style="margin: 10px 0; font-size: 0.9rem; color: #666; text-align: left;">
-                        提交即表示同意我们的<a href="/privacy-policy-cn" target="_blank" style="color: #0d6efd; text-decoration: underline;">隐私条款</a>
+                    <div class="privacy-statement">
+                        提交即表示同意我们的<a href="/privacy-policy-cn" target="_blank" class="privacy-link">隐私条款</a>
                     </div>
                     {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
                         <div id="sunny-turnstile" class="cf-turnstile"></div>
@@ -111,7 +111,7 @@
                             <div id="recaptcha-v3-status" class="captcha-status">
                                 <span class="status-icon">⏳</span> 正在进行人机验证...
                             </div>
-                            <button type="button" id="refresh-captcha-btn" class="refresh-captcha-btn" style="display: none;">
+                            <button type="button" id="refresh-captcha-btn" class="refresh-captcha-btn hidden">
                                 🔄 刷新验证
                             </button>
                         </div>
@@ -137,7 +137,7 @@
         </div>
 
         <!-- 雨天界面 -->
-        <div id="rainy-interface" style="display: none;">
+        <div id="rainy-interface" class="hidden">
             <div class="message-form">
                 <h2>🌧️ 雨中分享</h2>
                 <div class="form-group">
@@ -166,13 +166,13 @@
                         </div>
 
                         <!-- 私发选项 -->
-                        <div id="rainy-private-options" class="private-options" style="display: none;">
+                        <div id="rainy-private-options" class="private-options hidden">
                             <h5>回复通知方式</h5>
                             <label class="checkbox-option">
                                 <input type="checkbox" class="email-notification-checkbox" name="rainy-reply-notification" value="email">
                                 <span>收到回复时邮件通知我</span>
                             </label>
-                            <div class="sender-email-container" style="display: none;">
+                            <div class="sender-email-container hidden">
                                 <input type="email" class="sender-email-input" placeholder="请输入您的邮箱地址">
                                 <small>我们将通过此邮箱通知您收到回复</small>
                             </div>
@@ -183,8 +183,8 @@
                         </div>
                     </div>
 
-                    <div class="privacy-statement" style="margin: 10px 0; font-size: 0.9rem; color: #666; text-align: left;">
-                        提交即表示同意我们的<a href="/privacy-policy-cn" target="_blank" style="color: #0d6efd; text-decoration: underline;">隐私条款</a>
+                    <div class="privacy-statement">
+                        提交即表示同意我们的<a href="/privacy-policy-cn" target="_blank" class="privacy-link">隐私条款</a>
                     </div>
                     {% if captcha_provider == 'none' %}
                     <!-- 人机验证已禁用 -->
@@ -197,7 +197,7 @@
                             <div id="recaptcha-v3-status" class="captcha-status">
                                 <span class="status-icon">⏳</span> 正在进行人机验证...
                             </div>
-                            <button type="button" id="refresh-captcha-btn" class="refresh-captcha-btn" style="display: none;">
+                            <button type="button" id="refresh-captcha-btn" class="refresh-captcha-btn hidden">
                                 🔄 刷新验证
                             </button>
                         </div>
@@ -211,7 +211,7 @@
                             <div id="rainy-altcha-widget"></div>
                             <input type="hidden" id="rainy-altcha-payload" value="">
                         </div>
-                        <div id="rainy-cha-container" class="cha-container" style="display: none;">
+                        <div id="rainy-cha-container" class="cha-container hidden">
                             <div class="cha-question" id="rainy-cha-question">加载中...</div>
                             <input type="text" id="rainy-cha-answer" placeholder="请输入答案" required>
                         </div>
@@ -229,18 +229,18 @@
         </div>
     </div>
         <!-- 新增：提交处理中状态界面 -->
-    <div id="processing-overlay" class="modal" style="display: none; z-index: 1001;">
-        <div class="modal-content" style="width: 300px; text-align: center; padding: 30px;">
-            <h3 style="color: yellow;">正在处理您的想法...</h3>
-            <p id="processing-text" style="color: yellow;">正在加密...</p>
-            <div class="progress-bar-container" style="width: 100%; background-color: #f0f0f0; border-radius: 10px; margin: 20px 0;">
-                <div id="processing-progress-bar" style="width: 0%; height: 20px; background-color: #3498db; border-radius: 10px; transition: width 0.1s linear;"></div>
+    <div id="processing-overlay" class="processing-overlay">
+        <div class="processing-content">
+            <h3>正在处理您的想法...</h3>
+            <p id="processing-text">正在加密...</p>
+            <div class="progress-bar-container">
+                <div id="processing-progress-bar" class="processing-progress-bar" style="width: 0%;"></div>
             </div>
-            <p id="processing-time-remaining" style="color: yellow;">预计剩余时间: 8 秒</p>
+            <p id="processing-time-remaining">预计剩余时间: 8 秒</p>
         </div>
     </div>
     <!-- 成功模态框 -->
-    <div id="success-modal" class="modal" style="display: none;">
+    <div id="success-modal" class="modal hidden">
         <div class="modal-content">
             <div id="share-card" class="share-card">
                 <h3>📨 存票凭证</h3>

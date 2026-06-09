@@ -17,10 +17,12 @@ function showUserBar(user) {
     const body = document.body;
 
     if (userBar) {
-        userBar.style.display = 'flex';
+        userBar.classList.remove('hidden');
+        userBar.style.display = 'flex'; // 需要使用 flex 布局
         document.getElementById('user-name').textContent = user.username || user.email.split('@')[0];
     }
     if (authEntry) {
+        authEntry.classList.add('hidden');
         authEntry.style.display = 'none';
     }
     body.classList.add('has-user-bar');
@@ -61,7 +63,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     statusEl.innerHTML = '<span class="status-icon">⏳</span> 正在刷新验证...';
                     statusEl.classList.remove('status-error');
                 }
-                if (refreshBtn) refreshBtn.style.display = 'none';
+                if (refreshBtn) {
+                    refreshBtn.classList.add('hidden');
+                    refreshBtn.style.display = 'none';
+                }
 
                 grecaptcha.execute(recaptchaSiteKey, {action: 'submit'})
                     .then(function(token) {
@@ -77,7 +82,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证失败，点击刷新重试';
                             statusEl.classList.add('status-error');
                         }
-                        if (refreshBtn) refreshBtn.style.display = 'inline-block';
+                        if (refreshBtn) {
+                            refreshBtn.classList.remove('hidden');
+                            refreshBtn.style.display = 'inline-block';
+                        }
                     });
             }
         };
@@ -98,7 +106,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证加载失败';
                             statusEl.classList.add('status-error');
                         }
-                        if (refreshBtn) refreshBtn.style.display = 'inline-block';
+                        if (refreshBtn) {
+                            refreshBtn.classList.remove('hidden');
+                            refreshBtn.style.display = 'inline-block';
+                        }
                     });
             });
         } else {

@@ -87,16 +87,20 @@ app.jinja_env.globals['csrf_token'] = lambda: session.get('csrf_token', '')
 
 CSP_POLICY = app.config.get('CSP_POLICY',
     "default-src 'self'; "
-    "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; "
+    "script-src 'self' "
+    "'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com "
+    "https://www.google.com https://www.gstatic.com https://recaptcha.net; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: https:; "
-    "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; "
+    "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com "
+    "https://www.google.com https://recaptcha.net; "
     "font-src 'self'; "
-    "frame-src 'self' https://challenges.cloudflare.com; "
+    "frame-src 'self' https://challenges.cloudflare.com https://www.google.com; "
     "object-src 'none'; "
     "base-uri 'self'; "
     "form-action 'self'; "
-    "frame-ancestors 'none';"
+    "frame-ancestors 'none'; "
+    "upgrade-insecure-requests;"
 )
 
 @app.after_request
@@ -1016,6 +1020,42 @@ def sanitize_input(text):
     text = text.replace('<', '<').replace('>', '>')
     return text.strip()
 
+def detect_sql_injection(text):
+    """
+    检测SQL注入攻击模式
+
+    返回: True 表示检测到SQL注入模式，False 表示安全
+    """
+    # 常见SQL注入模式
+    sql_injection_patterns = [
+        r"(\%27)|(\')|(\-\-)|(\#)|(;)",  # 基本SQL注入字符
+        r"(\b(ALLOW|OR|AND)\b.*?(=|LIKE))",  # 逻辑运算符注入
+        r"(EXEC|EXECUTE|EXECUTEMANY|SP_|XP_)",  # 存储过程注入
+        r"(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\s+",  # SQL关键字
+        r"(UNION\s+SELECT)",  # UNION注入
+        r"(\b(INFORMATION_SCHEMA|SYS|MYSQL)\b)",  # 数据库元数据访问
+        r"(\b(GROUP_CONCAT|CONCAT|CONCAT_WS)\b.*?\()",  # 字符串连接注入
+        r"(WAITFOR\s+DELAY|SLEEP\()",  # 时间延迟注入
+        r"(BENCHMARK\s*\()",  # MySQL基准测试注入
+        r"(\b(LOAD_FILE|INTO\s+OUTFILE)\b)",  # 文件操作注入
+        r"(\b(CAST|CONVERT)\s*\(.*?\s+AS\s+)",  # 类型转换注入
+        r"(\b(CHAR|ASCII|ORD|HEX)\s*\()",  # 字符函数注入
+        r"(0x[0-9a-fA-F]+)",  # 十六进制注入
+        r"(\|\||&&)",  # 逻辑运算符
+        r"(\bor\b|\bAND\b).*?\b\d+\b",  # 布尔注入
+        r"(\bor\b|\bAND\b).*?['\"]",  # 带引号的布尔注入
+        r"(\bx\b\s*=\s*0x)",  # 变量注入
+    ]
+
+    text_upper = text.upper()
+
+    for pattern in sql_injection_patterns:
+        if re.search(pattern, text_upper, re.IGNORECASE | re.MULTILINE):
+            app.logger.warning(f"[SECURITY] 检测到SQL注入模式，模式: {pattern}, 输入: {text[:100]}")
+            return True
+
+    return False
+
 # 获取用户位置IP地址的函数
 def get_client_ip():
     # 优先使用 Cloudflare 提供的头
@@ -1552,6 +1592,11 @@ def handle_messages():
             content = request.json.get('content', '').strip()
             if not content:
                 return jsonify({'error': '内容不能为空'}), 400
+
+            # SQL注入检测
+            if detect_sql_injection(content):
+                app.logger.warning(f"[SECURITY] 拦截SQL注入尝试，IP: {request.headers.get('CF-Connecting-IP', request.remote_addr)}")
+                return jsonify({'error': '输入包含非法字符'}), 400
 
             captcha_provider = app.config.get('CAPTCHA_PROVIDER', 'cloudflare').lower()
             if captcha_provider == 'cloudflare':

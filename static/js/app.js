@@ -119,7 +119,11 @@ class RainMailApp {
             radio.addEventListener('change', (e) => {
                 const privateOptions = document.getElementById('private-options');
                 if (privateOptions) {
-                    privateOptions.style.display = e.target.value === 'private' ? 'block' : 'none';
+                    if (e.target.value === 'private') {
+                        privateOptions.classList.remove('hidden');
+                    } else {
+                        privateOptions.classList.add('hidden');
+                    }
                 }
             });
         });
@@ -130,7 +134,11 @@ class RainMailApp {
             radio.addEventListener('change', (e) => {
                 const privateOptions = document.getElementById('rainy-private-options');
                 if (privateOptions) {
-                    privateOptions.style.display = e.target.value === 'private' ? 'block' : 'none';
+                    if (e.target.value === 'private') {
+                        privateOptions.classList.remove('hidden');
+                    } else {
+                        privateOptions.classList.add('hidden');
+                    }
                 }
             });
         });
@@ -156,20 +164,20 @@ class RainMailApp {
             if (e.target.checked) {
                 if (this.isLoggedIn) {
                     // 已登录用户，显示登录邮箱提示
-                    emailContainer.style.display = 'block';
+                    emailContainer.classList.remove('hidden');
                     emailInput.value = this.userEmail;
                     emailInput.readOnly = true;
                     emailInput.placeholder = `使用登录邮箱: ${this.userEmail}`;
                 } else {
                     // 未登录用户，显示邮箱输入框
-                    emailContainer.style.display = 'block';
+                    emailContainer.classList.remove('hidden');
                     emailInput.readOnly = false;
                     emailInput.placeholder = '请输入您的邮箱地址';
                     emailInput.value = '';
                 }
             } else {
                 // 取消勾选邮件通知
-                emailContainer.style.display = 'none';
+                emailContainer.classList.add('hidden');
                 emailInput.value = '';
             }
         });
@@ -304,7 +312,7 @@ class RainMailApp {
                     statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证未完成或已过期，请点击刷新';
                     statusEl.classList.add('status-error');
                 }
-                if (refreshBtn) refreshBtn.style.display = 'inline-block';
+                if (refreshBtn) refreshBtn.classList.remove('hidden');
                 alert('人机验证未完成或已过期，请点击刷新验证按钮');
                 return;
             }
@@ -427,7 +435,7 @@ class RainMailApp {
     // --- 新增：显示处理中界面 ---
     showProcessingOverlay() {
         const overlay = document.getElementById('processing-overlay');
-        overlay.style.display = 'flex'; // 或 'block'，取决于CSS布局
+        overlay.style.display = 'flex'; // 需要使用 flex 布局
         document.getElementById('processing-text').textContent = '正在加密...';
         document.getElementById('processing-progress-bar').style.width = '0%';
         document.getElementById('processing-time-remaining').textContent = '预计剩余时间: 8 秒';
@@ -604,11 +612,11 @@ class RainMailApp {
         document.body.className = `${this.currentWeather}-mode`;
 
         if (this.currentWeather === 'sunny') {
-            sunnyInterface.style.display = 'block';
-            rainyInterface.style.display = 'none';
+            sunnyInterface.classList.remove('hidden');
+            rainyInterface.classList.add('hidden');
         } else {
-            sunnyInterface.style.display = 'none';
-            rainyInterface.style.display = 'block';
+            sunnyInterface.classList.add('hidden');
+            rainyInterface.classList.remove('hidden');
             this.loadMessages();
         }
 
@@ -643,7 +651,9 @@ class RainMailApp {
         // 生成二维码（使用分享链接）
         this.generateQRCode(shareData.full_share_url || shareData.unique_identifier);
 
-        document.getElementById('success-modal').style.display = 'flex';
+        const successModal = document.getElementById('success-modal');
+        successModal.classList.remove('hidden');
+        successModal.style.display = 'flex'; // 需要使用 flex 布局居中
     }
 
     generateQRCode(urlOrId) {
@@ -665,7 +675,9 @@ class RainMailApp {
     }
 
     hideModal() {
-        document.getElementById('success-modal').style.display = 'none';
+        const successModal = document.getElementById('success-modal');
+        successModal.classList.add('hidden');
+        successModal.style.display = 'none';
     }
 
     async saveShareCard() {
