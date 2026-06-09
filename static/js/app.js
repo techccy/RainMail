@@ -587,7 +587,6 @@ class RainMailApp {
                 <div class="message-content">${this.escapeHtml(msg.content)}</div>
                 <div class="message-meta">
                     <span>#${msg.id}</span>
-                    <span>UID: ${msg.unique_identifier || 'N/A'}</span>
                     <span>${msg.created_at}</span>
                 </div>
             </div>
@@ -654,22 +653,30 @@ class RainMailApp {
     showSuccessModal(shareData) {
         document.getElementById('card-message-id').textContent = shareData.message_id;
         document.getElementById('card-created-at').textContent = shareData.created_at;
-        document.getElementById('card-weather-status').textContent = 
+        document.getElementById('card-weather-status').textContent =
             shareData.weather_status === 'rainy' ? '雨天模式' : '晴天模式';
         document.getElementById('card-total-messages').textContent = shareData.total_messages;
         document.getElementById('card-unique-id').textContent = shareData.unique_identifier || 'N/A';
 
-        // 生成二维码
-        this.generateQRCode(shareData.message_id);
+        // 设置分享链接
+        const shareUrlEl = document.getElementById('card-share-url');
+        if (shareUrlEl && shareData.full_share_url) {
+            shareUrlEl.textContent = shareData.full_share_url;
+            shareUrlEl.href = shareData.full_share_url;
+        }
+
+        // 生成二维码（使用分享链接）
+        this.generateQRCode(shareData.full_share_url || shareData.unique_identifier);
 
         document.getElementById('success-modal').style.display = 'flex';
     }
 
-    generateQRCode(messageId) {
+    generateQRCode(urlOrId) {
         const qrContainer = document.getElementById('qr-code-container');
         qrContainer.innerHTML = '';
 
-        const qrUrl = `${window.location.origin}/#message-${messageId}`;
+        // 如果传入的是完整URL，直接使用；否则构建旧格式URL
+        const qrUrl = urlOrId.startsWith('http') ? urlOrId : `${window.location.origin}/#message-${urlOrId}`;
 
         // 使用QRCode.js生成二维码
         const qrcode = new QRCode(qrContainer, {

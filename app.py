@@ -1623,7 +1623,7 @@ def handle_messages():
                 sender_email=sender_email if sender_email else None,
                 public_after_reply=public_after_reply
             )
-            message.unique_identifier = generate_unique_id()
+            message.unique_identifier = generate_unique_id(16)
             db.session.add(message)
             db.session.commit()
 
@@ -1635,10 +1635,12 @@ def handle_messages():
             message_count = Message.query.count()
             share_data = {
                 'message_id': message.id,
+                'unique_identifier': message.unique_identifier,
+                'share_url': f'/m/{message.unique_identifier}',
+                'full_share_url': f'{request.host_url.rstrip("/")}/m/{message.unique_identifier}',
                 'total_messages': message_count,
                 'created_at': message.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 'weather_status': 'sunny',
-                'unique_identifier': message.unique_identifier,
                 'delivery_type': delivery_type
             }
 
@@ -3027,6 +3029,25 @@ def api_mark_notification_read(notif_id):
     db.session.commit()
 
     return jsonify({'success': True})
+
+# ==================== 消息查看路由 ====================
+
+@app.route('/m/<unique_id>')
+def view_public_message(unique_id):
+    """通过唯一标识符查看消息（公开或私发）"""
+    message = Message.query.filter_by(unique_identifier=unique_id).first()
+
+    if not message:
+        return render_template('error.html', message='消息不存在'), 404
+
+    # 获取回复列表
+    replies = MessageReply.query.filter_by(
+        original_message_id=message.id
+    ).order_by(MessageReply.created_at.desc()).all()
+
+    return render_template('public/message.html',
+                         message=message,
+                         replies=replies)
 
 # ==================== 信件相关路由 ====================
 

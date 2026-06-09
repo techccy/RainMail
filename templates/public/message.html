@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消息 #{{ message.unique_identifier }} - 雨天信箱</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📮</text></svg>">
+</head>
+<body class="rainy-mode">
+    <div id="weather-background"></div>
+
+    <div class="container glass-effect fade-in letter-view-container">
+        <header>
+            <h1>📮 消息详情</h1>
+            <p>消息ID: <strong>{{ message.unique_identifier }}</strong></p>
+        </header>
+
+        <div class="letter-content">
+            <div class="letter-meta">
+                <span class="letter-location">来自：{{ message.location }}</span>
+                <span class="letter-date">{{ message.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                <span class="letter-type">
+                    {% if message.delivery_type == 'public' %}公开投递{% else %}一对一投递{% endif %}
+                </span>
+            </div>
+            <div class="letter-body">
+                {{ message.content }}
+            </div>
+            <div class="letter-stats">
+                <span>🤗 {{ message.hugs_count }} 拥抱</span>
+            </div>
+        </div>
+
+        <!-- 回复列表 -->
+        <div class="replies-section">
+            <h3>回复列表 ({{ replies|length }})</h3>
+            {% if replies %}
+            <div class="replies-list">
+                {% for reply in replies %}
+                <div class="reply-item">
+                    <div class="reply-meta">
+                        <span class="reply-date">{{ reply.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                    <div class="reply-content">
+                        {% if reply.reply_type == 'text' %}
+                            {{ reply.reply_content }}
+                        {% else %}
+                            🤗 发送了一个拥抱
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-replies">还没有回复</p>
+            {% endif %}
+        </div>
+
+        <div class="back-link">
+            <a href="/" class="secondary-btn">返回首页</a>
+        </div>
+    </div>
+</body>
+</html>
