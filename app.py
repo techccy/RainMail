@@ -3143,6 +3143,11 @@ def api_reply_letter(delivery_id):
         if reply_type == 'text' and not reply_content:
             return jsonify({'error': '回复内容不能为空'}), 400
 
+        # 先进行基础关键词过滤，再进行 AI 审计
+        if reply_type == 'text' and (basic_keyword_check(reply_content) or ai_moderation_check(reply_content)):
+            app.logger.warning(f"回复内容拦截: {reply_content}")
+            return jsonify({"error": "回复内容未通过系统安全审查", "blocked": True}), 400
+
         # 创建回复
         reply = MessageReply(
             original_message_id=message.id,

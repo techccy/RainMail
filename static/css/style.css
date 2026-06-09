@@ -476,14 +476,17 @@ header h1 {
    8. 认证页面样式
    ============================================================ */
 .auth-page {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     min-height: 100vh;
+    color: #2c3e50;
 }
 
 .auth-container {
     max-width: 450px;
     margin: 80px auto;
     padding: 40px;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
 }
 
 .auth-form .form-group {
@@ -502,11 +505,11 @@ header h1 {
 .auth-form input[type="text"] {
     width: 100%;
     padding: 14px 16px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid #ddd;
     border-radius: 8px;
     font-size: 15px;
-    background: rgba(255, 255, 255, 0.1);
-    color: inherit;
+    background: rgba(255, 255, 255, 0.9);
+    color: #2c3e50;
     transition: all 0.3s ease;
 }
 
@@ -514,13 +517,13 @@ header h1 {
 .auth-form input[type="password"]:focus,
 .auth-form input[type="text"]:focus {
     outline: none;
-    border-color: rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+    border-color: #3498db;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
 .auth-form input::placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: #999;
 }
 
 .password-strength {
@@ -538,34 +541,34 @@ header h1 {
 }
 
 .error-message {
-    background: rgba(255, 68, 68, 0.2);
-    border: 1px solid rgba(255, 68, 68, 0.3);
-    color: #ffcccc;
+    background: #fee;
+    border: 1px solid #fcc;
+    color: #c33;
 }
 
 .success-message {
-    background: rgba(68, 255, 68, 0.2);
-    border: 1px solid rgba(68, 255, 68, 0.3);
-    color: #ccffcc;
+    background: #efe;
+    border: 1px solid #cfc;
+    color: #3c3;
 }
 
 .auth-links {
     text-align: center;
     margin-top: 24px;
     padding-top: 24px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid #e0e0e0;
 }
 
 .auth-links p {
     margin: 8px 0;
-    color: rgba(255, 255, 255, 0.8);
+    color: #666;
 }
 
 .auth-links a {
-    color: #ffffff;
+    color: #3498db;
     text-decoration: none;
     font-weight: 500;
-    border-bottom: 1px dashed rgba(255, 255, 255, 0.5);
+    border-bottom: 1px dashed #3498db;
     transition: all 0.3s ease;
 }
 
@@ -583,7 +586,7 @@ header h1 {
 
 /* Auth page Altcha */
 .auth-page .altcha-container {
-    background: rgba(255, 255, 255, 0.1);
+    background: #f5f5f5;
     border-radius: 8px;
     padding: 15px;
 }
@@ -1121,8 +1124,8 @@ body.has-user-bar .container {
 
 /* 验证时间提示样式 */
 .info-notice {
-    background: rgba(52, 152, 219, 0.15);
-    border: 1px solid rgba(52, 152, 219, 0.3);
+    background: #e3f2fd;
+    border: 1px solid #bbdefb;
     border-radius: 8px;
     padding: 12px 16px;
     margin-bottom: 20px;
@@ -1130,7 +1133,7 @@ body.has-user-bar .container {
     align-items: center;
     gap: 10px;
     font-size: 14px;
-    color: #3498db;
+    color: #1976d2;
 }
 
 .notice-icon {
