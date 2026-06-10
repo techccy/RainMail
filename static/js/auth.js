@@ -2,6 +2,62 @@
 
 // 全局状态
 let turnstileWidgetId = null;
+let emailProviders = {};
+
+// 加载邮箱服务商映射数据
+async function loadEmailProviders() {
+    if (Object.keys(emailProviders).length > 0) {
+        return emailProviders;
+    }
+    try {
+        const response = await fetch('/api/email-providers');
+        if (response.ok) {
+            emailProviders = await response.json();
+        }
+    } catch (error) {
+        console.error('加载邮箱服务商映射失败:', error);
+    }
+    return emailProviders;
+}
+
+// 根据邮箱获取邮箱服务商URL
+function getEmailProviderUrl(email) {
+    const domain = email.substring(email.lastIndexOf('@'));
+    return emailProviders[domain.toLowerCase()] || null;
+}
+
+// 显示邮箱验证弹窗
+function showEmailVerificationModal(email) {
+    const emailUrl = getEmailProviderUrl(email);
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'email-verification-modal';
+    modal.style.display = 'flex';
+    modal.style.zIndex = '2000';
+
+    const emailProviderName = emailUrl ? '邮箱' : '邮箱服务商';
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 420px;">
+            <h2 style="margin-bottom: 15px;">📨 验证邮件已发送</h2>
+            <p style="margin-bottom: 10px;">请查收 <strong>${email}</strong> 中的验证邮件，并在1小时内完成验证。</p>
+            <p style="font-size: 13px; color: #666; margin-bottom: 20px;">如未收到邮件，请检查垃圾箱文件夹。</p>
+            <div class="modal-actions">
+                ${emailUrl ? `<a href="${emailUrl}" target="_blank" class="primary-btn">前往${emailProviderName}</a>` : ''}
+                <a href="/auth/login" class="secondary-btn">${emailUrl ? '稍后，' : ''}前往登录</a>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // 点击背景关闭
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
+}
 
 // 显示警告信息
 function showWarning(message) {
@@ -433,10 +489,9 @@ function initRegisterPage(config) {
             console.log('注册响应数据:', data);
 
             if (data.success) {
-                showSuccess(data.message + ' 请在1小时内完成邮箱验证，即将跳转...');
-                setTimeout(() => {
-                    window.location.href = '/auth/login';
-                }, 4000);
+                // 先加载邮箱服务商映射，然后显示弹窗
+                await loadEmailProviders();
+                showEmailVerificationModal(email);
             } else {
                 showError(data.error || '注册失败');
             }

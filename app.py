@@ -2704,6 +2704,25 @@ def user_settings_page():
         'WECHAT_ENABLED': app.config.get('WECHAT_ENABLED', False)
     })
 
+@app.route('/api/email-providers')
+def api_email_providers():
+    """返回邮箱服务商映射数据"""
+    providers = {}
+    csv_path = os.path.join(os.path.dirname(__file__), 'resources', 'email.csv')
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            next(reader)  # 跳过表头
+            for row in reader:
+                if len(row) >= 2:
+                    suffix, url = row[0], row[1]
+                    providers[suffix.lower()] = url
+    except FileNotFoundError:
+        app.logger.warning(f"邮箱服务商映射文件未找到: {csv_path}")
+    except Exception as e:
+        app.logger.error(f"读取邮箱服务商映射文件失败: {e}")
+    return jsonify(providers)
+
 @app.route('/api/auth/register', methods=['POST'])
 @limiter.limit("3 per hour")
 def api_register():
