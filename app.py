@@ -2128,6 +2128,73 @@ def get_cha_question():
         app.logger.error(f"生成 CHA 问题失败: {str(e)}")
         return jsonify({'error': '生成验证问题失败'}), 500
 
+# ---------------------------------------------------------------------------
+# CHA 验证逻辑
+# ---------------------------------------------------------------------------
+
+def validate_cha(captcha_response, session_obj=None):
+    """Validate the answer for the CHA captcha.
+
+    When ``CAPTCHA_PROVIDER`` is set to ``cha``, the endpoint ``/api/cha/question``
+    generates a simple arithmetic question and stores the correct answer in the
+    user's Flask ``session`` under ``cha_answer`` along with a timestamp in
+    ``cha_timestamp``. The front‑end sends the user's answer in the JSON payload
+    as ``cha_answer`` to ``/api/verify``. This helper compares the submitted
+    answer with the stored one and ensures it is used within a reasonable time
+    window (2 minutes) to avoid replay attacks.
+
+    Parameters
+    ----------
+    captcha_response: dict
+        The parsed JSON body of the ``/api/verify`` request. Expected to contain
+        the key ``cha_answer``.
+    session_obj: Mapping, optional
+        A session‑like mapping to read/write temporary values. Defaults to the
+        global ``flask.session`` when ``None``.
+
+    Returns
+    -------
+    bool
+        ``True`` if the answer matches and is timely, otherwise ``False``.
+    """
+    # Extract the answer submitted by the user.
+    answer = captcha_response.get('cha_answer') if isinstance(captcha_response, dict) else None
+    if not answer:
+        app.logger.warning('CHA verification missing answer')
+        return False
+
+    # Use the provided session object for testing, otherwise the global Flask session.
+    sess = session_obj if session_obj is not None else session
+
+    stored_answer = sess.get('cha_answer')
+    timestamp = sess.get('cha_timestamp')
+
+    # Remove the stored values so they cannot be reused (prevents replay).
+    sess.pop('cha_answer', None)
+    sess.pop('cha_timestamp', None)
+
+    if stored_answer is None or timestamp is None:
+        app.logger.warning('CHA verification data missing in session')
+        return False
+
+    # Compare answers. The stored answer is typically an int; the incoming
+    # answer is a string from the form.
+    if str(stored_answer).strip() != str(answer).strip():
+        app.logger.info(f'CHA verification failed: expected {stored_answer}, got {answer}')
+        return False
+
+    # Ensure the answer is submitted within a reasonable timeframe (2 minutes).
+    try:
+        elapsed = time.time() - float(timestamp)
+        if elapsed > 120:
+            app.logger.info(f'CHA verification timeout: {elapsed:.1f}s elapsed')
+            return False
+    except Exception as e:
+        app.logger.error(f'CHA verification timestamp error: {e}')
+        return False
+
+    return True
+
 @app.route('/api/altcha/challenge')
 def get_altcha_challenge():
     """获取 Altcha 挑战"""
