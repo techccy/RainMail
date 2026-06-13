@@ -196,6 +196,19 @@ class RainMailApp {
         const textarea = document.getElementById(inputId);
         const content = textarea.value.trim();
 
+        // 用户行为验证
+        if (window.behaviorTracker) {
+            const behaviorValidation = window.behaviorTracker.validateBeforeSubmit();
+            if (!behaviorValidation.valid) {
+                alert(behaviorValidation.message);
+                return;
+            }
+        } else {
+            console.warn('[Security] Behavior tracker not loaded');
+            alert('系统未完全加载，请刷新页面后重试');
+            return;
+        }
+
         // 蜜罐检查 - 如果隐藏字段有值，说明是机器人
         const honeypot = document.getElementById('website-hp');
         if (honeypot && honeypot.value.trim() !== '') {
@@ -347,6 +360,14 @@ class RainMailApp {
             } else if (this.captchaProvider === 'none') {
                 // 无需添加验证字段
                 console.log('CAPTCHA disabled, no token needed');
+            }
+            
+            // 添加用户行为数据
+            if (window.behaviorTracker) {
+                const behaviorData = window.behaviorTracker.getBehaviorData();
+                if (behaviorData) {
+                    Object.assign(requestBody, behaviorData);
+                }
             }
 
             const response = await fetchWithCSRF('/api/messages', {

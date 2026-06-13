@@ -38,6 +38,110 @@ weather_request_lock = threading.Lock()
 # 临时存储正在进行的天气请求的结果
 pending_weather_result = None
 
+# --- 新增：用户行为轨迹分析 ---
+class UserBehaviorTracker:
+    """用户行为轨迹分析 - 防止自动化脚本攻击"""
+    
+    def __init__(self, secret_key):
+        self.SECRET_KEY = secret_key.encode()
+        self.MIN_PAGE_TIME = 8  # 最小页面停留时间（秒）
+        self.MIN_INPUT_FOCUS = 1  # 最少聚焦次数
+        self.MIN_INPUT_CHARS = 1  # 最少输入字符数
+        self.TOKEN_EXPIRY = 600  # Token有效期（秒）
+    
+    def generate_form_token(self):
+        """生成加密的 Form_Token"""
+        timestamp = str(int(time.time()))
+        random_str = secrets.token_hex(16)
+        
+        # 拼接数据：timestamp + random_str
+        data = f"{timestamp}:{random_str}"
+        
+        # 使用 HMAC-SHA256 加密
+        signature = hmac.new(
+            self.SECRET_KEY,
+            data.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Base64 编码
+        token = base64.b64encode(f"{data}:{signature}".encode()).decode()
+        
+        return {
+            'form_token': token,
+            'generated_at': int(timestamp),
+            'expires_at': int(timestamp) + self.TOKEN_EXPIRY
+        }
+    
+    def verify_form_token(self, form_token):
+        """验证 Form_Token 是否有效"""
+        try:
+            decoded = base64.b64decode(form_token.encode()).decode()
+            parts = decoded.split(':')
+            
+            if len(parts) != 3:
+                return False, "Token格式错误"
+            
+            timestamp, random_str, signature = parts
+            
+            # 重新计算签名
+            data = f"{timestamp}:{random_str}"
+            expected_signature = hmac.new(
+                self.SECRET_KEY,
+                data.encode(),
+                hashlib.sha256
+            ).hexdigest()
+            
+            # 验证签名
+            if not hmac.compare_digest(signature, expected_signature):
+                return False, "Token签名无效"
+            
+            # 验证时间戳（防止重放攻击）
+            token_time = int(timestamp)
+            current_time = int(time.time())
+            
+            if current_time - token_time > self.TOKEN_EXPIRY:
+                return False, "Token已过期"
+            
+            if token_time > current_time:
+                return False, "Token时间无效"
+            
+            return True, int(timestamp)
+            
+        except Exception as e:
+            app.logger.error(f"Form token验证错误: {str(e)}")
+            return False, "Token验证失败"
+    
+    def validate_user_behavior(self, form_token, page_stay_time, input_focus_count, input_char_count):
+        """验证用户行为"""
+        # 验证 Form_Token
+        is_valid, result = self.verify_form_token(form_token)
+        if not is_valid:
+            return False, result
+        
+        token_time = result
+        current_time = int(time.time())
+        max_stay_time = current_time - token_time
+        
+        # 验证页面停留时间
+        if page_stay_time < self.MIN_PAGE_TIME:
+            return False, f"页面停留时间不足{self.MIN_PAGE_TIME}秒"
+        
+        # 验证停留时间不超过最大值（防止脚本长时间等待）
+        if page_stay_time > max_stay_time + 60:  # 允许60秒误差
+            return False, "页面停留时间异常"
+        
+        # 验证输入框聚焦次数
+        if input_focus_count < self.MIN_INPUT_FOCUS:
+            return False, "未检测到输入框交互"
+        
+        # 验证输入字符数
+        if input_char_count < self.MIN_INPUT_CHARS:
+            return False, "未检测到输入内容"
+        
+        return True, "验证通过"
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -71,6 +175,10 @@ app.config.update(config)
 secret_key = app.config.get('SECRET_KEY', 'rainmail_secret_key_2024')
 app.secret_key = secret_key
 app.logger.info(f"Secret key 已设置")
+
+# 初始化用户行为跟踪器
+behavior_tracker = UserBehaviorTracker(secret_key)
+
 
 # Session 安全配置
 app.config['SESSION_COOKIE_SECURE'] = app.config.get('SESSION_COOKIE_SECURE', False)
@@ -1579,6 +1687,21 @@ def handle_messages():
     if request.method == 'POST':
         # 提交新消息
         try:
+            # 用户行为验证
+            form_token = request.json.get('form_token')
+            page_stay_time = request.json.get('page_stay_time', 0)
+            input_focus_count = request.json.get('input_focus_count', 0)
+            input_char_count = request.json.get('input_char_count', 0)
+
+            is_valid, message = behavior_tracker.validate_user_behavior(
+                form_token, page_stay_time, input_focus_count, input_char_count
+            )
+
+            if not is_valid:
+                user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
+                app.logger.warning(f"[BEHAVIOR] 用户行为验证失败，IP: {user_ip}, 原因: {message}")
+                return jsonify({'error': f'行为验证失败: {message}'}), 400
+
             # 蜜罐检测 - 检查JSON中是否包含蜜罐字段
             if request.json and 'website' in request.json:
                 user_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
@@ -1727,6 +1850,13 @@ def weather_api():
 def health_check():
     """健康检查接口"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+
+@app.route('/api/form_token', methods=['GET'])
+def get_form_token():
+    """获取 Form_Token 用于用户行为验证"""
+    token_data = behavior_tracker.generate_form_token()
+    return jsonify(token_data)
+
 
 # --- 微信公众号接口 ---
 @app.route('/wechat', methods=['GET'])
