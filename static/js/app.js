@@ -454,27 +454,44 @@ class RainMailApp {
         }
     }
     // --- 新增：显示处理中界面 ---
+    // 显示提交处理中遮罩层并初始化动画
     showProcessingOverlay() {
         const overlay = document.getElementById('processing-overlay');
-        overlay.style.display = 'flex'; // 需要使用 flex 布局
-        document.getElementById('processing-text').textContent = '正在加密...';
-        document.getElementById('processing-progress-bar').style.width = '0%';
-        document.getElementById('processing-time-remaining').textContent = '预计剩余时间: 8 秒';
+        if (!overlay) return;
+        // 移除隐藏类以确保 inline style 能生效（.hidden 使用 !important，会覆盖直接的 style 设置）
+        overlay.classList.remove('hidden');
+        // 使用 flex 布局让内容居中显示
+        overlay.style.display = 'flex';
+        // 重置动画文本和进度条
+        const processingTextEl = document.getElementById('processing-text');
+        const progressBarEl = document.getElementById('processing-progress-bar');
+        const timeRemainingEl = document.getElementById('processing-time-remaining');
+        if (processingTextEl) processingTextEl.textContent = '正在加密...';
+        if (progressBarEl) progressBarEl.style.width = '0%';
+        if (timeRemainingEl) timeRemainingEl.textContent = '预计剩余时间: 8 秒';
 
         // 可选：禁用提交按钮，防止重复点击
-        // document.getElementById('submit-btn').disabled = true;
-        // document.getElementById('rainy-submit-btn').disabled = true;
+        // const submitBtn = document.getElementById('submit-btn');
+        // const rainyBtn = document.getElementById('rainy-submit-btn');
+        // if (submitBtn) submitBtn.disabled = true;
+        // if (rainyBtn) rainyBtn.disabled = true;
     }
     // --- END 新增 ---
 
     // --- 新增：隐藏处理中界面 ---
+    // 隐藏处理中遮罩层并恢复按钮状态
     hideProcessingOverlay() {
         const overlay = document.getElementById('processing-overlay');
+        if (!overlay) return;
         overlay.style.display = 'none';
+        // 重新添加隐藏类，保持与其他隐藏元素的统一实现方式保持一致
+        overlay.classList.add('hidden');
 
-        // 可选：启用提交按钮
-        // document.getElementById('submit-btn').disabled = false;
-        // document.getElementById('rainy-submit-btn').disabled = false;
+        // 可选：恢复提交按钮可用状态
+        // const submitBtn = document.getElementById('submit-btn');
+        // const rainyBtn = document.getElementById('rainy-submit-btn');
+        // if (submitBtn) submitBtn.disabled = false;
+        // if (rainyBtn) rainyBtn.disabled = false;
     }
     // --- END 新增 ---
 

@@ -3617,7 +3617,10 @@ def send_verification_email(user):
         return
 
     # 构建验证链接 - 使用新的GET端点
-    verify_url = f"{request.host_url}verify-email?token={user.verification_token}"
+    # 确保验证链接使用 HTTPS，避免安全警告或浏览器阻止
+    # request.host_url 可能返回 http://，这里强制改为 https://
+    base_url = request.host_url.replace('http://', 'https://')
+    verify_url = f"{base_url}verify-email?token={user.verification_token}"
 
     # 创建邮件
     app_name = app.config.get('APP_NAME', 'RainMail')

@@ -37,10 +37,13 @@ function showEmailVerificationModal(email) {
 
     const emailProviderName = emailUrl ? '邮箱' : '邮箱服务商';
 
+    // 使用更亮的颜色提升可见性（亮黄色）
+    const brightColor = '#ffec00';
+
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 420px;">
-            <h2 style="margin-bottom: 15px;">📨 验证邮件已发送</h2>
-            <p style="margin-bottom: 10px;">请查收 <strong>${email}</strong> 中的验证邮件，并在1小时内完成验证。</p>
+            <h2 style="margin-bottom: 15px; color: ${brightColor};">📨 验证邮件已发送</h2>
+            <p style="margin-bottom: 10px; color: ${brightColor};">请查收 <strong>${email}</strong> 中的验证邮件，并在1小时内完成验证。</p>
             <p style="font-size: 13px; color: #666; margin-bottom: 20px;">如未收到邮件，请检查垃圾箱文件夹。</p>
             <div class="modal-actions">
                 ${emailUrl ? `<a href="${emailUrl}" target="_blank" class="primary-btn">前往${emailProviderName}</a>` : ''}
@@ -607,7 +610,8 @@ async function checkLoginStatus() {
 // 登出
 async function logout() {
     try {
-        await fetch('/api/auth/logout', { method: 'POST' });
+        // 使用全局的 fetchWithCSRF，确保请求带上 CSRF token，防止 403 错误
+        await fetchWithCSRF('/api/auth/logout', { method: 'POST' });
         window.location.href = '/';
     } catch (error) {
         console.error('登出失败:', error);
