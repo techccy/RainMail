@@ -62,6 +62,15 @@ function showEmailVerificationModal(email) {
     });
 }
 
+// 提交失败后用服务端下发的新题刷新 CHA（验证码一次性，答案已被销毁）
+function refreshChaQuestion(question) {
+    if (!question) return;
+    const questionEl = document.getElementById('cha-question');
+    const answerEl = document.getElementById('cha-answer');
+    if (questionEl) questionEl.textContent = question;
+    if (answerEl) answerEl.value = '';
+}
+
 // 显示警告信息
 function showWarning(message) {
     console.log('showWarning 被调用');
@@ -265,6 +274,8 @@ function initLoginPage(config) {
                 if (data.warning) {
                     showWarning(data.warning);
                 }
+                // 验证码一次性，失败后刷新为新题
+                refreshChaQuestion(data.cha_question);
             }
         } catch (error) {
             console.error('登录错误:', error);
@@ -497,6 +508,8 @@ function initRegisterPage(config) {
                 showEmailVerificationModal(email);
             } else {
                 showError(data.error || '注册失败');
+                // 验证码一次性，失败后刷新为新题
+                refreshChaQuestion(data.cha_question);
             }
         } catch (error) {
             console.error('注册错误:', error);

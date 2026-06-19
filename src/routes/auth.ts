@@ -66,6 +66,15 @@ function extractCaptchaResponse(provider: string, data: Record<string, any>): un
   }
 }
 
+/**
+ * 提交失败后生成一道新 CHA 题目（仅 cha 模式；验证码是一次性的，
+ * 上一次答案已在 validateCha 中销毁，必须换新题供前端展示）
+ */
+function freshChaQuestion(c: any): string | undefined {
+  if (getCaptchaProvider() !== 'cha') return undefined;
+  return prepareChaQuestion(c).question;
+}
+
 // ----------------------------- 页面 -----------------------------
 app.get('/auth/login', (c) => {
   const vars = captchaTemplateVars();
@@ -87,18 +96,18 @@ app.post('/api/auth/register', rateLimit('3 per hour'), async (c) => {
     const password = String(data.password ?? '');
     const username = String(data.username ?? '').trim();
 
-    if (!email || !password) return c.json({ error: '邮箱和密码不能为空' }, 400);
-    if (password.length < 6) return c.json({ error: '密码长度至少6位' }, 400);
+    if (!email || !password) return c.json({ error: '邮箱和密码不能为空', cha_question: freshChaQuestion(c) }, 400);
+    if (password.length < 6) return c.json({ error: '密码长度至少6位', cha_question: freshChaQuestion(c) }, 400);
 
     if (db.select().from(users).where(eq(users.email, email)).limit(1).all()[0]) {
-      return c.json({ error: '该邮箱已被注册' }, 400);
+      return c.json({ error: '该邮箱已被注册', cha_question: freshChaQuestion(c) }, 400);
     }
 
     const provider = getCaptchaProvider();
     const captchaResponse = extractCaptchaResponse(provider, data);
     const userIp = getClientIp(c);
     if (!(await validateCaptcha(captchaResponse, userIp, c))) {
-      return c.json({ error: '人机验证失败' }, 400);
+      return c.json({ error: '人机验证失败', cha_question: freshChaQuestion(c) }, 400);
     }
 
     const userCity = await getCityByIp(userIp);
@@ -187,16 +196,16 @@ app.post('/api/auth/login', rateLimit('10 per minute'), async (c) => {
     const captchaResponse = extractCaptchaResponse(provider, data);
     const userIp = getClientIp(c);
     if (!(await validateCaptcha(captchaResponse, userIp, c))) {
-      return c.json({ error: '人机验证失败' }, 400);
+      return c.json({ error: '人机验证失败', cha_question: freshChaQuestion(c) }, 400);
     }
 
     const [emailLocked, emailLockedUntil] = checkLoginLocked(email, 'email');
     if (emailLocked) {
-      return c.json({ error: '账户已被临时锁定', locked_until: emailLockedUntil?.toISOString() ?? null }, 429);
+      return c.json({ error: '账户已被临时锁定', locked_until: emailLockedUntil?.toISOString() ?? null, cha_question: freshChaQuestion(c) }, 429);
     }
     const [ipLocked, ipLockedUntil] = checkLoginLocked(userIp, 'ip');
     if (ipLocked) {
-      return c.json({ error: 'IP 地址已被临时锁定', locked_until: ipLockedUntil?.toISOString() ?? null }, 429);
+      return c.json({ error: 'IP 地址已被临时锁定', locked_until: ipLockedUntil?.toISOString() ?? null, cha_question: freshChaQuestion(c) }, 429);
     }
 
     const user = db.select().from(users).where(eq(users.email, email)).limit(1).all()[0];
@@ -209,6 +218,7 @@ app.post('/api/auth/login', rateLimit('10 per minute'), async (c) => {
         resp.locked = true;
         resp.error = '登录失败次数过多，账户已被临时锁定30分钟';
       }
+      resp.cha_question = freshChaQuestion(c);
       return c.json(resp, 401);
     }
 

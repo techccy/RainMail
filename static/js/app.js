@@ -391,31 +391,6 @@ class RainMailApp {
                 if (this.currentWeather === 'rainy') {
                     this.loadMessages();
                 }
-
-                // 如果使用 CHA，重新加载验证问题
-                if (this.captchaProvider === 'cha') {
-                    await this.loadCHAPuzzle(inputId === 'message-input' ? 'sunny-cha-question' : 'rainy-cha-question');
-                    // 清空答案输入框
-                    const chaAnswerInput = inputId === 'message-input' ?
-                        document.getElementById('sunny-cha-answer') :
-                        document.getElementById('rainy-cha-answer');
-                    if (chaAnswerInput) {
-                        chaAnswerInput.value = '';
-                    }
-                }
-
-                // 如果使用 Altcha，重新加载挑战
-                if (this.captchaProvider === 'altcha') {
-                    await this.loadAltchaChallenge(inputId === 'message-input' ? 'sunny-altcha-widget' : 'rainy-altcha-widget',
-                                                     inputId === 'message-input' ? 'sunny-altcha-payload' : 'rainy-altcha-payload');
-                }
-
-                // 如果使用 reCAPTCHA v3，重新获取验证
-                if (this.captchaProvider === 'recaptcha' || this.captchaProvider === 'recaptcha_v3') {
-                    if (typeof window.refreshRecaptcha === 'function') {
-                        await window.refreshRecaptcha();
-                    }
-                }
             } else {
                 // 检查是否需要登录
                 if (data.require_login) {
@@ -425,6 +400,25 @@ class RainMailApp {
                 }
                 clearInterval(this.progressIntervalId);
                 this.hideProcessingOverlay();
+            }
+
+            // 成功或失败都要刷新验证码：验证码一次性，提交后答案已被销毁，
+            // 失败重试若沿用旧题必然「人机验证失败」
+            if (this.captchaProvider === 'cha') {
+                await this.loadCHAPuzzle(inputId === 'message-input' ? 'sunny-cha-question' : 'rainy-cha-question');
+                const chaAnswerInput = inputId === 'message-input' ?
+                    document.getElementById('sunny-cha-answer') :
+                    document.getElementById('rainy-cha-answer');
+                if (chaAnswerInput) {
+                    chaAnswerInput.value = '';
+                }
+            } else if (this.captchaProvider === 'altcha') {
+                await this.loadAltchaChallenge(inputId === 'message-input' ? 'sunny-altcha-widget' : 'rainy-altcha-widget',
+                                                 inputId === 'message-input' ? 'sunny-altcha-payload' : 'rainy-altcha-payload');
+            } else if (this.captchaProvider === 'recaptcha' || this.captchaProvider === 'recaptcha_v3') {
+                if (typeof window.refreshRecaptcha === 'function') {
+                    await window.refreshRecaptcha();
+                }
             }
         } catch (error) {
             console.error('提交错误:', error);

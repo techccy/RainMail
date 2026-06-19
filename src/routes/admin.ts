@@ -14,7 +14,6 @@ import {
   getCaptchaProvider,
   validateCaptcha,
   prepareChaQuestion,
-  currentChaQuestion,
 } from '../lib/captcha.js';
 import { csrfProtect } from '../lib/csrf.js';
 import { sessionGet, sessionSet } from '../lib/session.js';
@@ -69,6 +68,14 @@ function extractAdminCaptcha(provider: string, form: Record<string, any>): unkno
   }
 }
 
+/**
+ * 提交失败后生成一道新 CHA 题目（仅 cha 模式）。验证码一次性，
+ * 上一次答案已在 validateCha 中销毁，必须换新题，否则重试必失败。
+ */
+function freshCha(c: any): string | undefined {
+  return getCaptchaProvider() === 'cha' ? prepareChaQuestion(c).question : undefined;
+}
+
 // ----------------------------- 管理员登录 -----------------------------
 app.get(prefix(''), rateLimit('5 per minute'), (c) => {
   const provider = getCaptchaProvider();
@@ -83,7 +90,7 @@ app.post(prefix(''), rateLimit('5 per minute'), csrfProtect, async (c) => {
   // 蜜罐
   if (checkHoneypot(c, form)) {
     console.warn(`[admin] 蜜罐被触发，IP: ${getClientIp(c)}`);
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '用户名或密码错误', cha_question: currentChaQuestion(c) }, c));
+    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '用户名或密码错误', cha_question: freshCha(c) }, c));
   }
 
   const captchaResponse = extractAdminCaptcha(provider, form);
@@ -92,10 +99,10 @@ app.post(prefix(''), rateLimit('5 per minute'), csrfProtect, async (c) => {
   const password = String(form.password ?? '');
 
   if (provider !== 'none' && !captchaResponse) {
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '请完成人机验证', cha_question: currentChaQuestion(c) }, c));
+    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '请完成人机验证', cha_question: freshCha(c) }, c));
   }
   if (!(await validateCaptcha(captchaResponse, userIp, c))) {
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '人机验证失败，请刷新网页', cha_question: currentChaQuestion(c) }, c));
+    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '人机验证失败，请刷新网页', cha_question: freshCha(c) }, c));
   }
 
   // 账户/IP 锁定检查
@@ -103,13 +110,13 @@ app.post(prefix(''), rateLimit('5 per minute'), csrfProtect, async (c) => {
   if (emailLocked) {
     const t = emailLockedUntil ? formatHM(emailLockedUntil) : '';
     flash(c, 'error', `账户已被临时锁定，请 ${t}后再试`);
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '账户已锁定', warning: getFlashesForTemplate(c) }, c));
+    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '账户已锁定', warning: getFlashesForTemplate(c), cha_question: freshCha(c) }, c));
   }
   const [ipLocked, ipLockedUntil] = checkLoginLocked(userIp, 'ip');
   if (ipLocked) {
     const t = ipLockedUntil ? formatHM(ipLockedUntil) : '';
     flash(c, 'error', `IP 地址已被临时锁定，请 ${t}后再试`);
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: 'IP 已锁定', warning: getFlashesForTemplate(c) }, c));
+    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: 'IP 已锁定', warning: getFlashesForTemplate(c), cha_question: freshCha(c) }, c));
   }
 
   // 验证凭据
@@ -126,7 +133,7 @@ app.post(prefix(''), rateLimit('5 per minute'), csrfProtect, async (c) => {
   if (shouldLockIp) flash(c, 'error', '登录失败次数过多，IP 地址已被临时锁定30分钟');
   else if (!shouldLockEmail) flash(c, 'error', '用户名或密码错误');
 
-  return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '登录失败', warning: getFlashesForTemplate(c), cha_question: currentChaQuestion(c) }, c));
+  return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '登录失败', warning: getFlashesForTemplate(c), cha_question: freshCha(c) }, c));
 });
 
 function formatHM(d: Date): string {
