@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>雨天信箱 - The Raindrop Box</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Alumni+Sans+Pinstripe&family=Albert+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📮</text></svg>">
     <script src="{{ url_for('static', filename='js/csrf.js') }}"></script>
@@ -38,21 +41,30 @@
 
     <div class="container glass-effect fade-in">
         <header>
-            <h1>📮 雨天信箱</h1>
+            <div class="brand-lockup">
+                <span class="ks-mark" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" fill="none">
+                        <rect x="3" y="3" width="26" height="26" fill="currentColor"/>
+                        <path d="M5 5 L27 27" stroke="oklch(7% 0.006 95)" stroke-width="2.5"/>
+                    </svg>
+                </span>
+                <span class="ks-wordmark">RainMail</span>
+            </div>
+            <h1>雨天信箱</h1>
             <p>The Raindrop Box</p>
-            <div class="status-indicator status-sunny" id="current-weather">🌤️ 晴天模式</div>
+            <div class="status-indicator status-sunny" id="current-weather">晴天模式</div>
         </header>
             <!-- 新增：天气元信息显示区 -->
         <div id="weather-meta" class="weather-meta">
-        📍 <span id="weather-location">加载中...</span> | 
-        🌦️ <span id="weather-text">--</span> |
-        🕒 <span id="next-refresh">--</span> 分钟后刷新
+        <span id="weather-location">加载中...</span> ·
+        <span id="weather-text">--</span> ·
+        <span id="next-refresh">--</span> 分钟后刷新
         </div>
 
         <!-- 晴天界面 -->
         <div id="sunny-interface">
             <div class="message-form">
-                <h2>✉️ 写下你的想法</h2>
+                <h2>写下你的想法</h2>
                 <!-- 蜜罐字段 - 对浏览器隐藏，脚本会填充 -->
                 <div class="honeypot-field">
                     <input type="text" id="website-hp" name="website" tabindex="-1" autocomplete="off">
@@ -64,7 +76,7 @@
 
                     <!-- 投递选项 -->
                     <div class="delivery-options">
-                        <h4>📮 投递方式</h4>
+                        <h4>投递方式</h4>
                         <div class="delivery-type-selector">
                             <label class="delivery-option">
                                 <input type="radio" name="delivery-type" value="public" checked>
@@ -132,15 +144,15 @@
             </div>
 
             <div class="weather-info">
-                <p>🌤️ 当前天气晴朗，信箱封存中</p>
-                <p>🌧️ 等到下雨时，所有想法将会公开</p>
+                <p>当前天气晴朗，信箱封存中</p>
+                <p>等到下雨时，所有想法将会公开</p>
             </div>
         </div>
 
         <!-- 雨天界面 -->
         <div id="rainy-interface" class="hidden">
             <div class="message-form">
-                <h2>🌧️ 雨中分享</h2>
+                <h2>雨中分享</h2>
                 <div class="form-group">
                     <label for="rainy-message-input">你的想法（最多500字）</label>
                     <textarea id="rainy-message-input" placeholder="雨声中写下你的心声..." maxlength="500"></textarea>
@@ -148,7 +160,7 @@
 
                     <!-- 投递选项 -->
                     <div class="delivery-options">
-                        <h4>📮 投递方式</h4>
+                        <h4>投递方式</h4>
                         <div class="delivery-type-selector">
                             <label class="delivery-option">
                                 <input type="radio" name="rainy-delivery-type" value="public" checked>
@@ -222,7 +234,7 @@
             </div>
 
             <div class="messages-list">
-                <h2>📜 公开的想法</h2>
+                <h2>公开的想法</h2>
                 <div id="messages-container">
                     <div class="loading">加载中...</div>
                 </div>
@@ -244,15 +256,14 @@
     <div id="success-modal" class="modal hidden">
         <div class="modal-content">
             <div id="share-card" class="share-card">
-                <h3>📨 存票凭证</h3>
-                <p>第 <span id="card-message-id">0</span> 号寄信人</p>
-                <p>唯一ID: <span id="card-unique-id">-</span></p>
-                <p>存入时间: <span id="card-created-at">-</span></p>
-                <p>服务器状态: <span id="card-weather-status">-</span></p>
-                <p>总消息数: <span id="card-total-messages">0</span></p>
-                <p class="share-url">分享链接: <a id="card-share-url" href="#" target="_blank">-</a></p>
+                <h3>存票凭证</h3>
+                <p><span>寄信人</span><span>第 <span id="card-message-id">0</span> 号</span></p>
+                <p><span>唯一 ID</span><span id="card-unique-id">-</span></p>
+                <p><span>存入时间</span><span id="card-created-at">-</span></p>
+                <p><span>服务器状态</span><span id="card-weather-status">-</span></p>
+                <p><span>总消息数</span><span id="card-total-messages">0</span></p>
                 <div id="qr-code-container"></div>
-                <p class="qr-url">https://dropbox.techccy.dpdns.org</p>
+                <p class="qr-url"><a id="card-share-url" href="#" target="_blank">-</a></p>
             </div>
             
             <div class="modal-actions">

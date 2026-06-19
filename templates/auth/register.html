@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>注册 - 雨天信箱</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Alumni+Sans+Pinstripe&family=Albert+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📮</text></svg>">
     <script src="{{ url_for('static', filename='js/csrf.js') }}"></script>
@@ -17,12 +20,20 @@
 
     <div class="container glass-effect fade-in auth-container">
         <header>
-            <h1>📮 雨天信箱</h1>
+            <div class="brand-lockup">
+                <span class="ks-mark" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" fill="none">
+                        <rect x="3" y="3" width="26" height="26" fill="currentColor"/>
+                        <path d="M5 5 L27 27" stroke="oklch(7% 0.006 95)" stroke-width="2.5"/>
+                    </svg>
+                </span>
+                <span class="ks-wordmark">RainMail</span>
+            </div>
+            <h1>注册</h1>
             <p>创建你的账户</p>
         </header>
 
         <div class="info-notice">
-            <span class="notice-icon">⏰</span>
             <span>请务必在注册后 <strong>1小时内</strong> 完成邮箱验证，否则账户将被自动删除。</span>
         </div>
 

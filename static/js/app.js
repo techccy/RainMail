@@ -632,7 +632,7 @@ class RainMailApp {
     updateWeatherDisplay() {
         const display = document.getElementById('current-weather');
         if (display) {
-            display.textContent = this.currentWeather === 'rainy' ? '🌧️ 雨天模式' : '🌤️ 晴天模式';
+            display.textContent = this.currentWeather === 'rainy' ? '雨天模式' : '晴天模式';
         }
     }
 
@@ -753,7 +753,7 @@ class RainMailApp {
             await new Promise(resolve => setTimeout(resolve, 200));
 
             const canvas = await html2canvas(clonedCard, {
-                backgroundColor: '#ffffff',
+                backgroundColor: '#0a0a0a', // 与漆黑存票卡片底色一致
                 scale: 2, // 适中的分辨率
                 useCORS: true,
                 allowTaint: false,
