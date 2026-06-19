@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>出错了 - 雨天信箱</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📮</text></svg>">
+</head>
+<body class="sunny-mode">
+    <div id="weather-background"></div>
+    <div class="container glass-effect fade-in" style="text-align: center; padding: 60px 30px;">
+        <h1>🌧️</h1>
+        <h2>{{ message }}</h2>
+        <p style="margin-top: 20px;"><a href="{{ url_for('index') }}" class="primary-btn" style="display:inline-block; text-decoration:none;">返回首页</a></p>
+    </div>
+</body>
+</html>

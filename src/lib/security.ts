@@ -1,0 +1,173 @@
+// =============================================================================
+// 安全相关：响应头、SQL 注入检测、XSS 过滤、蜜罐、限流、客户端 IP
+// 对齐 Python：add_security_headers / detect_sql_injection / sanitize_input /
+//             check_honeypot / get_client_ip / Limiter
+// =============================================================================
+import type { Context, MiddlewareHandler } from 'hono';
+import { getConfig } from '../config.js';
+
+// ----------------------------- 安全响应头 -----------------------------
+export const DEFAULT_CSP = [
+  "default-src 'self'",
+  "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://www.google.com https://www.gstatic.com https://recaptcha.net",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://www.google.com https://recaptcha.net",
+  "font-src 'self'",
+  "frame-src 'self' https://challenges.cloudflare.com https://www.google.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  'upgrade-insecure-requests',
+].join('; ');
+
+export function securityHeadersMiddleware(): MiddlewareHandler {
+  return async (c, next) => {
+    await next();
+    const cfg = getConfig();
+    c.header('Content-Security-Policy', (cfg.CSP_POLICY as string) || DEFAULT_CSP);
+    c.header('X-Frame-Options', 'DENY');
+    c.header('X-Content-Type-Options', 'nosniff');
+    c.header('X-XSS-Protection', '1; mode=block');
+    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    c.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  };
+}
+
+// ----------------------------- 客户端 IP -----------------------------
+export function getClientIp(c: Context): string {
+  const cf = c.req.header('CF-Connecting-IP');
+  if (cf) return cf.split(',')[0]!.trim();
+  const xff = c.req.header('X-Forwarded-For');
+  if (xff) return xff.split(',')[0]!.trim();
+  return c.env?.REMOTE_ADDR || '127.0.0.1';
+}
+
+// ----------------------------- SQL 注入检测 -----------------------------
+const SQL_INJECTION_PATTERNS: RegExp[] = [
+  /(%27)|(')|(--)|(#)|(;)/i,
+  /\b(ALLOW|OR|AND)\b.*?(=|LIKE)/i,
+  /(EXEC|EXECUTE|EXECUTEMANY|SP_|XP_)/i,
+  /(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\s+/i,
+  /(UNION\s+SELECT)/i,
+  /\b(INFORMATION_SCHEMA|SYS|MYSQL)\b/i,
+  /\b(GROUP_CONCAT|CONCAT|CONCAT_WS)\b.*?\(/i,
+  /(WAITFOR\s+DELAY|SLEEP\()/i,
+  /(BENCHMARK\s*\()/i,
+  /\b(LOAD_FILE|INTO\s+OUTFILE)\b/i,
+  /\b(CAST|CONVERT)\b.*\bAS\b/i,
+  /\b(CHAR|ASCII|ORD|HEX)\s*\(/i,
+  /(0x[0-9a-fA-F]+)/i,
+  /(\|\||&&)/i,
+  /(\bor\b|\bAND\b).*?\b\d+\b/i,
+  /(\bor\b|\bAND\b).*?['"]/i,
+  /(\bx\b\s*=\s*0x)/i,
+];
+
+export function detectSqlInjection(text: string): boolean {
+  if (!text) return false;
+  for (const pattern of SQL_INJECTION_PATTERNS) {
+    if (pattern.test(text)) {
+      console.warn(`[SECURITY] 检测到SQL注入模式，模式: ${pattern.source}, 输入: ${text.substring(0, 100)}`);
+      return true;
+    }
+  }
+  return false;
+}
+
+// ----------------------------- XSS 过滤 -----------------------------
+export function sanitizeInput(text: string): string {
+  if (!text) return '';
+  let out = text.replace(/<script.*?>.*?<\/script>/gis, '');
+  out = out.replace(/<.*?>/g, '');
+  out = out.replace(/"/g, '"').replace(/'/g, '&#39;');
+  out = out.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return out.trim();
+}
+
+// ----------------------------- 蜜罐检测 -----------------------------
+export function checkHoneypot(c: Context, data: Record<string, any>): boolean {
+  const value = String(data?.website_confirm ?? '').trim();
+  if (value) {
+    console.warn(`[HONEYPOT] 机器人IP被记录: ${getClientIp(c)}, 填充值: ${value}`);
+    return true;
+  }
+  return false;
+}
+
+// ----------------------------- 内存限流 -----------------------------
+interface RateBucket {
+  count: number;
+  resetAt: number; // epoch ms
+}
+
+interface RateLimitOpts {
+  limit: number;
+  windowMs: number;
+}
+
+const buckets = new Map<string, RateBucket>();
+
+/** 解析 "10 per minute" / "3 per hour" / "200 per day" */
+export function parseRate(spec: string): RateLimitOpts {
+  const m = spec.match(/(\d+)\s*per\s*(minute|hour|day|second)/i);
+  if (!m) return { limit: 100, windowMs: 60_000 };
+  const n = parseInt(m[1]!, 10);
+  const unit = m[2]!.toLowerCase();
+  const mult = unit === 'second' ? 1000 : unit === 'minute' ? 60_000 : unit === 'hour' ? 3_600_000 : 86_400_000;
+  return { limit: n, windowMs: mult };
+}
+
+/**
+ * 限流中间件工厂
+ * @example rateLimit('10 per minute')
+ */
+export function rateLimit(spec: string, keyTag = ''): MiddlewareHandler {
+  const { limit, windowMs } = parseRate(spec);
+  return async (c, next) => {
+    const id = getClientIp(c);
+    const key = `${keyTag}:${id}`;
+    const now = Date.now();
+    let bucket = buckets.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      buckets.set(key, bucket);
+    }
+    bucket.count++;
+    if (bucket.count > limit) {
+      const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
+      c.header('Retry-After', String(retryAfter));
+      return c.json({ error: '请求过于频繁，请稍后再试' }, 429);
+    }
+    await next();
+  };
+}
+
+/** 全局默认限流（200/day, 50/hour）——可选启用 */
+export function defaultRateLimit(): MiddlewareHandler {
+  return async (c, next) => {
+    const id = getClientIp(c);
+    const now = Date.now();
+    const dayKey = `gday:${id}`;
+    const hourKey = `ghour:${id}`;
+    const day = buckets.get(dayKey);
+    const hour = buckets.get(hourKey);
+    const dayReset = day && day.resetAt > now ? day : (() => {
+      const b = { count: 0, resetAt: now + 86_400_000 };
+      buckets.set(dayKey, b);
+      return b;
+    })();
+    const hourReset = hour && hour.resetAt > now ? hour : (() => {
+      const b = { count: 0, resetAt: now + 3_600_000 };
+      buckets.set(hourKey, b);
+      return b;
+    })();
+    dayReset.count++;
+    hourReset.count++;
+    if (dayReset.count > 200 || hourReset.count > 50) {
+      return c.json({ error: '请求过于频繁，请稍后再试' }, 429);
+    }
+    await next();
+  };
+}

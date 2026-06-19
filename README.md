@@ -109,7 +109,7 @@ iptables -I DOCKER-USER -i br-8a9b2c3d4e5f -d 192.168.1.0/24 -j DROP
    - 设置 `CAPTCHA_PROVIDER: "altcha"`
    - 配置 `ALTCHA_HMAC_KEY`（建议使用至少32个字符的随机字符串）
    - 配置 `ALTCHA_DIFFICULTY`（默认为3，数值越大计算越难）
-   - 生成密钥示例：`python -c "import secrets; print(secrets.token_urlsafe(32))"`
+   - 生成密钥示例：`openssl rand -base64 32`
 
 ### 环境变量配置
 
@@ -124,8 +124,8 @@ nano .env
 **关键环境变量说明：**
 
 ```bash
-# Flask 配置（必需）
-SECRET_KEY=your-secret-key-here           # Flask会话密钥，可通过 openssl rand -hex 32 生成
+# 应用配置（必需）
+SECRET_KEY=your-secret-key-here           # 会话签名密钥，可通过 openssl rand -hex 32 生成
 
 # 邮件配置
 MAIL_SERVER=smtp.gmail.com                # SMTP服务器地址
@@ -156,7 +156,7 @@ LOCATION_NAME=广州                        # 城市名称
 ADMIN_PATH_PREFIX=admin                  # 管理员路径前缀（建议修改为不易猜测的字符串）
 ADMIN_USERNAME=admin                     # 管理员用户名
 ADMIN_PASSWORD=your-scrypt-hash-here     # 管理员密码（必须是哈希格式，不能是明文）
-# 生成哈希方法：python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your-password'))"
+# 生成哈希方法：npm run gen-hash your-password （生成 Werkzeug 兼容的 scrypt 哈希）
 
 # AI 内容审查配置
 AI_MODERATION_API_KEY=your-ai-api-key    # AI服务API密钥
@@ -184,24 +184,32 @@ docker compose up -d --build
 RainMail/
 ├── .gitignore
 ├── .env.example               # 环境变量配置模板
-├── Dockerfile                 # Docker 部署配置
+├── Dockerfile                 # Docker 部署配置（node:20-slim）
+├── docker-compose.yml         # Docker Compose 编排
 ├── LICENSE                    # 许可证文件
 ├── README.md                  # 项目文档
 ├── Cloudflare.md              # Cloudflare 安全防护配置文档
-├── app.py                     # Flask 主应用文件
-├── config_loader.py           # 环境变量配置加载器
-├── install.sh                 # 安装脚本
-├── requirements.txt            # Python 依赖列表
-├── run.py                     # 启动脚本
-├── curl.py                    # 天气检查脚本
-├── test_app.py                # 功能测试文件
-├── totp_secret.json           # TOTP 密钥存储
-├── migrations/                # 数据库迁移文件
-│   └── add_message_columns.sql
+├── DEPLOYMENT.md              # 部署指南
+├── install.sh                 # 安装脚本（npm）
+├── package.json               # Node 依赖与脚本
+├── tsconfig.json              # TypeScript 配置
+├── drizzle.config.ts          # Drizzle ORM 配置
+├── src/                       # 后端源码（TypeScript / Hono + Drizzle）
+│   ├── index.ts               # 应用入口（启动 + 后台任务）
+│   ├── app.ts                 # Hono 装配（中间件 + 路由）
+│   ├── config.ts              # 环境变量 → 配置对象
+│   ├── db/                    # 数据库（Drizzle + better-sqlite3）
+│   │   ├── schema.ts          # 表定义
+│   │   ├── index.ts           # 连接 + 工具函数
+│   │   └── migrate.ts         # 启动期建表
+│   ├── lib/                   # 业务库（密码/会话/CSRF/验证码/天气/邮件/审核…）
+│   ├── routes/                # 路由（pages/api/auth/user/letters/admin）
+│   ├── views/nunjucks.ts      # Nunjucks 模板渲染（兼容 Jinja2）
+│   └── workers/               # 后台任务（天气解锁/邮件队列/清理）
 ├── instance/                  # 数据库目录
 │   └── rainmail.db            # SQLite 数据库
-├── resources/                 # 静态资源
-│   └── all.csv                # 敏感词库
+├── resources/                 # 资源
+│   └── email.csv              # 邮箱服务商映射
 ├── static/                    # 前端静态资源
 │   ├── techccy.png            # Logo
 │   ├── css/
@@ -210,20 +218,19 @@ RainMail/
 │       ├── app.js             # 前端逻辑
 │       ├── html2canvas.min.js # 截图库
 │       └── qrcode.min.js      # 二维码生成
-└── templates/                 # HTML 模板
+└── templates/                 # HTML 模板（Nunjucks/Jinja2 语法）
     ├── index.html             # 主页
     ├── admin_dashboard.html   # 管理员面板
     ├── admin_login.html       # 管理员登录
     ├── admin_settings.html    # 管理员设置
+    ├── error.html             # 错误页
     ├── auth/                  # 用户认证
     │   ├── login.html         # 登录页
     │   └── register.html      # 注册页
     ├── user/                  # 用户功能
     │   ├── inbox.html         # 收件箱
     │   ├── letter.html        # 情感投递页
-    │   ├── settings.html      # 用户设置
-    │   ├── profile.html       # 用户资料
-    │   └── sent.html          # 已发送
+    │   └── settings.html      # 用户设置
     ├── public/                # 公开页面
     │   └── message.html       # 公开消息详情页
     ├── privacy_policy.html    # 隐私条款（英文）
@@ -363,7 +370,7 @@ GET /api/health
 - 敏感词过滤
 
 ### 认证安全
-- 密码哈希存储（bcrypt）
+- 密码哈希存储（scrypt，兼容 Werkzeug 格式）
 - 邮箱验证机制
 - 人机验证（Cloudflare Turnstile / Altcha / 数学验证）
 - 会话管理

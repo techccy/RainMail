@@ -85,13 +85,9 @@
         {% if warning %}
             <div class="alert" style="background-color: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 15px; border-radius: 5px; margin-bottom: 20px; white-space: pre-wrap; font-size: 12px;">{{ warning }}</div>
         {% endif %}
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="alert alert-{{ category }}">{{ message }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
+        {% for entry in get_flashed_messages(with_categories=true) %}
+          <div class="alert alert-{{ entry[0] }}">{{ entry[1] }}</div>
+        {% endfor %}
 
         <form id="admin-login-form" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -29,7 +29,7 @@ class VerifyPage {
             if (typeof turnstile !== 'undefined') {
                 clearInterval(checkTurnstile);
                 turnstile.render('#turnstile-widget', {
-                    sitekey: document.querySelector('meta[name="turnstile-site-key"]')?.content || '{{ turnstile_site_key }}',
+                    sitekey: document.querySelector('meta[name="turnstile-site-key"]')?.content || '',
                     callback: (token) => {
                         document.getElementById('cf-token').value = token;
                         this.verifyAndSubmit({ cf_token: token });

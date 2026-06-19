@@ -21,9 +21,8 @@ services:
     env_file:
       - .env
 
-    # 数据卷挂载：SQLite数据库持久化
+    # 数据卷挂载：SQLite 数据库持久化（数据库文件位于 instance/rainmail.db）
     volumes:
-      - rainmail_data:/data
       - rainmail_instance:/app/instance
 
     # tmpfs用于运行时写入
@@ -56,11 +55,9 @@ services:
 
 # 定义数据卷
 volumes:
-  rainmail_data:
-    driver: local
   rainmail_instance:
     driver: local
-    
+
 networks:
   isolated_net:
     driver: bridge
