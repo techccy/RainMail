@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import type { Context } from 'hono';
 import { getConfig } from '../config.js';
 
-const MIN_PAGE_TIME = 8;
+const MIN_PAGE_TIME = 4;
 const MIN_INPUT_FOCUS = 1;
 const MIN_INPUT_CHARS = 1;
 const TOKEN_EXPIRY = 600;

@@ -10,7 +10,7 @@ class UserBehaviorTracker {
         this.inputFocusCount = 0;
         this.inputCharCount = 0;
         this.hasFocusedInput = false;
-        this.minStayTime = 8; // 最小停留时间（秒）
+        this.minStayTime = 4; // 最小停留时间（秒）
         this.tracking = false;
     }
 

@@ -144,7 +144,17 @@ export function rateLimit(spec: string, keyTag = ''): MiddlewareHandler {
   };
 }
 
-/** 全局默认限流（200/day, 50/hour）——可选启用 */
+/** 全局默认限流 ——可选启用
+ *
+ * 阈值需高于前端自身的后台轮询频率，否则长时间停留页面会被正常轮询打爆：
+ *   - 主页 /api/weather/meta 每 30 秒轮询一次 → 120 次/小时
+ *   - /api/weather 每 5 分钟轮询一次 → 12 次/小时
+ *   - 页面加载时还会拉 /api/form_token、/api/csrf_token 等
+ * 旧阈值（50/hour、200/day）远低于上述合计，导致停留约 25 分钟即触发 429。
+ * 现放宽至 1000/hour、5000/day，仍可拦截真正的刷量，且不影响被动轮询。
+ * 注意：写接口（POST /api/messages、login、register 等）均有各自更严格的路由级限流，
+ *       全局限流仅作为兜底，不应拦截合法的后台刷新请求。
+ */
 export function defaultRateLimit(): MiddlewareHandler {
   return async (c, next) => {
     const id = getClientIp(c);
@@ -165,7 +175,7 @@ export function defaultRateLimit(): MiddlewareHandler {
     })();
     dayReset.count++;
     hourReset.count++;
-    if (dayReset.count > 200 || hourReset.count > 50) {
+    if (dayReset.count > 5000 || hourReset.count > 1000) {
       return c.json({ error: '请求过于频繁，请稍后再试' }, 429);
     }
     await next();

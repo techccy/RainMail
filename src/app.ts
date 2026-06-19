@@ -34,7 +34,7 @@ export function createApp(): Hono {
   // 2. 安全响应头
   app.use('*', securityHeadersMiddleware());
 
-  // 3. 全局默认限流（200/day, 50/hour）
+  // 3. 全局默认限流（5000/day, 1000/hour）——仅作兜底，写接口有各自的路由级限流
   app.use('/api/*', defaultRateLimit());
 
   // 4. 静态资源
