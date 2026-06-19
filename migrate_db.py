@@ -8,10 +8,12 @@ import os
 import json
 from datetime import datetime
 
-# 数据库路径
-OLD_DB = 'instance/rainmail2.db'
-NEW_DB = 'instance/rainmail.db'
-BACKUP_DB = 'instance/rainmail.db.backup'
+# 数据库路径 —— 锚定项目根，与 app.py 使用的 instance 目录保持一致
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INSTANCE_DIR = os.path.join(BASE_DIR, 'instance')
+OLD_DB = os.path.join(INSTANCE_DIR, 'rainmail2.db')
+NEW_DB = os.path.join(INSTANCE_DIR, 'rainmail.db')
+BACKUP_DB = os.path.join(INSTANCE_DIR, 'rainmail.db.backup')
 
 def backup_new_database():
     """备份新数据库"""

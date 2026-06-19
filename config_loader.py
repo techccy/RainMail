@@ -105,6 +105,9 @@ def load_config_from_env():
         'APP_NAME_CN': 'APP_NAME_CN',
         'APP_URL': 'APP_URL',
 
+        # 数据库路径
+        'DATABASE_PATH': 'DATABASE_PATH',
+
         # 其他配置
         'TIMES': 'times',
         'FORCE_RAIN_DURATION': 'force_rain_duration',

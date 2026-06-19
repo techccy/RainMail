@@ -167,6 +167,9 @@ AI_MODERATION_MODEL=deepseek-ai/deepseek-r1-distill-llama-8b  # AI模型名称
 TIMES=3600                               # 天气缓存时间（秒）
 FORCE_RAIN_DURATION=10                   # 强制降雨持续时间（分钟）
 VERIFY_DURATION_MINUTES=15               # 邮箱验证码有效期（分钟）
+
+# 数据库路径（两种部署方式默认一致，一般无需修改）
+DATABASE_PATH=sqlite:///instance/rainmail.db
 ```
 
 **2. 启动应用**
@@ -177,6 +180,26 @@ docker compose up -d --build
 
 3. **访问应用**
    打开浏览器访问: http://localhost:5024
+
+## 本地运行（不使用 Docker）
+
+适合开发/调试，与 Docker 部署使用同一份 `.env` 和同一个数据库路径（`instance/rainmail.db`），可随时切换。
+
+```bash
+# 1. 安装依赖
+pip install -r requirements.txt
+
+# 2. 复制并编辑配置（首次）
+cp .env.example .env
+nano .env
+
+# 3. 启动应用
+python run.py
+```
+
+首次运行会自动在项目根创建 `instance/` 目录并初始化数据库。访问 http://localhost:5024
+
+> 数据库路径由 `.env` 的 `DATABASE_PATH` 控制，默认 `sqlite:///instance/rainmail.db`，Docker 与本地一致，切换部署方式无需改动配置。
 
 ## 项目结构
 

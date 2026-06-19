@@ -32,9 +32,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd -m -u 1000 rainmail && \
     chown -R rainmail:rainmail /app
 
-# 创建数据目录并设置权限
-RUN mkdir -p /data && \
-    chown -R rainmail:rainmail /data
+# 创建数据库目录并设置权限（数据库文件位于 instance 目录）
+RUN mkdir -p /app/instance && \
+    chown -R rainmail:rainmail /app/instance
 
 # 切换到非root用户
 USER rainmail

@@ -30,13 +30,10 @@ else
 fi
 
 # 检查配置文件
-if [ ! -f "config.yaml" ]; then
-    echo "创建默认配置文件..."
-    cat > config.yaml << EOL
-API_KEY: "请在此处填写和风天气API_KEY"
-times: 2
-EOL
-    echo "⚠ 请编辑 config.yaml 文件配置API密钥"
+if [ ! -f ".env" ]; then
+    echo "创建配置文件..."
+    cp .env.example .env
+    echo "⚠ 请编辑 .env 文件填入实际配置（特别是 SECRET_KEY、天气 API 密钥）"
 fi
 
 # 创建数据库
@@ -51,9 +48,9 @@ with app.app_context():
 echo ""
 echo "安装完成！"
 echo "启动应用: python run.py"
-echo "访问地址: http://localhost:5000"
+echo "访问地址: http://localhost:5024"
 echo ""
 echo "下一步:"
-echo "1. 编辑 config.yaml 配置天气API密钥"
+echo "1. 编辑 .env 文件配置实际参数（SECRET_KEY、天气 API 密钥等）"
 echo "2. 运行 python run.py 启动应用"
-echo "3. 打开浏览器访问 http://localhost:5000"
+echo "3. 打开浏览器访问 http://localhost:5024"

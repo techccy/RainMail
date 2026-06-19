@@ -475,9 +475,25 @@ else:
     API_AVAILABLE = True
     print(f"[INFO] 总共加载了 {len(API_PAIRS)} 组天气API。")
 
-# 数据库配置
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/rainmail.db'
+# 数据库配置 —— 读取 DATABASE_PATH，默认使用项目 instance 目录
+# Docker 和本地两种部署方式统一使用 instance/rainmail.db
+# Docker 端通过卷挂载 instance 目录持久化，本地端直接写入项目根的 instance 目录
+default_db_path = os.path.join(os.path.dirname(__file__), 'instance', 'rainmail.db')
+db_uri = app.config.get('DATABASE_PATH') or f'sqlite:///{default_db_path}'
+app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# 确保 SQLite 数据库所在目录存在（连接前创建，避免本地运行时目录缺失）
+if db_uri.startswith('sqlite:///'):
+    db_file = db_uri[len('sqlite:///'):]
+    db_dir = os.path.dirname(db_file)
+    # 相对路径锚定到项目根
+    if db_dir and not os.path.isabs(db_dir):
+        db_dir = os.path.join(os.path.dirname(__file__), db_dir)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
+print(f"[INFO] 数据库路径: {db_uri}")
 db = SQLAlchemy(app)
 
 # 邮件配置
