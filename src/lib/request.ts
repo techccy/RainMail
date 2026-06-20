@@ -27,37 +27,37 @@ export async function getJsonBody(c: Context): Promise<Record<string, any>> {
 export async function getFormBody(c: Context): Promise<Record<string, any>> {
   const cached = (c as any)._formBody;
   if (cached !== undefined) return cached;
+
+  // 先克隆请求，用 clone 探测 body 真实内容（不消费原始流）。
+  // 这样无论 parseBody 是否成功，都能拿到原始 body 文本用于诊断 / 兜底。
+  let rawText = '';
+  try {
+    const cloned = c.req.raw.clone();
+    rawText = await cloned.text();
+  } catch {
+    /* clone 失败说明流已被消费 */
+  }
+
   let body: Record<string, any> = {};
   try {
     body = Object.fromEntries((await c.req.parseBody()) as any);
   } catch {
     body = {};
   }
-  // 兜底 + 诊断：parseBody 返回空时，读原始 body 文本看实际内容。
-  // body 流是一次性的，parseBody 读过后 raw.text() 会空；这里两个都打出来定位。
-  if (Object.keys(body).length === 0) {
-    let rawLen = -1;
-    let rawSample = '';
+
+  // 兜底：parseBody 返回空，但原始 body 有内容 → 手动解析 urlencoded
+  if (Object.keys(body).length === 0 && rawText) {
     try {
-      const raw = await c.req.raw.text();
-      rawLen = raw.length;
-      rawSample = raw.slice(0, 80);
-      if (raw) {
-        const parsed = new URLSearchParams(raw);
-        const fallback: Record<string, any> = {};
-        parsed.forEach((v, k) => { fallback[k] = v; });
-        if (Object.keys(fallback).length > 0) {
-          body = fallback;
-        }
+      const parsed = new URLSearchParams(rawText);
+      const fallback: Record<string, any> = {};
+      parsed.forEach((v, k) => { fallback[k] = v; });
+      if (Object.keys(fallback).length > 0) {
+        console.warn(`[getFormBody] parseBody 空，手动解析成功 keys=[${Object.keys(fallback).join(',')}]`);
+        body = fallback;
       }
-    } catch (e: any) {
-      rawSample = `读取异常: ${e?.message ?? String(e)}`;
+    } catch {
+      /* ignore */
     }
-    console.warn(
-      `[getFormBody] parseBody 返回空 rawLen=${rawLen}`,
-      `rawSample=${rawSample ? JSON.stringify(rawSample) : '(空)'}`,
-      `parsedKeys=${Object.keys(body).join(',')}`,
-    );
   }
   (c as any)._formBody = body;
   (c.req as any).parsedBody = body;
