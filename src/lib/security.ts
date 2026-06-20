@@ -26,6 +26,14 @@ export function securityHeadersMiddleware(): MiddlewareHandler {
   return async (c, next) => {
     await next();
     const cfg = getConfig();
+    // SSR 页面（登录页等）把 CSRF token 内嵌进 HTML 并与会话绑定，
+    // 若被任何一层缓存（Cloudflare 边缘 / 浏览器启发式），下次 GET 命中缓存即不回源，
+    // 提交的是旧会话的 token，会导致 CSRF 校验失败。因此对 HTML 响应强制禁缓存。
+    const contentType = c.res.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+      c.header('Pragma', 'no-cache');
+    }
     c.header('Content-Security-Policy', (cfg.CSP_POLICY as string) || DEFAULT_CSP);
     c.header('X-Frame-Options', 'DENY');
     c.header('X-Content-Type-Options', 'nosniff');
