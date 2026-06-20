@@ -36,15 +36,14 @@ RUN npm run build
 # 编译完成后移除 dev 依赖，保持最终镜像精简
 RUN npm prune --omit=dev
 
-# 创建非 root 用户
-RUN useradd -m -u 1000 rainmail && \
-    chown -R rainmail:rainmail /app
+# 复用基础镜像中已存在的非 root 用户 node（UID 1000），避免 UID 冲突
+RUN chown -R node:node /app
 
 # 创建数据库目录并设置权限（数据库文件位于 instance 目录）
 RUN mkdir -p /app/instance && \
-    chown -R rainmail:rainmail /app/instance
+    chown -R node:node /app/instance
 
-USER rainmail
+USER node
 
 EXPOSE 5024
 
