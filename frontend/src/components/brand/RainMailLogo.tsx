@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 
 /**
  * RainMail 动态 Logo（pixel2motion 方法论 · 信任/专业气质）
@@ -34,8 +34,23 @@ export default function RainMailLogo({ width = 320, className }: RainMailLogoPro
   const gradId = `rm-grad-${uid}`;
   const clipId = `rm-wipe-${uid}`;
 
+  // 等页面完全加载后再播放（window.load）。
+  // 组件可能晚于 load 才挂载（如路由切换），此时 readyState 已是 complete，立即播放。
+  const [loaded, setLoaded] = useState(
+    () => typeof document !== 'undefined' && document.readyState === 'complete',
+  );
+  useEffect(() => {
+    if (loaded) return;
+    const onLoad = () => setLoaded(true);
+    window.addEventListener('load', onLoad, { once: true });
+    return () => window.removeEventListener('load', onLoad);
+  }, [loaded]);
+
   return (
-    <div className={['rm-logo', className].filter(Boolean).join(' ')} style={{ width }}>
+    <div
+      className={['rm-logo', loaded && 'rm-play', className].filter(Boolean).join(' ')}
+      style={{ width }}
+    >
       {/* biome-ignore lint/a11y/useUniqueIds: gradient/clip ids are namespaced by useId */}
       <style>{cssFor(gradId, clipId)}</style>
       <svg
@@ -106,6 +121,9 @@ export default function RainMailLogo({ width = 320, className }: RainMailLogoPro
 /**
  * 动画 CSS。token 仅用于 animation 简写与文档；keyframe 内全部写字面 cubic-bezier。
  * 气质：Trustworthy（ease-out 族，无过冲，无 squash）。
+ *
+ * 速度：已下调至原速 60%（duration / delay 同比 ×1.667），总时长由 1400ms → 2333ms。
+ * 触发：默认 paused，待外层 .rm-logo.rm-play 出现才播放（等页面 load 完成）。
  */
 function cssFor(gradId: string, clipId: string): string {
   // gradId/clipId 不直接用于 keyframe，但保留以便未来 per-instance 调参。
@@ -115,13 +133,13 @@ function cssFor(gradId: string, clipId: string): string {
 .rm-logo { display: inline-block; line-height: 0; }
 
 /* ===== 揭示（播放一次，forwards 固定终态）===== */
-/* 总时长 1400ms；20:50:30 = 280 / 700 / 420 */
+/* 速度 ×1.667（=1/0.6）；原 20:50:30 = 280 / 700 / 420 → 现 467 / 1167 / 700；总 2333ms */
 
 /* 1) 云朵：scale 0.94→1 + 淡入。ease-out = cubic-bezier(0,0,0.2,1)（信任族，一致） */
 .rm-cloud {
   opacity: 0;
   transform: scale(0.94);
-  animation: rm-cloud-in 1000ms cubic-bezier(0, 0, 0.2, 1) 80ms forwards;
+  animation: rm-cloud-in 1667ms cubic-bezier(0, 0, 0.2, 1) 133ms forwards paused;
   will-change: transform, opacity;
 }
 @keyframes rm-cloud-in {
@@ -138,14 +156,14 @@ function cssFor(gradId: string, clipId: string): string {
   transform: translateY(-10px);
   transform-box: fill-box;
   transform-origin: center;
-  animation: rm-drop-in 640ms cubic-bezier(0, 0, 0.2, 1) forwards;
+  animation: rm-drop-in 1067ms cubic-bezier(0, 0, 0.2, 1) forwards paused;
   will-change: transform, opacity;
 }
 /* 自然书写顺序错峰：inner-left / inner-right / bottom-left / bottom-right */
-.rm-drop-1 { animation-delay: 520ms; }
-.rm-drop-2 { animation-delay: 600ms; }
-.rm-drop-3 { animation-delay: 680ms; }
-.rm-drop-4 { animation-delay: 760ms; }
+.rm-drop-1 { animation-delay: 867ms; }
+.rm-drop-2 { animation-delay: 1000ms; }
+.rm-drop-3 { animation-delay: 1133ms; }
+.rm-drop-4 { animation-delay: 1267ms; }
 @keyframes rm-drop-in {
   0%   { opacity: 0; transform: translateY(-10px); }
   55%  { opacity: 1; }                                   /* token: ease-enter */
@@ -158,7 +176,7 @@ function cssFor(gradId: string, clipId: string): string {
   transform: scaleX(0);
   transform-origin: left center;
   transform-box: fill-box;
-  animation: rm-wipe 720ms cubic-bezier(0, 0, 0.2, 1) 640ms forwards;
+  animation: rm-wipe 1200ms cubic-bezier(0, 0, 0.2, 1) 1067ms forwards paused;
   will-change: transform;
 }
 @keyframes rm-wipe {
@@ -170,13 +188,21 @@ function cssFor(gradId: string, clipId: string): string {
   transform: translateX(2px);
   transform-box: fill-box;
   transform-origin: center;
-  animation: rm-wordmark-drift 720ms cubic-bezier(0, 0, 0.2, 1) 640ms forwards;
+  animation: rm-wordmark-drift 1200ms cubic-bezier(0, 0, 0.2, 1) 1067ms forwards paused;
   will-change: transform, opacity;
 }
 @keyframes rm-wordmark-drift {
   0%   { opacity: 0; transform: translateX(2px); }
   30%  { opacity: 1; }                                    /* token: ease-enter */
   100% { opacity: 1; transform: translateX(0); }
+}
+
+/* ===== 页面完全加载后才开始播放 ===== */
+.rm-play .rm-cloud,
+.rm-play .rm-drop,
+.rm-play .rm-wipe-rect,
+.rm-play .rm-wordmark {
+  animation-play-state: running;
 }
 
 /* ===== Reduced motion：立即静态终态（Final Frame Contract）===== */
