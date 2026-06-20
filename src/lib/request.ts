@@ -45,14 +45,15 @@ export async function getFormBody(c: Context): Promise<Record<string, any>> {
     body = {};
   }
 
-  // 兜底：parseBody 返回空，但原始 body 有内容 → 手动解析 urlencoded
+  // 兜底：parseBody 返回空，但原始 body 有内容 → 手动解析 urlencoded。
+  // 原因：Hono 的 @hono/node-server 适配层对 application/x-www-form-urlencoded 的
+  // parseBody 偶发返回空（见 honojs/hono#2695）。用 clone 探测原始 body 后手动解析。
   if (Object.keys(body).length === 0 && rawText) {
     try {
       const parsed = new URLSearchParams(rawText);
       const fallback: Record<string, any> = {};
       parsed.forEach((v, k) => { fallback[k] = v; });
       if (Object.keys(fallback).length > 0) {
-        console.warn(`[getFormBody] parseBody 空，手动解析成功 keys=[${Object.keys(fallback).join(',')}]`);
         body = fallback;
       }
     } catch {

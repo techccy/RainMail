@@ -14,13 +14,6 @@ export function generateCsrfToken(c: Context): string {
   if (!token) {
     token = crypto.randomBytes(32).toString('hex');
     sessionSet(c, 'csrf_token', token);
-    console.warn(
-      `[csrf] 生成新 token path=${c.req.path}`,
-      `token=${token.slice(0, 8)}…`,
-      `cookie=${c.req.header('cookie') ? '有' : '无'}`,
-    );
-  } else {
-    console.warn(`[csrf] 复用已有 token path=${c.req.path} token=${token.slice(0, 8)}…`);
   }
   return token;
 }
@@ -53,7 +46,6 @@ export async function csrfProtect(c: Context, next: Next): Promise<Response | vo
 
   // 优先从 header
   let token = c.req.header('X-CSRF-Token');
-  let bodyKeys: string[] | null = null;
   if (!token) {
     // 再尝试请求体（JSON / 表单）
     const ct = c.req.header('content-type') || '';
@@ -61,26 +53,13 @@ export async function csrfProtect(c: Context, next: Next): Promise<Response | vo
     try {
       if (ct.includes('application/json')) body = await getJsonBody(c);
       else if (ct.includes('application/x-www-form-urlencoded') || ct.includes('multipart/form-data')) body = await getFormBody(c);
-      bodyKeys = Object.keys(body);
     } catch {
       /* ignore */
     }
     token = body?.csrf_token;
   }
 
-  const sessionToken = sessionGet(c, 'csrf_token');
-  const ok = validateCsrfToken(c, token ?? null);
-  if (!ok) {
-    // CSRF 失败诊断：输出提交的 token、session 中的 token、cookie 状态、
-    // content-type 与 body 字段，便于区分根因。
-    console.warn(
-      `[csrf] 校验失败 path=${c.req.path} method=${method}`,
-      `submitted=${token ? `${String(token).slice(0, 8)}…(${String(token).length})` : '(空)'}`,
-      `session=${sessionToken ? `${String(sessionToken).slice(0, 8)}…(${String(sessionToken).length})` : '(空)'}`,
-      `cookieHeader=${c.req.header('cookie') ? '有' : '无'}`,
-      `contentType=${c.req.header('content-type') || '(空)'}`,
-      `bodyKeys=${bodyKeys ? `[${bodyKeys.join(',')}]` : '(未解析)'}`,
-    );
+  if (!validateCsrfToken(c, token ?? null)) {
     return c.json({ error: 'CSRF token 验证失败' }, 403);
   }
   await next();

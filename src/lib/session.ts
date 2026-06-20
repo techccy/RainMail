@@ -52,17 +52,8 @@ function verifyAndParse(raw: string | undefined): SessionData {
 
 /** 为请求初始化会话变量（在全局中间件最前面调用） */
 export function initSession(c: Context): void {
-  const cookieHeader = c.req.header('cookie');
   const cookie = getCookie(c, COOKIE_NAME);
   const data = verifyAndParse(cookie);
-  // 诊断：完整记录 cookie header 与解析结果，定位 session 读不到的根因
-  console.warn(
-    `[session] path=${c.req.path} method=${c.req.method}`,
-    `cookieHeaderLen=${cookieHeader ? cookieHeader.length : 0}`,
-    `cookieHeader=${cookieHeader ? JSON.stringify(cookieHeader.slice(0, 100)) : '(无)'}`,
-    `parsedCookie=${cookie ? `${cookie.slice(0, 20)}…(len=${cookie.length})` : '(未找到 session 键)'}`,
-    `sessionKeys=[${Object.keys(data).join(',')}]`,
-  );
   // 暂存原始快照，便于响应阶段判断是否需要写回
   c.set('session', data);
   c.set('sessionOriginal', JSON.stringify(data));
