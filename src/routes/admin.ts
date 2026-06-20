@@ -8,7 +8,7 @@ import { db, nowIso } from '../db/index.js';
 import { messages, users, letterDeliveries, notifications } from '../db/schema.js';
 import { getConfig } from '../config.js';
 import { render, flash } from '../views/nunjucks.js';
-import { getClientIp, rateLimit, checkHoneypot } from '../lib/security.js';
+import { getClientIp, checkHoneypot } from '../lib/security.js';
 import { getFormBody, getJsonBody } from '../lib/request.js';
 import {
   getCaptchaProvider,
@@ -82,13 +82,14 @@ function freshCha(c: any): string | undefined {
 app.get(`/${ADMIN_PREFIX}`, (c) => c.redirect(prefix(''), 301));
 
 // ----------------------------- 管理员登录 -----------------------------
-app.get(prefix(''), rateLimit('5 per minute'), (c) => {
+// 登录速率限制已移除：由 Cloudflare（WAF / Rate Limiting Rules）在边缘层防护
+app.get(prefix(''), (c) => {
   const provider = getCaptchaProvider();
   const cha = provider === 'cha' || provider === 'altcha' ? prepareChaQuestion(c).question : undefined;
   return c.html(render('admin_login.html', { ...captchaTemplateVars(), cha_question: cha }, c));
 });
 
-app.post(prefix(''), rateLimit('5 per minute'), csrfProtect, async (c) => {
+app.post(prefix(''), csrfProtect, async (c) => {
   const provider = getCaptchaProvider();
   const form = await getFormBody(c);
 
