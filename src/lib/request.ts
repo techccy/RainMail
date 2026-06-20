@@ -33,23 +33,31 @@ export async function getFormBody(c: Context): Promise<Record<string, any>> {
   } catch {
     body = {};
   }
-  // 兜底：parseBody 偶发返回空对象（如 body 流被读、或适配层对 urlencoded 解析失败）。
-  // 此时手动读取原始 body 文本并解析 urlencoded，确保字段不丢失。
+  // 兜底 + 诊断：parseBody 返回空时，读原始 body 文本看实际内容。
+  // body 流是一次性的，parseBody 读过后 raw.text() 会空；这里两个都打出来定位。
   if (Object.keys(body).length === 0) {
+    let rawLen = -1;
+    let rawSample = '';
     try {
       const raw = await c.req.raw.text();
+      rawLen = raw.length;
+      rawSample = raw.slice(0, 80);
       if (raw) {
         const parsed = new URLSearchParams(raw);
         const fallback: Record<string, any> = {};
         parsed.forEach((v, k) => { fallback[k] = v; });
         if (Object.keys(fallback).length > 0) {
-          console.warn(`[getFormBody] parseBody 返回空，手动解析 urlencoded 得到字段: [${Object.keys(fallback).join(',')}]`);
           body = fallback;
         }
       }
-    } catch {
-      /* ignore */
+    } catch (e: any) {
+      rawSample = `读取异常: ${e?.message ?? String(e)}`;
     }
+    console.warn(
+      `[getFormBody] parseBody 返回空 rawLen=${rawLen}`,
+      `rawSample=${rawSample ? JSON.stringify(rawSample) : '(空)'}`,
+      `parsedKeys=${Object.keys(body).join(',')}`,
+    );
   }
   (c as any)._formBody = body;
   (c.req as any).parsedBody = body;
