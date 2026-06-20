@@ -13,9 +13,9 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖清单并安装（利用 Docker 层缓存）
+# 复制依赖清单并安装（包含 dev 依赖，构建时需要 tsc）
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 # 复制项目源码与资源
 COPY tsconfig.json ./
@@ -28,6 +28,9 @@ COPY .env.example ./
 
 # 编译 TypeScript
 RUN npm run build
+
+# 编译完成后移除 dev 依赖，保持最终镜像精简
+RUN npm prune --omit=dev
 
 # 创建非 root 用户
 RUN useradd -m -u 1000 rainmail && \
