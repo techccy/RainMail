@@ -76,6 +76,11 @@ function freshCha(c: any): string | undefined {
   return getCaptchaProvider() === 'cha' ? prepareChaQuestion(c).question : undefined;
 }
 
+// ----------------------------- 裸前缀尾斜杠归一化 -----------------------------
+// /techccyadmin → /techccyadmin/  （prefix('') 注册的登录路由带尾斜杠，
+// 裸前缀无匹配会落到路由器尽头返回 404，这里补一条 301 重定向）
+app.get(`/${ADMIN_PREFIX}`, (c) => c.redirect(prefix(''), 301));
+
 // ----------------------------- 管理员登录 -----------------------------
 app.get(prefix(''), rateLimit('5 per minute'), (c) => {
   const provider = getCaptchaProvider();
