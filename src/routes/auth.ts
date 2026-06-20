@@ -54,7 +54,7 @@ function freshChaQuestion(c: any): string | undefined {
 }
 
 // ----------------------------- 注册 API -----------------------------
-app.post('/api/auth/register', rateLimit('3 per hour'), async (c) => {
+app.post('/api/auth/register', rateLimit('3 per hour', 'register'), async (c) => {
   try {
     const data = await getJsonBody(c);
     const email = String(data.email ?? '').trim().toLowerCase();
@@ -151,7 +151,7 @@ app.get('/verify-email', (c) => {
 });
 
 // ----------------------------- 登录 API -----------------------------
-app.post('/api/auth/login', rateLimit('10 per minute'), async (c) => {
+app.post('/api/auth/login', rateLimit('10 per minute', 'login'), async (c) => {
   try {
     const data = await getJsonBody(c);
     const email = String(data.email ?? '').trim().toLowerCase();

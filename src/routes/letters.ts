@@ -110,7 +110,7 @@ function safeParseJson(s: string | null): Record<string, any> {
 }
 
 // ----------------------------- 提交消息 POST /api/messages -----------------------------
-app.post('/api/messages', rateLimit('10 per minute'), csrfProtect, async (c) => {
+app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async (c) => {
   try {
     const data = await getJsonBody(c);
 

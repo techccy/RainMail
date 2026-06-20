@@ -58,7 +58,7 @@ app.get('/api/weather', async (c) => {
   return c.json(await getDashboardData(city));
 });
 
-app.get('/api/weather/meta', rateLimit('120 per hour'), async (c) => {
+app.get('/api/weather/meta', rateLimit('120 per hour', 'weather-meta'), async (c) => {
   const clientIp = getClientIp(c);
   const city = await getCityByIp(clientIp);
   return c.json(await getWeatherMeta(city));

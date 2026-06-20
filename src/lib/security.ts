@@ -129,7 +129,10 @@ export function parseRate(spec: string): RateLimitOpts {
 
 /**
  * 限流中间件工厂
- * @example rateLimit('10 per minute')
+ * @param keyTag 路由标签，用于隔离不同接口的计数桶。若多个路由共用空 tag，
+ *               它们会共享同一个 `${tag}:${ip}` 桶（登录与投递会互相消耗额度）。
+ *               每个限流路由都应传入唯一 tag，例如 'msg' / 'login' / 'register'。
+ * @example rateLimit('10 per minute', 'msg')
  */
 export function rateLimit(spec: string, keyTag = ''): MiddlewareHandler {
   const { limit, windowMs } = parseRate(spec);
@@ -145,6 +148,9 @@ export function rateLimit(spec: string, keyTag = ''): MiddlewareHandler {
     bucket.count++;
     if (bucket.count > limit) {
       const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
+      console.warn(
+        `[RATELIMIT] tag=${keyTag || '(none)'} IP=${id} count=${bucket.count}/${limit} windowMs=${windowMs} retryAfter=${retryAfter}s`,
+      );
       c.header('Retry-After', String(retryAfter));
       return c.json({ error: '请求过于频繁，请稍后再试' }, 429);
     }
@@ -184,6 +190,9 @@ export function defaultRateLimit(): MiddlewareHandler {
     dayReset.count++;
     hourReset.count++;
     if (dayReset.count > 5000 || hourReset.count > 1000) {
+      console.warn(
+        `[RATELIMIT] tag=global IP=${id} day=${dayReset.count}/5000 hour=${hourReset.count}/1000`,
+      );
       return c.json({ error: '请求过于频繁，请稍后再试' }, 429);
     }
     await next();
