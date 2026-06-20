@@ -229,8 +229,14 @@ app.post('/api/messages', rateLimit('10 per minute'), csrfProtect, async (c) => 
 });
 
 // ----------------------------- 查看信件页面 /letters/:token -----------------------------
-app.get('/letters/:token', (c) => {
+// 邮件链接场景：:token 为 unlock_token（16 位随机串）→ SSR 渲染解锁/查看页。
+// 收件箱场景：:token 为 delivery id（纯数字）→ 让出，交由 SPA fallback（React /letters/:id）。
+// SPA 前端另经 /api/letters/:id（按 delivery id + 登录态校验）取详情。
+app.get('/letters/:token', (c, next) => {
   const token = c.req.param('token');
+  // 纯数字 = delivery id → 交给 SPA
+  if (/^\d+$/.test(token)) return next();
+
   const delivery = db.select().from(letterDeliveries).where(eq(letterDeliveries.unlock_token, token)).limit(1).all()[0];
   if (!delivery) return c.html(render('error.html', { message: '信件不存在' }, c), 404);
 
@@ -249,6 +255,37 @@ app.get('/letters/:token', (c) => {
       c,
     ),
   );
+});
+
+// ----------------------------- 信件详情 JSON（SPA 用，按 delivery id） -----------------------------
+app.get('/api/letters/:id', (c) => {
+  const id = Number(c.req.param('id'));
+  const delivery = db.select().from(letterDeliveries).where(eq(letterDeliveries.id, id)).limit(1).all()[0];
+  if (!delivery) return c.json({ error: '信件不存在' }, 404);
+
+  // 登录态校验（仅 recipient_user_id 场景；邮件 token 场景走 /letters/:token SSR）
+  const userId = sessionGet(c, 'user_id');
+  if (delivery.recipient_user_id && (!userId || userId !== delivery.recipient_user_id)) {
+    return c.json({ error: '无权访问此信件' }, 403);
+  }
+
+  const message = db.select().from(messages).where(eq(messages.id, delivery.message_id!)).limit(1).all()[0];
+  if (!message) return c.json({ error: '信件内容不存在' }, 404);
+
+  const isUnlocked = delivery.delivery_status === 'delivered' || delivery.delivery_status === 'read';
+
+  // 已解锁才返回内容；未解锁只返回元信息
+  return c.json({
+    delivery_id: delivery.id,
+    message_id: message.id,
+    is_unlocked: isUnlocked,
+    is_read: delivery.delivery_status === 'read',
+    location: message.location,
+    created_at: delivery.created_at,
+    unlocked_at: delivery.unlocked_at,
+    content: isUnlocked ? message.content : null,
+    hugs_count: message.hugs_count ?? 0,
+  });
 });
 
 // ----------------------------- 权限校验辅助 -----------------------------

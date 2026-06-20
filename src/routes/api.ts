@@ -30,6 +30,21 @@ const app = new Hono();
 // ----------------------------- 健康检查 -----------------------------
 app.get('/api/health', (c) => c.json({ status: 'healthy', timestamp: new Date().toISOString() }));
 
+// ----------------------------- 前端启动配置 -----------------------------
+// 返回 SPA 启动所需配置（替代模板 data-* 注入）
+app.get('/api/bootstrap', (c) => {
+  const cfg = getConfig();
+  const provider = getCaptchaProvider();
+  return c.json({
+    captcha_provider: provider,
+    turnstile_site_key: provider === 'cloudflare' ? String(cfg.TURNSTILE_SITE_KEY ?? '') : '',
+    recaptcha_site_key:
+      provider === 'recaptcha' || provider === 'recaptcha_v3' ? String(cfg.RECAPTCHA_V3_SITE_KEY ?? '') : '',
+    app_name: String(cfg.APP_NAME ?? 'RainMail'),
+    app_name_cn: String(cfg.APP_NAME_CN ?? '雨天信箱'),
+  });
+});
+
 // ----------------------------- CSRF token -----------------------------
 app.get('/api/csrf_token', (c) => c.json({ csrf_token: generateCsrfToken(c) }));
 

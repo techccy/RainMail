@@ -1,54 +1,27 @@
 // =============================================================================
-// 页面路由 —— / /privacy-policy(-cn) /m/:unique_id
+// 页面路由 —— /privacy-policy(-cn) + 消息详情 JSON API
+//
+// 原 SSR 页面路由（/、/m/:unique_id）已交由 React SPA（见 frontend/），
+// 由 app.ts 的 SPA fallback 提供 index.html。
+// 保留：隐私政策（静态法律文本 SSR）+ /api/messages/:unique_id（SPA 取消息详情用）。
 // =============================================================================
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { messages, messageReplies } from '../db/schema.js';
-import { getConfig } from '../config.js';
-import { render, wrapDates } from '../views/nunjucks.js';
-import { getClientIp } from '../lib/security.js';
-import { getCityByIp } from '../lib/ipgeo.js';
-import { getDashboardData } from '../lib/weather.js';
-import { getCaptchaProvider } from '../lib/captcha.js';
+import { render } from '../views/nunjucks.js';
 
 const app = new Hono();
 
-// ----------------------------- 首页 -----------------------------
-app.get('/', async (c) => {
-  const cfg = getConfig();
-  const clientIp = getClientIp(c);
-  const city = await getCityByIp(clientIp);
-  const dashboard = await getDashboardData(city);
-
-  const provider = getCaptchaProvider();
-  const turnstileSiteKey = provider === 'cloudflare' ? String(cfg.TURNSTILE_SITE_KEY ?? '') : '';
-  const recaptchaSiteKey = provider === 'recaptcha' || provider === 'recaptcha_v3' ? String(cfg.RECAPTCHA_V3_SITE_KEY ?? '') : '';
-
-  return c.html(
-    render(
-      'index.html',
-      {
-        ...dashboard,
-        turnstile_site_key: turnstileSiteKey,
-        recaptcha_site_key: recaptchaSiteKey,
-        captcha_provider: provider,
-        wechat_enabled: false,
-      },
-      c,
-    ),
-  );
-});
-
-// ----------------------------- 隐私政策 -----------------------------
+// ----------------------------- 隐私政策（SSR 静态） -----------------------------
 app.get('/privacy-policy', (c) => c.html(render('privacy_policy.html', {}, c)));
 app.get('/privacy-policy-cn', (c) => c.html(render('privacy_policy_cn.html', {}, c)));
 
-// ----------------------------- 消息详情页 -----------------------------
-app.get('/m/:unique_id', (c) => {
+// ----------------------------- 消息详情 JSON（SPA 用） -----------------------------
+app.get('/api/messages/:unique_id', (c) => {
   const uniqueId = c.req.param('unique_id');
   const message = db.select().from(messages).where(eq(messages.unique_identifier, uniqueId)).limit(1).all()[0];
-  if (!message) return c.html(render('error.html', { message: '消息不存在' }, c), 404);
+  if (!message) return c.json({ error: '消息不存在' }, 404);
 
   const replies = db
     .select()
@@ -57,16 +30,24 @@ app.get('/m/:unique_id', (c) => {
     .all()
     .sort((a, b) => (a.created_at! < b.created_at! ? 1 : -1));
 
-  return c.html(
-    render(
-      'public/message.html',
-      {
-        message: wrapDates(message, ['created_at']),
-        replies: replies.map((r) => wrapDates(r, ['created_at'])),
-      },
-      c,
-    ),
-  );
+  return c.json({
+    message: {
+      id: message.id,
+      content: message.content,
+      created_at: message.created_at,
+      location: message.location,
+      unique_identifier: message.unique_identifier,
+      delivery_type: message.delivery_type,
+      is_anonymous: !!message.is_anonymous,
+      hugs_count: message.hugs_count ?? 0,
+    },
+    replies: replies.map((r) => ({
+      id: r.id,
+      reply_content: r.reply_content,
+      reply_type: r.reply_type,
+      created_at: r.created_at,
+    })),
+  });
 });
 
 export default app;

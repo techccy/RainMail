@@ -1,0 +1,20 @@
+{
+  "segment_count": 53,
+  "cubic_segments": 53,
+  "line_segments": 0,
+  "closed": true,
+  "budget": null,
+  "over_budget": false,
+  "median_segment_length": 47.95,
+  "short_segment_warnings": [
+    {
+      "segment": 42,
+      "length": 5.19
+    }
+  ],
+  "join_angle_threshold_degrees": 8.0,
+  "join_angle_warnings": [],
+  "input_svg": "frontend/public/brand/_test5.svg",
+  "selected_path_index": 0,
+  "path_count": 5
+}

@@ -26,7 +26,11 @@ COPY static/ ./static/
 COPY resources/ ./resources/
 COPY .env.example ./
 
-# 编译 TypeScript
+# 构建前端 SPA（产物输出到 static/spa/，随 static/ 一并由 Hono 服务）
+COPY frontend/ ./frontend/
+RUN cd frontend && npm ci && npm run build && cd .. && rm -rf frontend/node_modules
+
+# 编译 TypeScript 后端
 RUN npm run build
 
 # 编译完成后移除 dev 依赖，保持最终镜像精简

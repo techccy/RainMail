@@ -1,15 +1,14 @@
 // =============================================================================
-// 用户路由 —— /user/(inbox|settings)、/api/user/*
+// 用户路由 —— /api/user/*
+//
+// 原 SSR 页面（/user/inbox、/user/settings）已交由 React SPA，
+// 由 app.ts 的 SPA fallback 提供 index.html。登录态由前端 RequireAuth 守卫。
 // =============================================================================
 import { Hono } from 'hono';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { users, messages, letterDeliveries, notifications } from '../db/schema.js';
-import { getConfig } from '../config.js';
-import { render } from '../views/nunjucks.js';
-import { getClientIp } from '../lib/security.js';
 import { getJsonBody } from '../lib/request.js';
-import { getCaptchaProvider } from '../lib/captcha.js';
 import { csrfProtect } from '../lib/csrf.js';
 import { sessionGet } from '../lib/session.js';
 
@@ -22,31 +21,6 @@ function loginRequired(c: any): Response | null {
   }
   return null;
 }
-
-// ----------------------------- 页面 -----------------------------
-app.get('/user/inbox', (c) => {
-  const guard = loginRequired(c);
-  if (guard) return guard;
-  const cfg = getConfig();
-  const provider = getCaptchaProvider();
-  return c.html(
-    render(
-      'user/inbox.html',
-      {
-        captcha_provider: provider,
-        turnstile_site_key: provider === 'cloudflare' ? String(cfg.TURNSTILE_SITE_KEY ?? '') : '',
-        recaptcha_site_key: provider === 'recaptcha' || provider === 'recaptcha_v3' ? String(cfg.RECAPTCHA_V3_SITE_KEY ?? '') : '',
-      },
-      c,
-    ),
-  );
-});
-
-app.get('/user/settings', (c) => {
-  const guard = loginRequired(c);
-  if (guard) return guard;
-  return c.html(render('user/settings.html', {}, c));
-});
 
 // ----------------------------- 用户信息 -----------------------------
 app.get('/api/user/profile', (c) => {
@@ -193,10 +167,5 @@ app.put('/api/user/notifications/:id', csrfProtect, (c) => {
   return c.json({ success: true });
 });
 
-// 避免未使用告警
-void and;
-void inArray;
-void desc;
-void getClientIp;
 export { loginRequired };
 export default app;

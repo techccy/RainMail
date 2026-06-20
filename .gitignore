@@ -4,6 +4,10 @@
 node_modules/
 dist/
 *.tsbuildinfo
+.venv/
+
+# 前端构建产物（输出到 static/spa，不入库）
+static/spa/
 
 # ----------------------------------------------------------------------------
 # 环境与密钥（不提交）
@@ -40,3 +44,5 @@ docs/
 impeccable/
 .wrangler/
 /gsap/
+design-os/
+pixel2motion/

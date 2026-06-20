@@ -4,7 +4,10 @@
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { Context, Next } from 'hono';
+import fs from 'node:fs';
+import path from 'node:path';
 import { getConfig } from './config.js';
+import { PROJECT_ROOT } from './config.js';
 import { initSession, commitSession } from './lib/session.js';
 import { securityHeadersMiddleware, defaultRateLimit } from './lib/security.js';
 import { setAdminPrefix } from './views/nunjucks.js';
@@ -48,11 +51,59 @@ export function createApp(): Hono {
   app.route('/', letterRoutes);
   app.route('/', adminRoutes); // 内部使用 admin 前缀
 
-  // 6. 全局错误兜底
+  // 6. SPA fallback —— React 前端接管页面路由
+  //    仅对「未匹配到后端路由 + GET + Accept:text/html + 非静态/非 API/非 admin」的请求
+  //    返回 static/spa/index.html，由 react-router 客户端路由。
+  const spaIndex = path.join(PROJECT_ROOT, 'static', 'spa', 'index.html');
+  app.get('*', serveSpaIndex(spaIndex, adminPrefix));
+
+  // 7. 全局错误兜底
   app.onError((err, c) => {
     console.error('[app] 未捕获错误:', err);
     return c.json({ error: '服务器内部错误' }, 500);
   });
 
   return app;
+}
+
+/**
+ * SPA fallback 中间件工厂。
+ * 判定规则：
+ *   - 仅 GET 且 Accept 含 text/html
+ *   - 路径不以 /api、/static、/admin（admin 前缀）、/letters（保留 SSR 资源路径）干扰
+ *   - SPA index.html 存在时返回；否则放行（交由后续 404）
+ *
+ * 注意：react-router 的 SPA 路由（/、/auth/*、/user/*、/m/:id 等）均会被此前端接管。
+ * 后端已有的精确路由（pages/api/auth/user/letters/admin）优先级更高，已在上一步注册。
+ */
+function serveSpaIndex(indexHtmlPath: string, adminPrefix: string) {
+  return async (c: Context, next: Next) => {
+    const url = new URL(c.req.url);
+    const p = url.pathname;
+
+    // 非 GET 或非页面请求直接放行
+    if (c.req.method !== 'GET') return next();
+    const accept = c.req.header('accept') ?? '';
+    if (!accept.includes('text/html')) return next();
+
+    // 明确排除的路径前缀：API、静态资源、admin、后端 SSR 资源目录、隐私政策(SSR 静态)
+    const exclude = [
+      '/api/',
+      '/static/',
+      `/${adminPrefix}/`,
+      `/${adminPrefix}`,
+      '/privacy-policy',
+      '/privacy-policy-cn',
+    ];
+    if (exclude.some((x) => p === x || p.startsWith(x))) return next();
+
+    // SPA index.html 不存在（前端未构建）→ 放行，返回 404
+    try {
+      await fs.promises.access(indexHtmlPath, fs.constants.R_OK);
+    } catch {
+      return next();
+    }
+    const html = await fs.promises.readFile(indexHtmlPath, 'utf-8');
+    return c.html(html);
+  };
 }

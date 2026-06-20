@@ -1,22 +1,21 @@
 // =============================================================================
-// 认证路由 —— /auth/(login|register)、/api/auth/*、/verify-email
+// 认证路由 —— /api/auth/*、/verify-email
+//
+// 原 SSR 页面（/auth/login、/auth/register）已交由 React SPA，
+// 由 app.ts 的 SPA fallback 提供 index.html。验证码配置经 /api/bootstrap 提供。
 // =============================================================================
 import { Hono } from 'hono';
 import crypto from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db, nowIso } from '../db/index.js';
 import { users } from '../db/schema.js';
-import { getConfig } from '../config.js';
-import { render } from '../views/nunjucks.js';
 import { getClientIp, rateLimit } from '../lib/security.js';
 import { getJsonBody } from '../lib/request.js';
 import { getCityByIp } from '../lib/ipgeo.js';
 import {
   getCaptchaProvider,
   validateCaptcha,
-  generateChaQuestion,
   prepareChaQuestion,
-  currentChaQuestion,
 } from '../lib/captcha.js';
 import { csrfProtect } from '../lib/csrf.js';
 import { sessionSet, sessionPop } from '../lib/session.js';
@@ -25,27 +24,6 @@ import { checkLoginLocked, trackFailedLogin, resetFailedLogin } from '../lib/aut
 import { sendVerificationEmail } from '../lib/mail.js';
 
 const app = new Hono();
-
-/** 公共：构造登录/注册页模板变量 */
-function captchaTemplateVars() {
-  const cfg = getConfig();
-  const provider = getCaptchaProvider();
-  return {
-    captcha_provider: provider,
-    turnstile_site_key: provider === 'cloudflare' ? String(cfg.TURNSTILE_SITE_KEY ?? '') : '',
-    recaptcha_site_key: provider === 'recaptcha' || provider === 'recaptcha_v3' ? String(cfg.RECAPTCHA_V3_SITE_KEY ?? '') : '',
-  };
-}
-
-/** 公共：为 CHA/Altcha 移动端回退准备问题 */
-function maybePrepareCha(c: any): string | undefined {
-  const provider = getCaptchaProvider();
-  if (provider === 'cha' || provider === 'altcha') {
-    const q = prepareChaQuestion(c);
-    return q.question;
-  }
-  return undefined;
-}
 
 /** 公共：从请求体按 provider 提取验证码响应 */
 function extractCaptchaResponse(provider: string, data: Record<string, any>): unknown {
@@ -74,19 +52,6 @@ function freshChaQuestion(c: any): string | undefined {
   if (getCaptchaProvider() !== 'cha') return undefined;
   return prepareChaQuestion(c).question;
 }
-
-// ----------------------------- 页面 -----------------------------
-app.get('/auth/login', (c) => {
-  const vars = captchaTemplateVars();
-  const cha = maybePrepareCha(c);
-  return c.html(render('auth/login.html', { ...vars, cha_question: cha }, c));
-});
-
-app.get('/auth/register', (c) => {
-  const vars = captchaTemplateVars();
-  const cha = maybePrepareCha(c);
-  return c.html(render('auth/register.html', { ...vars, cha_question: cha }, c));
-});
 
 // ----------------------------- 注册 API -----------------------------
 app.post('/api/auth/register', rateLimit('3 per hour'), async (c) => {
@@ -272,5 +237,4 @@ app.post('/api/auth/resend-verification', csrfProtect, async (c) => {
   }
 });
 
-export { maybePrepareCha, currentChaQuestion, generateChaQuestion };
 export default app;
