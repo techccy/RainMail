@@ -59,7 +59,17 @@ export async function csrfProtect(c: Context, next: Next): Promise<Response | vo
     token = body?.csrf_token;
   }
 
-  if (!validateCsrfToken(c, token ?? null)) {
+  const sessionToken = sessionGet(c, 'csrf_token');
+  const ok = validateCsrfToken(c, token ?? null);
+  if (!ok) {
+    // CSRF 失败诊断：输出提交的 token、session 中的 token、cookie 状态，
+    // 便于区分根因（cookie 未回传 / session 解析失败 / token 不匹配 / 容器未重新构建）。
+    console.warn(
+      `[csrf] 校验失败 path=${c.req.path} method=${method}`,
+      `submitted=${token ? `${String(token).slice(0, 8)}…(${String(token).length})` : '(空)'}`,
+      `session=${sessionToken ? `${String(sessionToken).slice(0, 8)}…(${String(sessionToken).length})` : '(空)'}`,
+      `cookieHeader=${c.req.header('cookie') ? '有' : '无'}`,
+    );
     return c.json({ error: 'CSRF token 验证失败' }, 403);
   }
   await next();
