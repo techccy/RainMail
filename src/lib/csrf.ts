@@ -14,6 +14,13 @@ export function generateCsrfToken(c: Context): string {
   if (!token) {
     token = crypto.randomBytes(32).toString('hex');
     sessionSet(c, 'csrf_token', token);
+    console.warn(
+      `[csrf] 生成新 token path=${c.req.path}`,
+      `token=${token.slice(0, 8)}…`,
+      `cookie=${c.req.header('cookie') ? '有' : '无'}`,
+    );
+  } else {
+    console.warn(`[csrf] 复用已有 token path=${c.req.path} token=${token.slice(0, 8)}…`);
   }
   return token;
 }

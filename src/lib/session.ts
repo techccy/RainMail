@@ -54,6 +54,13 @@ function verifyAndParse(raw: string | undefined): SessionData {
 export function initSession(c: Context): void {
   const cookie = getCookie(c, COOKIE_NAME);
   const data = verifyAndParse(cookie);
+  if (cookie && Object.keys(data).length === 0) {
+    console.warn(
+      `[session] cookie 验签失败 path=${c.req.path} method=${c.req.method}`,
+      `cookieLen=${cookie.length}`,
+      `cookieHead=${cookie.slice(0, 20)}…`,
+    );
+  }
   // 暂存原始快照，便于响应阶段判断是否需要写回
   c.set('session', data);
   c.set('sessionOriginal', JSON.stringify(data));
