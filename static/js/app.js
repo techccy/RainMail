@@ -378,7 +378,7 @@ class RainMailApp {
                 body: JSON.stringify(requestBody)
             });
 
-            clearInterval(this.progressIntervalId);
+            this._clearProgress();
             this.hideProcessingOverlay();
             const data = await response.json();
 
@@ -398,7 +398,7 @@ class RainMailApp {
                 } else {
                     alert(data.error || '提交失败');
                 }
-                clearInterval(this.progressIntervalId);
+                this._clearProgress();
                 this.hideProcessingOverlay();
             }
 
@@ -423,7 +423,7 @@ class RainMailApp {
         } catch (error) {
             console.error('提交错误:', error);
             alert('网络错误，请重试');
-            clearInterval(this.progressIntervalId);
+            this._clearProgress();
             this.hideProcessingOverlay();
         }
     }
@@ -452,10 +452,6 @@ class RainMailApp {
     showProcessingOverlay() {
         const overlay = document.getElementById('processing-overlay');
         if (!overlay) return;
-        // 移除隐藏类以确保 inline style 能生效（.hidden 使用 !important，会覆盖直接的 style 设置）
-        overlay.classList.remove('hidden');
-        // 使用 flex 布局让内容居中显示
-        overlay.style.display = 'flex';
         // 重置动画文本和进度条
         const processingTextEl = document.getElementById('processing-text');
         const progressBarEl = document.getElementById('processing-progress-bar');
@@ -464,11 +460,14 @@ class RainMailApp {
         if (progressBarEl) progressBarEl.style.width = '0%';
         if (timeRemainingEl) timeRemainingEl.textContent = '预计剩余时间: 8 秒';
 
-        // 可选：禁用提交按钮，防止重复点击
-        // const submitBtn = document.getElementById('submit-btn');
-        // const rainyBtn = document.getElementById('rainy-submit-btn');
-        // if (submitBtn) submitBtn.disabled = true;
-        // if (rainyBtn) rainyBtn.disabled = true;
+        // GSAP 接管显示（含淡入 + 内容缩放）；未加载时回退到直接 display
+        const motion = window.RainMailMotion;
+        if (motion && motion.modalIn) {
+            motion.modalIn(overlay);
+        } else {
+            overlay.classList.remove('hidden');
+            overlay.style.display = 'flex';
+        }
     }
     // --- END 新增 ---
 
@@ -477,67 +476,117 @@ class RainMailApp {
     hideProcessingOverlay() {
         const overlay = document.getElementById('processing-overlay');
         if (!overlay) return;
-        overlay.style.display = 'none';
-        // 重新添加隐藏类，保持与其他隐藏元素的统一实现方式保持一致
-        overlay.classList.add('hidden');
-
-        // 可选：恢复提交按钮可用状态
-        // const submitBtn = document.getElementById('submit-btn');
-        // const rainyBtn = document.getElementById('rainy-submit-btn');
-        // if (submitBtn) submitBtn.disabled = false;
-        // if (rainyBtn) rainyBtn.disabled = false;
+        const motion = window.RainMailMotion;
+        if (motion && motion.modalOut) {
+            motion.modalOut(overlay);
+        } else {
+            overlay.style.display = 'none';
+            overlay.classList.add('hidden');
+        }
     }
     // --- END 新增 ---
 
     // --- 新增：模拟进度条 ---
+    // 优先使用 GSAP 时间线（来自 motion.js）；GSAP 不可用时回退到 setInterval。
     simulateProgress(totalDurationMs) {
         const progressBar = document.getElementById('processing-progress-bar');
         const processingText = document.getElementById('processing-text');
         const timeRemainingElement = document.getElementById('processing-time-remaining');
 
-        const steps = 100; // 进度条分为100步
+        const texts = ['正在加密...', '正在打包...', '正在上传...', '正在审核...'];
+        const reduceMotion = window.RainMailMotion && window.RainMailMotion.prefersReduced && window.RainMailMotion.prefersReduced();
+
+        // 清理上一次（GSAP timeline 或 interval）
+        this._clearProgress();
+
+        const gsapLib = window.gsap;
+        if (gsapLib && progressBar) {
+            // 用 scaleX（transformOrigin 左对齐）比 width 更省 layout；但现有样式基于 width，
+            // 为保持与 CSS .processing-progress-bar 一致，这里仍动画 width。
+            const tl = gsapLib.timeline({
+                onStart: () => {
+                    const startTime = Date.now();
+                    // 时间剩余用独立 tween 文本更新（不阻塞主进度）
+                    const updateRemaining = () => {
+                        if (!tl.isActive() && tl.progress() >= 1) return;
+                        const elapsed = Date.now() - startTime;
+                        const remaining = Math.max(0, totalDurationMs - elapsed);
+                        if (timeRemainingElement) {
+                            timeRemainingElement.textContent = `预计剩余时间: ${(remaining / 1000).toFixed(1)} 秒`;
+                        }
+                    };
+                    this._progressRemainingTimer = setInterval(updateRemaining, 100);
+                },
+                onComplete: () => {
+                    if (this._progressRemainingTimer) { clearInterval(this._progressRemainingTimer); this._progressRemainingTimer = null; }
+                    if (progressBar) progressBar.style.width = '100%';
+                    if (processingText) processingText.textContent = '处理完成...';
+                },
+            });
+
+            tl.fromTo(progressBar, { width: '0%' }, {
+                width: '100%',
+                duration: reduceMotion ? 0.001 : totalDurationMs / 1000,
+                ease: 'none',
+            });
+            // 分段切换文字：每 1/4 进度换一次
+            const seg = (reduceMotion ? 0.001 : totalDurationMs / 1000) / texts.length;
+            texts.forEach((txt, i) => {
+                if (i === 0) {
+                    if (processingText) processingText.textContent = txt;
+                    return;
+                }
+                tl.add(() => { if (processingText) processingText.textContent = txt; }, seg * i);
+            });
+
+            this.progressTimeline = tl;
+            return;
+        }
+
+        // ----- 回退：原 setInterval 实现 -----
+        const steps = 100;
         const stepDuration = totalDurationMs / steps;
         let currentStep = 0;
-
-        const texts = [
-            '正在加密...',
-            '正在打包...',
-            '正在上传...',
-            '正在审核...'
-        ];
         let textIndex = 0;
-        const textChangeInterval = Math.floor(steps / texts.length); // 每隔几步换一次文字
-
+        const textChangeInterval = Math.floor(steps / texts.length);
         const startTime = Date.now();
-
-        // 清除可能存在的旧定时器
-        if (this.progressIntervalId) {
-            clearInterval(this.progressIntervalId);
-        }
 
         this.progressIntervalId = setInterval(() => {
             currentStep++;
             const progressPercent = Math.min((currentStep / steps) * 100, 100);
-            progressBar.style.width = `${progressPercent}%`;
+            if (progressBar) progressBar.style.width = `${progressPercent}%`;
 
-            // 更新文字
             if (currentStep % textChangeInterval === 0 && textIndex < texts.length) {
-                processingText.textContent = texts[textIndex];
+                if (processingText) processingText.textContent = texts[textIndex];
                 textIndex++;
             }
 
-            // 更新剩余时间 (估算)
             const elapsed = Date.now() - startTime;
             const remaining = Math.max(0, totalDurationMs - elapsed);
-            timeRemainingElement.textContent = `预计剩余时间: ${(remaining / 1000).toFixed(1)} 秒`;
+            if (timeRemainingElement) timeRemainingElement.textContent = `预计剩余时间: ${(remaining / 1000).toFixed(1)} 秒`;
 
             if (currentStep >= steps) {
                 clearInterval(this.progressIntervalId);
-                // 确保进度条达到100%
-                progressBar.style.width = '100%';
-                processingText.textContent = '处理完成...'; // 或者显示一个完成状态
+                if (progressBar) progressBar.style.width = '100%';
+                if (processingText) processingText.textContent = '处理完成...';
             }
         }, stepDuration);
+    }
+
+    /** 统一清理进度条（GSAP timeline 或 interval 或剩余时间计时器） */
+    _clearProgress() {
+        if (this.progressTimeline && typeof this.progressTimeline.kill === 'function') {
+            this.progressTimeline.kill();
+        }
+        this.progressTimeline = null;
+        if (this.progressIntervalId) {
+            clearInterval(this.progressIntervalId);
+            this.progressIntervalId = null;
+        }
+        if (this._progressRemainingTimer) {
+            clearInterval(this._progressRemainingTimer);
+            this._progressRemainingTimer = null;
+        }
     }
     // --- END 新增 ---
 
@@ -606,6 +655,11 @@ class RainMailApp {
                 </div>
             </div>
         `).join('');
+
+        // GSAP：消息卡片入场 stagger（可选链降级，GSAP 未加载时仍保留 CSS fadeIn）
+        if (window.RainMailMotion && window.RainMailMotion.animateMessages) {
+            window.RainMailMotion.animateMessages(container);
+        }
     }
 
     async checkWeather() {
@@ -640,15 +694,27 @@ class RainMailApp {
         const sunnyInterface = document.getElementById('sunny-interface');
         const rainyInterface = document.getElementById('rainy-interface');
 
-        // 更新body的class
+        // 更新body的class（也驱动 weather-bg.js 粒子模式切换）
         document.body.className = `${this.currentWeather}-mode`;
 
-        if (this.currentWeather === 'sunny') {
-            sunnyInterface.classList.remove('hidden');
-            rainyInterface.classList.add('hidden');
-        } else {
-            sunnyInterface.classList.add('hidden');
-            rainyInterface.classList.remove('hidden');
+        // 优先让 GSAP 接管两个 interface 的交叉淡入淡出；未接管时回退到 .hidden 硬切
+        const motion = window.RainMailMotion;
+        let handled = false;
+        if (motion && motion.onWeatherChange) {
+            handled = !!motion.onWeatherChange(this.currentWeather);
+        }
+
+        if (!handled) {
+            if (this.currentWeather === 'sunny') {
+                sunnyInterface.classList.remove('hidden');
+                rainyInterface.classList.add('hidden');
+            } else {
+                sunnyInterface.classList.add('hidden');
+                rainyInterface.classList.remove('hidden');
+            }
+        }
+
+        if (this.currentWeather === 'rainy') {
             this.loadMessages();
         }
 
@@ -684,8 +750,14 @@ class RainMailApp {
         this.generateQRCode(shareData.full_share_url || shareData.unique_identifier);
 
         const successModal = document.getElementById('success-modal');
-        successModal.classList.remove('hidden');
-        successModal.style.display = 'flex'; // 需要使用 flex 布局居中
+        // GSAP 接管显示（淡入 + 内容缩放）；未加载时回退
+        const motion = window.RainMailMotion;
+        if (motion && motion.modalIn) {
+            motion.modalIn(successModal);
+        } else {
+            successModal.classList.remove('hidden');
+            successModal.style.display = 'flex'; // 需要使用 flex 布局居中
+        }
     }
 
     generateQRCode(urlOrId) {
@@ -708,8 +780,13 @@ class RainMailApp {
 
     hideModal() {
         const successModal = document.getElementById('success-modal');
-        successModal.classList.add('hidden');
-        successModal.style.display = 'none';
+        const motion = window.RainMailMotion;
+        if (motion && motion.modalOut) {
+            motion.modalOut(successModal);
+        } else {
+            successModal.classList.add('hidden');
+            successModal.style.display = 'none';
+        }
     }
 
     async saveShareCard() {
@@ -848,6 +925,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // 添加键盘快捷键
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        document.getElementById('success-modal').style.display = 'none';
+        const successModal = document.getElementById('success-modal');
+        const motion = window.RainMailMotion;
+        if (motion && motion.modalOut) {
+            motion.modalOut(successModal);
+        } else if (successModal) {
+            successModal.style.display = 'none';
+        }
     }
 });

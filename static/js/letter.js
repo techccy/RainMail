@@ -100,7 +100,12 @@ async function sendHug() {
 function showReplyForm() {
     const replyForm = document.getElementById('reply-form');
     if (replyForm) {
-        replyForm.style.display = 'block';
+        const motion = window.RainMailMotion;
+        if (motion && motion.slideToggle) {
+            motion.slideToggle(replyForm, true);
+        } else {
+            replyForm.style.display = 'block';
+        }
         document.getElementById('reply-content').focus();
     }
 }
@@ -108,11 +113,16 @@ function showReplyForm() {
 function hideReplyForm() {
     const replyForm = document.getElementById('reply-form');
     if (replyForm) {
-        replyForm.style.display = 'none';
         document.getElementById('reply-content').value = '';
         const counter = document.querySelector('.reply-form .char-count');
         if (counter) {
             counter.textContent = '0';
+        }
+        const motion = window.RainMailMotion;
+        if (motion && motion.slideToggle) {
+            motion.slideToggle(replyForm, false);
+        } else {
+            replyForm.style.display = 'none';
         }
     }
 }

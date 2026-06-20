@@ -1532,6 +1532,33 @@ textarea::placeholder {
 }
 
 /* ============================================================
+   20.5 GSAP 动画层集成
+   ------------------------------------------------------------
+   motion.js 在 <html> 上添加 .gsap-ready 类后：
+   - 关闭 .fade-in 的 CSS 入场（交给 GSAP，避免双重动画）
+   - 启用真正参与动画的元素的 will-change（仅这些元素，遵循性能原则）
+   - SplitText 拆行容器裁剪（公共信件页正文逐行揭示）
+   未加载 GSAP 时这些规则不生效，原有 CSS 动画继续作为 fallback。
+   ============================================================ */
+.gsap-ready .fade-in {
+    animation: none;
+}
+
+.gsap-ready .ks-mark,
+.gsap-ready .ks-wordmark,
+.gsap-ready .message-item,
+.gsap-ready .letter-item,
+.gsap-ready .letter-body,
+.gsap-ready .reply-item {
+    will-change: transform, opacity;
+}
+
+/* SplitText 行容器（由 motion.js 设置 overflow:hidden）防脱字 */
+.ks-line {
+    line-height: inherit;
+}
+
+/* ============================================================
    21. 响应式
    ============================================================ */
 @media (max-width: 600px) {

@@ -67,6 +67,10 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/letter.js') }}"></script>
+    <!-- GSAP 动画层（需在 letter.js 之后，letter.js 通过可选链调用） -->
+    <script src="{{ url_for('static', filename='js/gsap/gsap.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/motion.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/weather-bg.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof initLetterView === 'function') {
