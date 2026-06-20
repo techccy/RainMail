@@ -33,6 +33,24 @@ export async function getFormBody(c: Context): Promise<Record<string, any>> {
   } catch {
     body = {};
   }
+  // 兜底：parseBody 偶发返回空对象（如 body 流被读、或适配层对 urlencoded 解析失败）。
+  // 此时手动读取原始 body 文本并解析 urlencoded，确保字段不丢失。
+  if (Object.keys(body).length === 0) {
+    try {
+      const raw = await c.req.raw.text();
+      if (raw) {
+        const parsed = new URLSearchParams(raw);
+        const fallback: Record<string, any> = {};
+        parsed.forEach((v, k) => { fallback[k] = v; });
+        if (Object.keys(fallback).length > 0) {
+          console.warn(`[getFormBody] parseBody 返回空，手动解析 urlencoded 得到字段: [${Object.keys(fallback).join(',')}]`);
+          body = fallback;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
   (c as any)._formBody = body;
   (c.req as any).parsedBody = body;
   return body;
