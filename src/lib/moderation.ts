@@ -68,6 +68,7 @@ export async function aiModerationReview(content: string): Promise<AiModerationV
     ],
     temperature: 0.0,
     max_tokens: 100,
+    response_format: { type: 'json_object' }, // 强制 JSON 输出，避免思考型模型在 content 里输出思考过程
   };
 
   try {
