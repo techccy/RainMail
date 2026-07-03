@@ -1,10 +1,11 @@
 // =============================================================================
 // ShareCardModal —— 提交成功后的存票凭证弹窗
 // 展示：寄信人/第N号/唯一ID/存入时间/服务器状态/总消息数 + QR
-// 「保存存票」→ html2canvas 导出 PNG（雨天信箱存票_#N.png）
-// QR 用 qrcode 库（替代 vendored qrcode.min.js）
+// 「保存存票」→ html-to-image 导出 PNG（雨天信箱存票_#N.png）
+// QR 用 qrcode 库渲染成 dataURL <img>（替代 vendored qrcode.min.js）
+// 卡片配色由 weatherStatus 显式决定，不依赖全局 .dark 主题
 // =============================================================================
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,48 +22,85 @@ interface Props {
 export default function ShareCardModal({ share, weatherOverride, open, onOpenChange }: Props) {
   const { user } = useAuth();
   const cardRef = useRef<HTMLDivElement>(null);
-  const qrRef = useRef<HTMLCanvasElement>(null);
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const weatherStatus = weatherOverride ?? share?.weather_status ?? 'sunny';
   const weatherLabel = weatherStatus === 'rainy' ? '雨天模式' : '晴天模式';
   const senderName = user?.username || user?.email?.split('@')[0] || '匿名';
 
-  // 渲染 QR 到 canvas（懒加载 qrcode 库）
+  // 卡片配色：由实时天气决定，晴天浅卡 / 雨天深卡，独立于全局 .dark 主题
+  const theme =
+    weatherStatus === 'rainy'
+      ? {
+          cardBg: '#1c1f2b', // 深蓝灰
+          text: 'text-stone-100',
+          label: 'text-stone-400',
+          border: 'border-stone-700',
+          link: 'text-stone-300',
+        }
+      : {
+          cardBg: '#faf7f0', // 暖白票据感
+          text: 'text-stone-900',
+          label: 'text-stone-500',
+          border: 'border-stone-200',
+          link: 'text-stone-600',
+        };
+
+  // 渲染 QR 为 dataURL（懒加载 qrcode 库）
+  // 用 toDataURL + state 取代直接画 canvas：不再依赖 Radix Portal 异步挂载时 qrRef 是否就绪
   useEffect(() => {
-    if (!share || !qrRef.current) return;
+    if (!share) {
+      setQrDataUrl('');
+      return;
+    }
     const url = share.full_share_url.startsWith('http')
       ? share.full_share_url
       : `${window.location.origin}${share.full_share_url}`;
     let cancelled = false;
-    void import('qrcode').then(({ default: QRCode }) => {
-      if (cancelled || !qrRef.current) return;
-      QRCode.toCanvas(
-        qrRef.current,
-        url,
-        { width: 128, margin: 1, errorCorrectionLevel: 'H', color: { dark: '#000000', light: '#ffffff' } },
-        () => {},
-      );
+    setQrDataUrl(''); // 切票时清空，避免闪旧码
+    void import('qrcode').then((mod) => {
+      if (cancelled) return;
+      // 兼容 default 与 namespace 两种 interop
+      const QRCode = (mod as { default?: typeof import('qrcode') }).default ?? mod;
+      QRCode.toDataURL(url, {
+        width: 128,
+        margin: 1,
+        errorCorrectionLevel: 'H',
+        color: { dark: '#000000', light: '#ffffff' },
+      })
+        .then((dataUrl) => {
+          if (!cancelled) setQrDataUrl(dataUrl);
+        })
+        .catch((e) => console.error('二维码生成失败', e));
     });
     return () => {
       cancelled = true;
     };
-  }, [share, open]);
+  }, [share]);
 
   const handleSave = async () => {
     if (!cardRef.current || !share) return;
-    // 懒加载 html2canvas（体积大，仅导出时需要）
-    const { default: html2canvas } = await import('html2canvas');
-    const canvas = await html2canvas(cardRef.current, {
-      backgroundColor: '#0a0a0a',
-      scale: 2,
-      useCORS: true,
-      logging: false,
-    });
-    const dataUrl = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = `雨天信箱存票_#${share.message_id}.png`;
-    a.click();
+    setSaving(true);
+    try {
+      // 懒加载 html-to-image（体积大，仅导出时需要）
+      // 选用 html-to-image 而非 html2canvas：前者通过 SVG foreignObject 委托浏览器原生渲染，
+      // 原生支持 oklch / 嵌套 canvas / 现代 CSS，后者会在解析 Tailwind v4 的 oklch 边框色时抛错。
+      const { toPng } = await import('html-to-image');
+      const dataUrl = await toPng(cardRef.current, {
+        pixelRatio: 2,
+        backgroundColor: theme.cardBg, // 与卡片底色一致，避免圆角透明
+        cacheBust: true,
+      });
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `雨天信箱存票_#${share.message_id}.png`;
+      a.click();
+    } catch (e) {
+      console.error('存票导出失败', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!share) return null;
@@ -82,46 +120,58 @@ export default function ShareCardModal({ share, weatherOverride, open, onOpenCha
           </p>
         )}
 
-        {/* 存票卡（html2canvas 截图源） */}
+        {/* 存票卡（html-to-image 截图源） */}
         <div
           ref={cardRef}
-          className="space-y-3 rounded-lg border border-border bg-zinc-950 p-5 text-zinc-100"
-          style={{ backgroundColor: '#0a0a0a' }}
+          className={`space-y-3 rounded-lg border p-5 ${theme.border} ${theme.text}`}
+          style={{ backgroundColor: theme.cardBg }}
         >
           <div className="flex items-center justify-between">
-            <span className="font-mono text-xs uppercase tracking-wider text-zinc-400">RainMail · 存票</span>
-            <span className="font-mono text-xs text-zinc-400">{weatherLabel}</span>
+            <span className={`font-mono text-xs uppercase tracking-wider ${theme.label}`}>RainMail · 存票</span>
+            <span className={`font-mono text-xs ${theme.label}`}>{weatherLabel}</span>
           </div>
           <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
-            <span className="text-zinc-400">寄信人</span>
+            <span className={theme.label}>寄信人</span>
             <span>{senderName}</span>
-            <span className="text-zinc-400">第</span>
+            <span className={theme.label}>第</span>
             <span>
               <span className="font-mono">#{share.message_id}</span> 号
             </span>
-            <span className="text-zinc-400">唯一 ID</span>
+            <span className={theme.label}>唯一 ID</span>
             <span className="font-mono text-xs">{share.unique_identifier}</span>
-            <span className="text-zinc-400">存入时间</span>
+            <span className={theme.label}>存入时间</span>
             <span className="font-mono text-xs">{new Date(share.created_at).toLocaleString('zh-CN')}</span>
-            <span className="text-zinc-400">总消息数</span>
+            <span className={theme.label}>总消息数</span>
             <span className="font-mono">{share.total_messages}</span>
           </div>
           <div className="flex justify-center pt-2">
-            <canvas ref={qrRef} width={128} height={128} className="rounded bg-white p-1" />
+            {qrDataUrl ? (
+              <img
+                src={qrDataUrl}
+                width={128}
+                height={128}
+                alt="存票二维码"
+                className="rounded bg-white p-1"
+              />
+            ) : (
+              <div className="flex size-32 items-center justify-center rounded bg-white p-1">
+                <span className="text-xs text-stone-400">生成中…</span>
+              </div>
+            )}
           </div>
           <a
             href={share.full_share_url}
             target="_blank"
             rel="noreferrer"
-            className="block break-all text-center font-mono text-xs text-zinc-300 underline"
+            className={`block break-all text-center font-mono text-xs underline ${theme.link}`}
           >
             {share.full_share_url}
           </a>
         </div>
 
         <div className="flex gap-2">
-          <Button onClick={handleSave} className="flex-1">
-            保存存票
+          <Button onClick={handleSave} disabled={saving} className="flex-1">
+            {saving ? '导出中…' : '保存存票'}
           </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             关闭
