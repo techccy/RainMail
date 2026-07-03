@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db, nowIso } from '../db/index.js';
 import { messages, users, letterDeliveries, messageReplies, notifications } from '../db/schema.js';
-import type { Message, LetterDelivery } from '../db/schema.js';
+import type { Message, LetterDelivery, MessageReply } from '../db/schema.js';
 import { getConfig } from '../config.js';
 import { render, wrapDates } from '../views/nunjucks.js';
 import { getClientIp, detectSqlInjection, sanitizeInput, rateLimit } from '../lib/security.js';
@@ -15,7 +15,7 @@ import { getJsonBody } from '../lib/request.js';
 import { getCityByIp } from '../lib/ipgeo.js';
 import { getCaptchaProvider, validateCaptcha } from '../lib/captcha.js';
 import { validateUserBehavior } from '../lib/behavior.js';
-import { basicKeywordCheck, aiModerationCheck } from '../lib/moderation.js';
+import { basicKeywordCheck } from '../lib/moderation.js';
 import { csrfProtect } from '../lib/csrf.js';
 import { sessionGet, sessionSet } from '../lib/session.js';
 import { sendNewLetterNotification, sendReplyNotification } from '../lib/mail.js';
@@ -100,6 +100,42 @@ export function createPrivateDelivery(c: any, message: Message, senderCity: stri
   return null;
 }
 
+/**
+ * 执行回复审核通过后的副作用：站内通知、回复邮件、被回复后公开翻转。
+ * 同时供回复路由（直接 approved 路径）与审核队列 worker（异步通过后）复用。
+ */
+export async function runReplySideEffects(c: any, message: Message, reply: MessageReply): Promise<void> {
+  // 通知原发件人
+  if (message.sender_id) {
+    db.insert(notifications)
+      .values({
+        user_id: message.sender_id,
+        notification_type: 'reply',
+        title: '📨 你的信收到了回复',
+        content: '有人回复了你之前发送的信件',
+        created_at: nowIso(),
+      })
+      .run();
+  }
+
+  // 邮件通知（微信通知已移除）
+  if (message.reply_notification === 'email' && message.sender_id) {
+    const sender = db.select().from(users).where(eq(users.id, message.sender_id)).limit(1).all()[0];
+    if (sender) {
+      await sendReplyNotification(c, sender, message, reply);
+    }
+  }
+
+  // 被回复后公开
+  if (message.public_after_reply) {
+    db.update(messages).set({ delivery_type: 'public' }).where(eq(messages.id, message.id)).run();
+    const firstDelivery = db.select().from(letterDeliveries).where(eq(letterDeliveries.message_id, message.id)).limit(1).all()[0];
+    if (firstDelivery) {
+      db.update(letterDeliveries).set({ delivery_status: 'public' }).where(eq(letterDeliveries.id, firstDelivery.id)).run();
+    }
+  }
+}
+
 function safeParseJson(s: string | null): Record<string, any> {
   if (!s) return {};
   try {
@@ -153,8 +189,11 @@ app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async 
       return c.json({ error: '人机验证失败，请刷新网页' }, 400);
     }
 
-    if (basicKeywordCheck(content) || (await aiModerationCheck(content))) {
-      console.warn(`[moderation] 内容拦截: ${content}`);
+    // 基础敏感词仍作为同步前置拦截（快速、不消耗 AI 配额）；命中即 400。
+    // AI 审核已改为异步队列（见 workers/moderation-queue.ts），不再阻塞请求：
+    // 消息以 pending 落库，审核通过后才进入公开列表/触发私信投递与邮件。
+    if (basicKeywordCheck(content)) {
+      console.warn(`[moderation] 内容拦截(敏感词): ${content}`);
       return c.json({ error: '内容未通过系统安全审查', blocked: true }, 400);
     }
 
@@ -183,6 +222,11 @@ app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async 
     const now = nowIso();
     const uniqueIdentifier = randomId(16);
 
+    // 配置了 AI 审核时以 pending 落库（由 worker 审核通过后再触发投递/通知）；
+    // 未配置 AI 时直接 approved，保持"即写即发"的现状语义。
+    const aiConfigured = !!(getConfig().AI_MODERATION as { API_KEY?: string } | undefined)?.API_KEY;
+    const reviewStatus = aiConfigured ? 'pending' : 'approved';
+
     db.insert(messages)
       .values({
         content,
@@ -196,12 +240,15 @@ app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async 
         sender_email: senderEmail || null,
         public_after_reply: publicAfterReply,
         created_at: now,
+        review_status: reviewStatus,
       })
       .run();
 
     const message = db.select().from(messages).where(eq(messages.unique_identifier, uniqueIdentifier)).limit(1).all()[0]!;
 
-    if (deliveryType === 'private') {
+    // 私信投递、邮件通知统一延迟到 worker 审核通过后触发（见 moderation-queue.ts）。
+    // 未配置 AI 时（approved）在此立即投递，保持原行为。
+    if (reviewStatus === 'approved' && deliveryType === 'private') {
       createPrivateDelivery(c, message, senderCity);
     }
 
@@ -220,6 +267,7 @@ app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async 
         created_at: message.created_at,
         weather_status: 'sunny',
         delivery_type: deliveryType,
+        review_status: reviewStatus,
       },
     });
   } catch (e) {
@@ -366,10 +414,16 @@ app.post('/api/letters/:id/reply', csrfProtect, async (c) => {
     const replierEmail = String(data.replier_email ?? '').trim();
 
     if (replyType === 'text' && !replyContent) return c.json({ error: '回复内容不能为空' }, 400);
-    if (replyType === 'text' && (basicKeywordCheck(replyContent) || (await aiModerationCheck(replyContent)))) {
-      console.warn(`[moderation] 回复内容拦截: ${replyContent}`);
+    // 基础敏感词同步拦截（命中即 400，不消耗 AI 配额）；
+    // AI 审核改为异步队列：文本回复以 pending 落库，通过后再触发通知/邮件/公开翻转。
+    if (replyType === 'text' && basicKeywordCheck(replyContent)) {
+      console.warn(`[moderation] 回复内容拦截(敏感词): ${replyContent}`);
       return c.json({ error: '回复内容未通过系统安全审查', blocked: true }, 400);
     }
+
+    const aiConfigured = !!(getConfig().AI_MODERATION as { API_KEY?: string } | undefined)?.API_KEY;
+    // 仅文本回复需要 AI 审核；拥抱等非文本回复无需审核，直接 approved。
+    const replyReviewStatus = replyType === 'text' && aiConfigured ? 'pending' : 'approved';
 
     const userId = sessionGet(c, 'user_id');
     db.insert(messageReplies)
@@ -380,6 +434,7 @@ app.post('/api/letters/:id/reply', csrfProtect, async (c) => {
         replier_user_id: userId ?? null,
         replier_email: !userId ? replierEmail || null : null,
         created_at: nowIso(),
+        review_status: replyReviewStatus,
       })
       .run();
 
@@ -387,35 +442,16 @@ app.post('/api/letters/:id/reply', csrfProtect, async (c) => {
       db.update(letterDeliveries).set({ delivery_status: 'read', read_at: nowIso() }).where(eq(letterDeliveries.id, delivery.id)).run();
     }
 
-    // 通知原发件人
-    if (message.sender_id) {
-      db.insert(notifications)
-        .values({
-          user_id: message.sender_id,
-          notification_type: 'reply',
-          title: '📨 你的信收到了回复',
-          content: '有人回复了你之前发送的信件',
-          created_at: nowIso(),
-        })
-        .run();
-    }
+    const reply = db
+      .select()
+      .from(messageReplies)
+      .where(eq(messageReplies.original_message_id, message.id))
+      .all()
+      .slice(-1)[0]!;
 
-    // 邮件通知（微信通知已移除）
-    if (message.reply_notification === 'email' && message.sender_id) {
-      const sender = db.select().from(users).where(eq(users.id, message.sender_id)).limit(1).all()[0];
-      if (sender) {
-        const reply = db.select().from(messageReplies).where(eq(messageReplies.original_message_id, message.id)).all().slice(-1)[0]!;
-        await sendReplyNotification(c, sender, message, reply);
-      }
-    }
-
-    // 被回复后公开
-    if (message.public_after_reply) {
-      db.update(messages).set({ delivery_type: 'public' }).where(eq(messages.id, message.id)).run();
-      const firstDelivery = db.select().from(letterDeliveries).where(eq(letterDeliveries.message_id, message.id)).limit(1).all()[0];
-      if (firstDelivery) {
-        db.update(letterDeliveries).set({ delivery_status: 'public' }).where(eq(letterDeliveries.id, firstDelivery.id)).run();
-      }
+    // 审核通过（含未配置 AI）才执行通知/邮件/公开翻转；pending 则交给 worker 审核通过后处理。
+    if (replyReviewStatus === 'approved') {
+      runReplySideEffects(c, message, reply);
     }
 
     return c.json({ success: true, message: '回复成功' });

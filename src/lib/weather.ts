@@ -222,7 +222,8 @@ export async function getDashboardData(city = '广州'): Promise<DashboardData> 
     }
   }
 
-  const messageCount = db.select().from(messages).all().length;
+  // 仅统计已通过 AI 审核的消息（pending/rejected 不计入展示计数）
+  const messageCount = db.select().from(messages).all().filter((m) => (m.review_status ?? 'approved') === 'approved').length;
   return {
     weather_status: weatherStatus,
     precip_prob: precipProb,

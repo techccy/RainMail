@@ -17,7 +17,6 @@ import {
   generateChaQuestion,
   generateAltchaChallenge,
 } from '../lib/captcha.js';
-import { basicKeywordCheck, aiModerationCheck } from '../lib/moderation.js';
 import { detectSqlInjection, sanitizeInput, getClientIp, rateLimit } from '../lib/security.js';
 import { getJsonBody } from '../lib/request.js';
 import { getCityByIp } from '../lib/ipgeo.js';
@@ -73,9 +72,11 @@ app.get('/api/messages', async (c) => {
     return c.json({ error: `${city} 模式下无法查看消息` }, 403);
   }
   const rows = db.select().from(messages).where(eq(messages.delivery_type, 'public')).all();
-  rows.sort((a, b) => (a.created_at! < b.created_at! ? 1 : -1));
+  // 仅展示已通过 AI 审核的消息（pending/rejected 不出现在公开列表）
+  const visible = rows.filter((m) => (m.review_status ?? 'approved') === 'approved');
+  visible.sort((a, b) => (a.created_at! < b.created_at! ? 1 : -1));
   return c.json({
-    messages: rows.map((m) => ({
+    messages: visible.map((m) => ({
       id: m.id,
       content: m.content,
       created_at: m.created_at,

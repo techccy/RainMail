@@ -31,14 +31,30 @@ const DEFAULT_SYSTEM_PROMPT = `你是一个内容安全审核助手。请判断�
 {"decision": "PASS"}    表示内容安全，可以通过
 `;
 
+export type AiModerationConfig = {
+  API_KEY?: string;
+  BASE_URL?: string;
+  MODEL?: string;
+  SYSTEM_PROMPT?: string;
+};
+
+/** AI 审核三元结果：'pass' 通过 / 'reject' 拦截 / 'error' 网络/超时可重试 */
+export type AiModerationVerdict = 'pass' | 'reject' | 'error';
+
 /**
- * AI 内容审核
- * @returns true 表示应拦截，false 表示放行
- * 行为对齐 Python：解析失败默认拦截，请求异常默认放行
+ * AI 内容审核（队列 worker 用）。
+ *
+ * 返回三元结果，让队列区分：
+ *   - 'pass'   → 放行（AI 明确 PASS）
+ *   - 'reject' → 拦截（AI 明确 REJECT；或决策不明/JSON 解析失败 → 仍按拦截，与原 fail-closed 语义一致）
+ *   - 'error'  → 网络/超时异常，可重试（区别于原同步版本"异常默认放行"的 fail-open 语义；
+ *                队列场景下用重试+耗尽兜底处理，而非直接放行）
+ *
+ * 未配置 API_KEY 时返回 'pass'（跳过审核，对齐原行为）。
  */
-export async function aiModerationCheck(content: string): Promise<boolean> {
-  const ai = getConfig().AI_MODERATION as { API_KEY?: string; BASE_URL?: string; MODEL?: string; SYSTEM_PROMPT?: string } | undefined;
-  if (!ai || !ai.API_KEY) return false;
+export async function aiModerationReview(content: string): Promise<AiModerationVerdict> {
+  const ai = getConfig().AI_MODERATION as AiModerationConfig | undefined;
+  if (!ai || !ai.API_KEY) return 'pass';
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${ai.API_KEY}`,
@@ -70,21 +86,21 @@ export async function aiModerationCheck(content: string): Promise<boolean> {
       const decision = (result.decision ?? '').toUpperCase();
       if (decision === 'REJECT') {
         console.info('[moderation] AI 判别结果：拦截');
-        return true;
+        return 'reject';
       }
       if (decision === 'PASS') {
         console.info('[moderation] AI 判别结果：通过');
-        return false;
+        return 'pass';
       }
       console.warn(`[moderation] AI 返回了不明确的决策: ${decision}，默认拦截`);
-      return true;
+      return 'reject';
     } catch {
       console.warn(`[moderation] AI 响应 JSON 解析失败: [${raw}]，默认拦截`);
-      return true;
+      return 'reject';
     }
   } catch (e) {
     console.error('[moderation] AI 审计请求异常:', e);
-    // 异常默认放行
-    return false;
+    // 网络/超时 → 可重试错误（队列场景）
+    return 'error';
   }
 }

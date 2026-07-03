@@ -23,11 +23,18 @@ app.get('/api/messages/:unique_id', (c) => {
   const message = db.select().from(messages).where(eq(messages.unique_identifier, uniqueId)).limit(1).all()[0];
   if (!message) return c.json({ error: '消息不存在' }, 404);
 
+  const reviewStatus = message.review_status ?? 'approved';
+  // 审核中：可访问但提示正在审核；被拦截：当作不存在，避免泄露拦截事实
+  if (reviewStatus === 'rejected') return c.json({ error: '消息不存在' }, 404);
+  if (reviewStatus === 'pending') return c.json({ review_status: 'pending', error: '内容审核中，请稍候' }, 202);
+
   const replies = db
     .select()
     .from(messageReplies)
     .where(eq(messageReplies.original_message_id, message.id))
     .all()
+    // 仅返回已通过审核的回复
+    .filter((r) => (r.review_status ?? 'approved') === 'approved')
     .sort((a, b) => (a.created_at! < b.created_at! ? 1 : -1));
 
   return c.json({

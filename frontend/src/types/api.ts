@@ -71,6 +71,7 @@ export interface ShareData {
   created_at: string;
   weather_status: WeatherStatus;
   delivery_type: 'public' | 'private';
+  review_status?: 'pending' | 'approved' | 'rejected';
 }
 
 /** GET /api/cha/question */

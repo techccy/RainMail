@@ -29,6 +29,10 @@ export const messages = sqliteTable('message', {
   hugs_count: integer('hugs_count').default(0),
   sender_email: text('sender_email'),
   public_after_reply: integer('public_after_reply', { mode: 'boolean' }).default(false),
+  // AI 审核队列字段
+  // 'pending' = 等待 AI 审核；'approved' = 已通过（默认，未配置 AI 时即写即发）；'rejected' = 已拦截/重试耗尽
+  review_status: text('review_status').default('approved'),
+  review_attempts: integer('review_attempts').default(0),
 });
 
 // ----------------------------- location_weather_cache -----------------------------
@@ -97,6 +101,9 @@ export const messageReplies = sqliteTable('message_reply', {
   replier_user_id: integer('replier_user_id').references(() => users.id),
   replier_email: text('replier_email'),
   created_at: text('created_at').default(nowIso()),
+  // AI 审核队列字段（语义同 message）
+  review_status: text('review_status').default('approved'),
+  review_attempts: integer('review_attempts').default(0),
 });
 
 // ----------------------------- failed_login_attempt -----------------------------

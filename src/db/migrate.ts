@@ -20,7 +20,9 @@ const DDL_STATEMENTS: string[] = [
     reply_to_id INTEGER REFERENCES message(id),
     hugs_count INTEGER DEFAULT 0,
     sender_email TEXT,
-    public_after_reply BOOLEAN DEFAULT 0
+    public_after_reply BOOLEAN DEFAULT 0,
+    review_status TEXT DEFAULT 'approved',
+    review_attempts INTEGER DEFAULT 0
   )`,
   `CREATE TABLE IF NOT EXISTS location_weather_cache (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +71,9 @@ const DDL_STATEMENTS: string[] = [
     reply_type TEXT DEFAULT 'text',
     replier_user_id INTEGER REFERENCES user(id),
     replier_email TEXT,
-    created_at DATETIME DEFAULT (datetime('now'))
+    created_at DATETIME DEFAULT (datetime('now')),
+    review_status TEXT DEFAULT 'approved',
+    review_attempts INTEGER DEFAULT 0
   )`,
   `CREATE TABLE IF NOT EXISTS failed_login_attempt (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,10 +110,44 @@ const DDL_STATEMENTS: string[] = [
   )`,
 ];
 
+/** 返回某张表已存在的列名集合 */
+function existingColumns(table: string): Set<string> {
+  const rows = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return new Set(rows.map((r) => r.name));
+}
+
+/**
+ * 为旧库（建表时还没有审核字段）幂等补列。
+ * 历史行无需回填：列默认值 'approved' 即让旧行为"已通过"，
+ * 对齐"未配置 AI 时即写即发"的现状语义。
+ */
+function ensureReviewColumns(): void {
+  const messageCols = existingColumns('message');
+  if (!messageCols.has('review_status')) {
+    sqlite.exec(`ALTER TABLE message ADD COLUMN review_status TEXT DEFAULT 'approved'`);
+  }
+  if (!messageCols.has('review_attempts')) {
+    sqlite.exec(`ALTER TABLE message ADD COLUMN review_attempts INTEGER DEFAULT 0`);
+  }
+
+  const replyCols = existingColumns('message_reply');
+  if (!replyCols.has('review_status')) {
+    sqlite.exec(`ALTER TABLE message_reply ADD COLUMN review_status TEXT DEFAULT 'approved'`);
+  }
+  if (!replyCols.has('review_attempts')) {
+    sqlite.exec(`ALTER TABLE message_reply ADD COLUMN review_attempts INTEGER DEFAULT 0`);
+  }
+
+  // 审核队列查询索引（pending 行按时间排序）
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS ix_message_review_status ON message (review_status)`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS ix_message_reply_review_status ON message_reply (review_status)`);
+}
+
 /** 创建所有表（幂等） */
 export function ensureSchema(): void {
   const tx = sqlite.transaction(() => {
     for (const stmt of DDL_STATEMENTS) sqlite.exec(stmt);
+    ensureReviewColumns();
   });
   tx();
   console.log('[INFO] 数据库表已就绪');

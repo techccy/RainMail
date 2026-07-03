@@ -11,6 +11,7 @@ import { createApp } from './app.js';
 import { startWeatherUnlockWorker } from './workers/weather-unlock.js';
 import { startEmailQueueWorker } from './workers/email-queue.js';
 import { startCleanupWorker } from './workers/cleanup.js';
+import { startModerationQueueWorker } from './workers/moderation-queue.js';
 
 const PORT = Number(process.env.PORT ?? 5024);
 
@@ -52,6 +53,7 @@ function main(): void {
     startWeatherUnlockWorker();
     startEmailQueueWorker();
     startCleanupWorker();
+    startModerationQueueWorker();
     console.log('[BackgroundWorkers] 后台任务已启动');
   } catch (e) {
     console.error('[BackgroundWorkers] 启动后台任务失败:', e);

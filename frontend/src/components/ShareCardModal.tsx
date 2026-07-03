@@ -75,6 +75,13 @@ export default function ShareCardModal({ share, weatherOverride, open, onOpenCha
           <DialogDescription>您的想法已存入信箱</DialogDescription>
         </DialogHeader>
 
+        {/* AI 内容审核中提示 */}
+        {share.review_status === 'pending' && (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
+            ⏳ 内容审核中，通过后将出现在雨天广播。
+          </p>
+        )}
+
         {/* 存票卡（html2canvas 截图源） */}
         <div
           ref={cardRef}

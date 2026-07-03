@@ -126,6 +126,7 @@ app.get('/api/user/sent', (c) => {
       delivery_type: m.delivery_type,
       is_anonymous: !!m.is_anonymous,
       hugs_count: m.hugs_count ?? 0,
+      review_status: m.review_status ?? 'approved',
     })),
   });
 });
