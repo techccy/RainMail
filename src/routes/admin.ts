@@ -1,11 +1,11 @@
 // =============================================================================
 // 管理员路由 —— /{admin_prefix}/* 全部管理功能
-// 包含登录、仪表盘、消息/用户管理、配置、强制降雨、邮件测试等
+// 包含登录、仪表盘、消息/用户管理（系统设置已移除，配置统一走 .env）
 // =============================================================================
 import { Hono } from 'hono';
-import { and, eq, ne, like, or, sql } from 'drizzle-orm';
-import { db, nowIso } from '../db/index.js';
-import { messages, users, letterDeliveries, notifications } from '../db/schema.js';
+import { and, eq, ne, like, or, sql, inArray } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { messages, users, letterDeliveries, notifications, messageReplies } from '../db/schema.js';
 import { getConfig } from '../config.js';
 import { render, flash, DateTime } from '../views/nunjucks.js';
 import { getClientIp, checkHoneypot } from '../lib/security.js';
@@ -19,8 +19,7 @@ import { csrfProtect } from '../lib/csrf.js';
 import { sessionGet, sessionSet } from '../lib/session.js';
 import { verifyPassword, hashPassword } from '../lib/password.js';
 import { checkLoginLocked, trackFailedLogin, resetFailedLogin } from '../lib/authLockout.js';
-import { getDashboardData, forceRain } from '../lib/weather.js';
-import { sendTestEmail } from '../lib/mail.js';
+import { getDashboardData } from '../lib/weather.js';
 
 const app = new Hono();
 
@@ -169,15 +168,6 @@ app.post(prefix('logout'), csrfProtect, (c) => {
   return c.redirect(prefix(''));
 });
 
-// ----------------------------- 强制降雨 -----------------------------
-app.post(prefix('force_rain'), csrfProtect, (c) => {
-  const guard = adminRequired(c);
-  if (guard) return guard;
-  const duration = Number(cfg.force_rain_duration ?? 40);
-  const until = forceRain(duration);
-  return c.json({ success: true, message: `已强制开启降雨模式 ${duration} 分钟`, until: until.until });
-});
-
 // ----------------------------- 删除消息 -----------------------------
 app.post(prefix('delete_message/:id'), csrfProtect, (c) => {
   const guard = adminRequired(c);
@@ -185,8 +175,26 @@ app.post(prefix('delete_message/:id'), csrfProtect, (c) => {
   const id = Number(c.req.param('id'));
   const message = db.select().from(messages).where(eq(messages.id, id)).limit(1).all()[0];
   if (!message) return c.json({ error: '消息不存在' }, 404);
+  // 关联清理（外键约束开启，否则会报错）
+  db.delete(messageReplies).where(eq(messageReplies.original_message_id, id)).run();
+  db.delete(letterDeliveries).where(eq(letterDeliveries.message_id, id)).run();
   db.delete(messages).where(eq(messages.id, id)).run();
   return c.json({ success: true, message: '消息已删除' });
+});
+
+// ----------------------------- 批量删除消息 -----------------------------
+app.post(prefix('api/delete_messages'), csrfProtect, async (c) => {
+  const guard = adminRequired(c);
+  if (guard) return guard;
+  const data = await getJsonBody(c);
+  const raw = Array.isArray(data.ids) ? data.ids : [];
+  // 去重 + 仅保留正整数 + 上限 1000
+  const ids = Array.from(new Set(raw.map((v: unknown) => Number(v)).filter((n: number) => Number.isInteger(n) && n > 0))).slice(0, 1000);
+  if (ids.length === 0) return c.json({ success: false, error: '未选择有效消息' }, 400);
+  db.delete(messageReplies).where(inArray(messageReplies.original_message_id, ids)).run();
+  db.delete(letterDeliveries).where(inArray(letterDeliveries.message_id, ids)).run();
+  const result = db.delete(messages).where(inArray(messages.id, ids)).run();
+  return c.json({ success: true, message: `已删除 ${result.changes} 条消息`, deleted: result.changes });
 });
 
 // ----------------------------- 用户列表 -----------------------------
@@ -307,131 +315,22 @@ app.post(prefix('api/delete_user/:id'), csrfProtect, (c) => {
   return c.json({ success: true, message: '用户已删除' });
 });
 
-// ----------------------------- 设置页 -----------------------------
-app.get(prefix('settings'), (c) => {
+// ----------------------------- 批量删除用户 -----------------------------
+app.post(prefix('api/delete_users'), csrfProtect, async (c) => {
   const guard = adminRequired(c);
   if (guard) return guard;
-  return c.html(render('admin_settings.html', {}, c));
-});
-
-// ----------------------------- 配置安全检查 -----------------------------
-app.get(prefix('config/security-check'), (c) => {
-  const guard = adminRequired(c);
-  if (guard) return guard;
-  const issues: any[] = [];
-  if (ADMIN_PASSWORD && !/^(scrypt:|pbkdf2:|sha256\$)/.test(ADMIN_PASSWORD)) {
-    issues.push({ type: 'plaintext_password', severity: 'critical', message: '管理员密码为明文存储', fix: '请重新登录或手动迁移密码' });
-  }
-  return c.json({ has_issues: issues.length > 0, issues });
-});
-
-// ----------------------------- 配置（脱敏） -----------------------------
-function mask(key: string, value: any): any {
-  if (value === null || value === '') return value;
-  const sensitive = ['HEFENG_KEY', 'TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'ALTCHA_HMAC_KEY', 'admin_password', 'MAIL_PASSWORD', 'API_KEY', 'IPINFO_TOKEN'];
-  for (const s of sensitive) {
-    if (key.includes(s)) {
-      return typeof value === 'string' && value.length > 4 ? `****${value.slice(-4)}` : '****';
-    }
-  }
-  return value;
-}
-
-app.get(prefix('api/config'), (c) => {
-  const guard = adminRequired(c);
-  if (guard) return guard;
-  const ai = (cfg.AI_MODERATION ?? {}) as Record<string, any>;
-  const categorized = {
-    weather: {
-      HEFENG_HOST1: cfg.HEFENG_HOST1 ?? '',
-      HEFENG_HOST2: cfg.HEFENG_HOST2 ?? '',
-      HEFENG_HOST3: cfg.HEFENG_HOST3 ?? '',
-      HEFENG_HOST4: cfg.HEFENG_HOST4 ?? '',
-      HEFENG_KEY1: mask('HEFENG_KEY1', cfg.HEFENG_KEY1 ?? ''),
-      HEFENG_KEY2: mask('HEFENG_KEY2', cfg.HEFENG_KEY2 ?? ''),
-      HEFENG_KEY3: mask('HEFENG_KEY3', cfg.HEFENG_KEY3 ?? ''),
-      HEFENG_KEY4: mask('HEFENG_KEY4', cfg.HEFENG_KEY4 ?? ''),
-      times: cfg.times ?? 3600,
-    },
-    captcha: {
-      TURNSTILE_SECRET_KEY: mask('TURNSTILE_SECRET_KEY', cfg.TURNSTILE_SECRET_KEY ?? ''),
-      TURNSTILE_SITE_KEY: mask('TURNSTILE_SITE_KEY', cfg.TURNSTILE_SITE_KEY ?? ''),
-      CAPTCHA_PROVIDER: cfg.CAPTCHA_PROVIDER ?? 'altcha',
-      ALTCHA_HMAC_KEY: mask('ALTCHA_HMAC_KEY', cfg.ALTCHA_HMAC_KEY ?? ''),
-      ALTCHA_DIFFICULTY: cfg.ALTCHA_DIFFICULTY ?? 3,
-      VERIFY_DURATION_MINUTES: cfg.VERIFY_DURATION_MINUTES ?? 15,
-    },
-    location: { LOCATION_NAME: cfg.LOCATION_NAME ?? '广州', LOCATION_ID: cfg.LOCATION_ID ?? 101280101 },
-    admin: {
-      admin_username: cfg.admin_username ?? 'admin',
-      admin_password: mask('admin_password', cfg.admin_password ?? ''),
-      force_rain_duration: cfg.force_rain_duration ?? 10,
-    },
-    mail: {
-      MAIL_ENABLED: cfg.MAIL_ENABLED !== false,
-      MAIL_SERVER: cfg.MAIL_SERVER ?? 'smtp.gmail.com',
-      MAIL_PORT: cfg.MAIL_PORT ?? 587,
-      MAIL_USE_TLS: cfg.MAIL_USE_TLS ?? true,
-      MAIL_USERNAME: cfg.MAIL_USERNAME ?? '',
-      MAIL_PASSWORD: mask('MAIL_PASSWORD', cfg.MAIL_PASSWORD ?? ''),
-      MAIL_DEFAULT_SENDER: cfg.MAIL_DEFAULT_SENDER ?? 'RainMail <noreply@rainmail.dev>',
-    },
-    delivery: { PRIVATE_DELIVERY_REQUIRE_LOGIN: cfg.PRIVATE_DELIVERY_REQUIRE_LOGIN ?? false },
-    ai_moderation: {
-      API_KEY: mask('API_KEY', ai.API_KEY ?? ''),
-      BASE_URL: ai.BASE_URL ?? '',
-      MODEL: ai.MODEL ?? '',
-      SYSTEM_PROMPT: ai.SYSTEM_PROMPT ?? '',
-    },
-  };
-  return c.json({ success: true, config: categorized });
-});
-
-app.put(prefix('api/config'), csrfProtect, (c) => {
-  const guard = adminRequired(c);
-  if (guard) return guard;
-  return c.json({ success: false, message: '配置现在从环境变量（.env 文件）加载，无法通过 API 修改。请编辑 .env 文件来修改配置。' }, 400);
-});
-
-app.get(prefix('api/config/export'), (c) => {
-  const guard = adminRequired(c);
-  if (guard) return guard;
-  const body = JSON.stringify(cfg, null, 2);
-  c.header('Content-Type', 'application/json');
-  c.header('Content-Disposition', `attachment; filename=rainmail_config_${nowIso().replace(/[: ]/g, '')}.json`);
-  return c.body(body);
-});
-
-app.post(prefix('api/config/import'), csrfProtect, (c) => {
-  const guard = adminRequired(c);
-  if (guard) return guard;
-  return c.json({ success: false, message: '配置现在从环境变量（.env 文件）加载，无法通过 API 导入。' }, 400);
-});
-
-// ----------------------------- 测试邮件 -----------------------------
-app.post(prefix('api/config/test-email'), csrfProtect, async (c) => {
-  const guard = adminRequired(c);
-  if (guard) return guard;
-  try {
-    const data = await getJsonBody(c);
-    const testEmail = String(data.test_email ?? '');
-    if (!testEmail) return c.json({ success: false, error: '请提供测试邮箱地址' }, 400);
-    await sendTestEmail(testEmail);
-    return c.json({ success: true, message: `测试邮件已发送至 ${testEmail}` });
-  } catch (e) {
-    return c.json({ success: false, error: `邮件发送失败: ${(e as Error).message}` }, 500);
-  }
-});
-
-// ----------------------------- 修改密码 -----------------------------
-app.post(prefix('change_password'), csrfProtect, async (c) => {
-  const guard = adminRequired(c);
-  if (guard) return guard;
-  const form = await getFormBody(c);
-  const newPwd = String(form.new_password ?? '');
-  const confirm = String(form.confirm_password ?? '');
-  if (!newPwd || newPwd !== confirm) return c.json({ success: false, error: '密码不匹配或为空' });
-  return c.json({ success: true, message: '密码已更新（请在 .env 中手动更新）' });
+  const data = await getJsonBody(c);
+  const raw = Array.isArray(data.ids) ? data.ids : [];
+  // 去重 + 仅保留正整数 + 上限 1000
+  const ids = Array.from(new Set(raw.map((v: unknown) => Number(v)).filter((n: number) => Number.isInteger(n) && n > 0))).slice(0, 1000);
+  if (ids.length === 0) return c.json({ success: false, error: '未选择有效用户' }, 400);
+  // 关联清理（与单条删除一致，改用 inArray 批量）
+  db.delete(messages).where(inArray(messages.sender_id, ids)).run();
+  db.delete(messageReplies).where(inArray(messageReplies.replier_user_id, ids)).run();
+  db.delete(letterDeliveries).where(inArray(letterDeliveries.recipient_user_id, ids)).run();
+  db.delete(notifications).where(inArray(notifications.user_id, ids)).run();
+  const result = db.delete(users).where(inArray(users.id, ids)).run();
+  return c.json({ success: true, message: `已删除 ${result.changes} 个用户`, deleted: result.changes });
 });
 
 void and;

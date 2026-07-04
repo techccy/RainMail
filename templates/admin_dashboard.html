@@ -226,6 +226,22 @@
         .username-cell, .city-cell {
             cursor: pointer;
         }
+        .filter-btn {
+            padding: 6px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .filter-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .filter-btn.active {
+            background: rgba(255, 255, 255, 0.35);
+            border-color: rgba(255, 255, 255, 0.6);
+        }
     </style>
 </head>
 <body class="sunny-mode">
@@ -258,16 +274,6 @@
             </div>
         </div>
 
-        <!-- 操作按钮 -->
-        <div class="admin-actions">
-            <h3>系统操作</h3>
-            <div class="action-buttons">
-                <button onclick="forceRain()" class="primary-btn">强制降雨60分钟</button>
-                <button onclick="changePassword()" class="secondary-btn">更改密码</button>
-                <a href="{{ url_for('admin_settings') }}" class="secondary-btn" style="text-decoration: none; display: inline-block;">系统设置</a>
-            </div>
-        </div>
-
         <!-- 用户管理 -->
         <div class="users-list">
             <h3>用户管理</h3>
@@ -275,11 +281,13 @@
                 <input type="text" id="search-input" class="search-input" placeholder="搜索用户名或邮箱...">
                 <button onclick="searchUsers()" class="secondary-btn">搜索</button>
                 <button onclick="clearSearch()" class="secondary-btn">清除</button>
+                <button id="batch-delete-users-btn" class="delete-btn" onclick="batchDeleteUsers()" disabled style="opacity:0.5;cursor:not-allowed;">批量删除</button>
             </div>
             <div class="messages-table">
                 <table>
                     <thead>
                         <tr>
+                            <th style="width:40px;"><input type="checkbox" id="user-select-all"></th>
                             <th>ID</th>
                             <th>用户名</th>
                             <th>邮箱</th>
@@ -302,11 +310,23 @@
 
         <!-- 消息列表 -->
         <div class="messages-list">
-            <h3>所有消息 ({{ messages|length }} 条)</h3>
+            <div class="search-box" style="justify-content: space-between;">
+                <h3 style="margin:0;">所有消息 ({{ messages|length }} 条)</h3>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <div class="filter-btns" style="display:flex; gap:6px;">
+                        <button class="filter-btn active" data-filter="all" onclick="filterMessages('all')">全部</button>
+                        <button class="filter-btn" data-filter="pending" onclick="filterMessages('pending')">审核中</button>
+                        <button class="filter-btn" data-filter="rejected" onclick="filterMessages('rejected')">已拦截</button>
+                        <button class="filter-btn" data-filter="approved" onclick="filterMessages('approved')">已通过</button>
+                    </div>
+                    <button id="batch-delete-messages-btn" class="delete-btn" onclick="batchDeleteMessages()" disabled style="opacity:0.5;cursor:not-allowed;">批量删除</button>
+                </div>
+            </div>
             <div class="messages-table">
                 <table>
                     <thead>
                         <tr>
+                            <th style="width:40px;"><input type="checkbox" id="message-select-all"></th>
                             <th>ID</th>
                             <th>内容</th>
                             <th>时间</th>
@@ -318,7 +338,8 @@
                     <tbody>
                         {% for message in messages %}
                         {% set rs = message.review_status or 'approved' %}
-                        <tr>
+                        <tr data-status="{{ rs }}">
+                            <td><input type="checkbox" class="message-check" value="{{ message.id }}"></td>
                             <td>#{{ message.id }}</td>
                             <td class="message-content" title="{{ message.content }}">{{ message.content }}</td>
                             <td>{{ message.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
@@ -350,6 +371,10 @@
         let currentPage = 1;
         let currentSearch = '';
         const perPage = 20;
+        // 批量选择状态
+        const selectedUserIds = new Set();
+        const selectedMessageIds = new Set();
+        let currentMessageFilter = 'all';
 
         // 获取缓存的用户数据
         function getUserFromCache(userId) {
@@ -362,6 +387,11 @@
         async function loadUsers(page = 1, search = '') {
             currentPage = page;
             currentSearch = search;
+            // 切换页面/搜索时清空选择
+            selectedUserIds.clear();
+            updateUserBatchButton();
+            const selectAll = document.getElementById('user-select-all');
+            if (selectAll) selectAll.checked = false;
             try {
                 const url = `/${window.ADMIN_PATH_PREFIX}/api/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(search)}`;
                 const response = await fetch(url);
@@ -371,6 +401,7 @@
                     usersCache = data.users;
                     tbody.innerHTML = data.users.map(user => `
                         <tr data-user-id="${user.id}">
+                            <td><input type="checkbox" class="user-check" value="${user.id}" onchange="onUserCheckChange(this, ${user.id})"></td>
                             <td>${user.id}</td>
                             <td class="username-cell">${user.username || 'N/A'}</td>
                             <td>${user.email}</td>
@@ -390,7 +421,7 @@
                     `).join('');
                     renderPagination(data.total, data.pages, page);
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">暂无用户</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">暂无用户</td></tr>';
                     document.getElementById('pagination').innerHTML = '';
                 }
             } catch (error) {
@@ -466,7 +497,7 @@
             };
 
             try {
-                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/update_user/${userId}`, {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/update_user/${userId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(updateData)
@@ -518,7 +549,7 @@
             }
 
             try {
-                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/reset_password/${userId}`, {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/reset_password/${userId}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({password: newPassword})
@@ -535,10 +566,10 @@
         }
 
         async function deleteUser(userId, email) {
-            if (!confirm(`确定要删除用户 ${email} 吗？\n\n此操作将删除该用户的所有数据，包括：\n- 发送的消息\n- 信件投递记录\n- 通知记录\n- 微信绑定\n\n此操作不可恢复！`)) return;
+            if (!confirm(`确定要删除用户 ${email} 吗？\n\n此操作将删除该用户的所有数据，包括：\n- 发送的消息\n- 信件投递记录\n- 通知记录\n\n此操作不可恢复！`)) return;
 
             try {
-                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/delete_user/${userId}`, {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/delete_user/${userId}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'}
                 });
@@ -558,7 +589,7 @@
             if (!confirm(`确定要验证用户 ${email} 吗？`)) return;
 
             try {
-                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/api/verify_user/${userId}`, {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/verify_user/${userId}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'}
                 });
@@ -574,27 +605,11 @@
             }
         }
 
-        async function forceRain() {
-            try {
-                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/force_rain`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-                const data = await response.json();
-                alert(data.message);
-                location.reload();
-            } catch (error) {
-                alert('操作失败');
-            }
-        }
-
         async function deleteMessage(messageId) {
             if (!confirm('确定要删除这条消息吗？')) return;
-            
+
             try {
-                const response = await fetch(`/${window.ADMIN_PATH_PREFIX}/delete_message/${messageId}`, {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/delete_message/${messageId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -604,35 +619,143 @@
                 if (data.success) {
                     alert('消息已删除');
                     location.reload();
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
                 }
             } catch (error) {
                 alert('删除失败');
             }
         }
 
-        function changePassword() {
-            const newPassword = prompt('请输入新密码:');
-            const confirmPassword = prompt('请确认新密码:');
-            
-            if (newPassword && newPassword === confirmPassword) {
-                const formData = new FormData();
-                formData.append('new_password', newPassword);
-                formData.append('confirm_password', confirmPassword);
-                
-                fetch(`/${window.ADMIN_PATH_PREFIX}/change_password`, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    alert(data.message);
-                })
-                .catch(error => {
-                    alert('密码更改失败');
+        // ============================= 批量选择与删除 =============================
+
+        function setBatchButtonState(btnId, enabled) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.disabled = !enabled;
+            btn.style.opacity = enabled ? '1' : '0.5';
+            btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+        }
+
+        function updateUserBatchButton() {
+            setBatchButtonState('batch-delete-users-btn', selectedUserIds.size > 0);
+        }
+
+        function updateMessageBatchButton() {
+            setBatchButtonState('batch-delete-messages-btn', selectedMessageIds.size > 0);
+        }
+
+        // ----- 用户表选择 -----
+        function onUserCheckChange(checkbox, userId) {
+            if (checkbox.checked) selectedUserIds.add(userId);
+            else selectedUserIds.delete(userId);
+            updateUserBatchButton();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const selectAllUsers = document.getElementById('user-select-all');
+            if (selectAllUsers) {
+                selectAllUsers.addEventListener('change', function () {
+                    document.querySelectorAll('.user-check').forEach(cb => {
+                        const uid = Number(cb.value);
+                        cb.checked = this.checked;
+                        if (this.checked) selectedUserIds.add(uid);
+                        else selectedUserIds.delete(uid);
+                    });
+                    updateUserBatchButton();
                 });
-            } else {
-                alert('密码不匹配');
             }
+
+            const selectAllMessages = document.getElementById('message-select-all');
+            if (selectAllMessages) {
+                selectAllMessages.addEventListener('change', function () {
+                    document.querySelectorAll('.message-check').forEach(cb => {
+                        const row = cb.closest('tr');
+                        if (!row || row.style.display === 'none') return;
+                        const mid = Number(cb.value);
+                        cb.checked = this.checked;
+                        if (this.checked) selectedMessageIds.add(mid);
+                        else selectedMessageIds.delete(mid);
+                    });
+                    updateMessageBatchButton();
+                });
+            }
+
+            // 消息行复选框
+            document.querySelectorAll('.message-check').forEach(cb => {
+                cb.addEventListener('change', function () {
+                    const mid = Number(this.value);
+                    if (this.checked) selectedMessageIds.add(mid);
+                    else selectedMessageIds.delete(mid);
+                    updateMessageBatchButton();
+                });
+            });
+        });
+
+        async function batchDeleteUsers() {
+            if (selectedUserIds.size === 0) return;
+            if (!confirm(`确定要删除选中的 ${selectedUserIds.size} 个用户吗？\n\n将级联删除其发送的消息、信件投递、回复和通知记录，此操作不可恢复！`)) return;
+            try {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/delete_users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: Array.from(selectedUserIds) })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                    selectedUserIds.clear();
+                    loadUsers(currentPage, currentSearch);
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                alert('操作失败');
+            }
+        }
+
+        async function batchDeleteMessages() {
+            if (selectedMessageIds.size === 0) return;
+            if (!confirm(`确定要删除选中的 ${selectedMessageIds.size} 条消息吗？`)) return;
+            try {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/delete_messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: Array.from(selectedMessageIds) })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                alert('操作失败');
+            }
+        }
+
+        // ----- 消息审核状态筛选 -----
+        function filterMessages(status) {
+            currentMessageFilter = status;
+            document.querySelectorAll('.filter-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.filter === status);
+            });
+            const selectAll = document.getElementById('message-select-all');
+            if (selectAll) selectAll.checked = false;
+            document.querySelectorAll('.messages-list tbody tr').forEach(tr => {
+                const show = status === 'all' || tr.dataset.status === status;
+                tr.style.display = show ? '' : 'none';
+                // 隐藏行取消勾选
+                if (!show) {
+                    const cb = tr.querySelector('.message-check');
+                    if (cb && cb.checked) {
+                        cb.checked = false;
+                        selectedMessageIds.delete(Number(cb.value));
+                    }
+                }
+            });
+            updateMessageBatchButton();
         }
     </script>
 </body>

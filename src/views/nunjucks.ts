@@ -77,7 +77,6 @@ const ROUTE_MAP: Record<string, () => string> = {
   user_settings: () => '/user/settings',
   admin_login: () => `/${adminPrefix}/`,
   admin_dashboard: () => `/${adminPrefix}/dashboard`,
-  admin_settings: () => `/${adminPrefix}/settings`,
   admin_logout: () => `/${adminPrefix}/logout`,
 };
 
