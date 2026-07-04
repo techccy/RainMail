@@ -7,7 +7,7 @@ import { and, eq, ne, like, or, sql } from 'drizzle-orm';
 import { db, nowIso } from '../db/index.js';
 import { messages, users, letterDeliveries, notifications } from '../db/schema.js';
 import { getConfig } from '../config.js';
-import { render, flash } from '../views/nunjucks.js';
+import { render, flash, DateTime } from '../views/nunjucks.js';
 import { getClientIp, checkHoneypot } from '../lib/security.js';
 import { getFormBody, getJsonBody } from '../lib/request.js';
 import {
@@ -160,7 +160,7 @@ app.get(prefix('dashboard'), async (c) => {
   if (guard) return guard;
   const rows = db.select().from(messages).all().sort((a, b) => (a.created_at! < b.created_at! ? 1 : -1));
   const dashboard = await getDashboardData('广州');
-  return c.html(render('admin_dashboard.html', { messages: rows.map((m) => ({ ...m, created_at: m.created_at })), ...dashboard }, c));
+  return c.html(render('admin_dashboard.html', { messages: rows.map((m) => ({ ...m, created_at: new DateTime(m.created_at) })), ...dashboard }, c));
 });
 
 // ----------------------------- 登出 -----------------------------
