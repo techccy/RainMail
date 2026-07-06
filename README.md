@@ -1,6 +1,6 @@
 # 雨天信箱 - The RainMail
 
-体验项目--->https://rainmail.techccy.dpdns.org
+体验项目--->https://rm.techccy.com
 
 一个基于天气状态的匿名社交树洞应用，当**访问者**城市下雨时解锁所有秘密。
 
