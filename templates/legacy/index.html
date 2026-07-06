@@ -12,11 +12,7 @@
     <script src="{{ url_for('static', filename='js/csrf.js') }}"></script>
     <script src="{{ url_for('static', filename='js/behavior-tracker.js') }}"></script>
 </head>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
-{% if captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}
-<script src="https://www.google.com/recaptcha/api.js?render={{ recaptcha_site_key }}" async defer></script>
-{% endif %}
-<body class="sunny-mode" data-captcha-provider="{{ captcha_provider }}" data-turnstile-site-key="{{ turnstile_site_key }}" data-recaptcha-site-key="{{ recaptcha_site_key }}">
+<body class="sunny-mode">
     <div id="weather-background"></div>
 
     <!-- 未登录时的登录入口 -->
@@ -115,30 +111,6 @@
                     <div class="privacy-statement">
                         提交即表示同意我们的<a href="/privacy-policy-cn" target="_blank" class="privacy-link">隐私条款</a>
                     </div>
-                    {% if captcha_provider == 'cloudflare' and turnstile_site_key %}
-                        <div id="sunny-turnstile" class="cf-turnstile"></div>
-                        <input type="hidden" name="cf-token-hidden" id="cf-token-hidden" value="">
-                    {% elif captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}
-                        <div class="recaptcha-v3-wrapper">
-                            <input type="hidden" name="recaptcha-token-hidden" id="recaptcha-token-hidden" value="">
-                            <div id="recaptcha-v3-status" class="captcha-status">
-                                <span class="status-icon">⏳</span> 正在进行人机验证...
-                            </div>
-                            <button type="button" id="refresh-captcha-btn" class="refresh-captcha-btn hidden">
-                                🔄 刷新验证
-                            </button>
-                        </div>
-                    {% elif captcha_provider == 'cha' %}
-                        <div id="sunny-cha-container" class="cha-container">
-                            <div class="cha-question" id="sunny-cha-question">加载中...</div>
-                            <input type="text" id="sunny-cha-answer" placeholder="请输入答案" required>
-                        </div>
-                    {% elif captcha_provider == 'altcha' %}
-                        <div id="sunny-altcha-container" class="altcha-container">
-                            <div id="sunny-altcha-widget"></div>
-                            <input type="hidden" id="sunny-altcha-payload" value="">
-                        </div>
-                    {% endif %}
                 </div>
                 <button id="submit-btn" class="primary-btn">投递想法</button>
             </div>
@@ -199,36 +171,6 @@
                     <div class="privacy-statement">
                         提交即表示同意我们的<a href="/privacy-policy-cn" target="_blank" class="privacy-link">隐私条款</a>
                     </div>
-                    {% if captcha_provider == 'none' %}
-                    <!-- 人机验证已禁用 -->
-                    {% elif captcha_provider == 'cloudflare' and turnstile_site_key %}
-                        <div id="rainy-turnstile" class="cf-turnstile"></div>
-                        <input type="hidden" name="cf-token-hidden" id="rainy-cf-token-hidden" value="">
-                    {% elif captcha_provider in ('recaptcha', 'recaptcha_v3') and recaptcha_site_key %}
-                        <div class="recaptcha-v3-wrapper">
-                            <input type="hidden" name="recaptcha-token-hidden" id="recaptcha-token-hidden" value="">
-                            <div id="recaptcha-v3-status" class="captcha-status">
-                                <span class="status-icon">⏳</span> 正在进行人机验证...
-                            </div>
-                            <button type="button" id="refresh-captcha-btn" class="refresh-captcha-btn hidden">
-                                🔄 刷新验证
-                            </button>
-                        </div>
-                    {% elif captcha_provider == 'cha' %}
-                        <div id="rainy-cha-container" class="cha-container">
-                            <div class="cha-question" id="rainy-cha-question">加载中...</div>
-                            <input type="text" id="rainy-cha-answer" placeholder="请输入答案" required>
-                        </div>
-                    {% elif captcha_provider == 'altcha' %}
-                        <div id="rainy-altcha-container" class="altcha-container">
-                            <div id="rainy-altcha-widget"></div>
-                            <input type="hidden" id="rainy-altcha-payload" value="">
-                        </div>
-                        <div id="rainy-cha-container" class="cha-container hidden">
-                            <div class="cha-question" id="rainy-cha-question">加载中...</div>
-                            <input type="text" id="rainy-cha-answer" placeholder="请输入答案" required>
-                        </div>
-                    {% endif %}
                 </div>
                 <button id="rainy-submit-btn" class="primary-btn">投递想法</button>
             </div>

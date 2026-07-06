@@ -13,7 +13,6 @@ import { render, wrapDates } from '../views/nunjucks.js';
 import { getClientIp, detectSqlInjection, sanitizeInput, rateLimit } from '../lib/security.js';
 import { getJsonBody } from '../lib/request.js';
 import { getCityByIp } from '../lib/ipgeo.js';
-import { getCaptchaProvider, validateCaptcha } from '../lib/captcha.js';
 import { validateUserBehavior } from '../lib/behavior.js';
 import { basicKeywordCheck } from '../lib/moderation.js';
 import { csrfProtect } from '../lib/csrf.js';
@@ -29,25 +28,6 @@ function randomId(len: number): string {
   const bytes = crypto.randomBytes(len);
   for (let i = 0; i < len; i++) out += chars[bytes[i]! % chars.length];
   return out;
-}
-
-/** 按 provider 提取消息提交的验证码响应 */
-function extractCaptchaForMessage(provider: string, data: Record<string, any>): unknown {
-  switch (provider) {
-    case 'cloudflare':
-      return data.cf_token;
-    case 'recaptcha':
-    case 'recaptcha_v3':
-      return data.recaptcha_token;
-    case 'cha':
-      return data.cha_answer;
-    case 'altcha':
-      return data.altcha_payload;
-    case 'none':
-      return 'skip';
-    default:
-      return undefined;
-  }
 }
 
 // ----------------------------- 创建私密投递记录 -----------------------------
@@ -168,7 +148,7 @@ app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async 
     if (data.website) {
       const ip = getClientIp(c);
       console.warn(`[HONEYPOT] 机器人IP被记录: ${ip}, 蜜罐值: ${data.website}`);
-      return c.json({ error: '请先完成人机验证', redirect: '/verify' }, 429);
+      return c.json({ error: '请求异常', redirect: '/verify' }, 429);
     }
 
     let content = String(data.content ?? '').trim();
@@ -180,15 +160,7 @@ app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async 
       return c.json({ error: '输入包含非法字符' }, 400);
     }
 
-    const provider = getCaptchaProvider();
-    const captchaResponse = extractCaptchaForMessage(provider, data);
     const userIp = getClientIp(c);
-    if (provider !== 'none' && !captchaResponse) {
-      return c.json({ error: '请完成人机验证' }, 400);
-    }
-    if (!(await validateCaptcha(captchaResponse, userIp, c))) {
-      return c.json({ error: '人机验证失败，请刷新网页' }, 400);
-    }
 
     // 基础敏感词仍作为同步前置拦截（快速、不消耗 AI 配额）；命中即 400。
     // AI 审核已改为异步队列（见 workers/moderation-queue.ts），不再阻塞请求：

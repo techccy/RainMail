@@ -1,7 +1,6 @@
-// 认证相关功能
+// 认证相关功能（旧 SSR 页面用，已移除验证码逻辑）
 
 // 全局状态
-let turnstileWidgetId = null;
 let emailProviders = {};
 
 // 加载邮箱服务商映射数据
@@ -62,15 +61,6 @@ function showEmailVerificationModal(email) {
     });
 }
 
-// 提交失败后用服务端下发的新题刷新 CHA（验证码一次性，答案已被销毁）
-function refreshChaQuestion(question) {
-    if (!question) return;
-    const questionEl = document.getElementById('cha-question');
-    const answerEl = document.getElementById('cha-answer');
-    if (questionEl) questionEl.textContent = question;
-    if (answerEl) answerEl.value = '';
-}
-
 // 显示警告信息
 function showWarning(message) {
     console.log('showWarning 被调用');
@@ -97,8 +87,8 @@ function showWarning(message) {
 }
 
 // 初始化登录页面
-function initLoginPage(config) {
-    console.log('initLoginPage 被调用, config:', config);
+function initLoginPage() {
+    console.log('initLoginPage 被调用');
 
     const form = document.getElementById('login-form');
     const errorMessage = document.getElementById('error-message');
@@ -109,86 +99,6 @@ function initLoginPage(config) {
     }
 
     console.log('登录表单元素已找到，准备绑定事件');
-
-    // 初始化 CAPTCHA
-    try {
-        if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
-            // reCAPTCHA v3 - 无形验证
-            const statusEl = document.getElementById('recaptcha-v3-status');
-            if (typeof grecaptcha !== 'undefined') {
-                grecaptcha.ready(function() {
-                    grecaptcha.execute(config.recaptchaSiteKey, {action: 'login'})
-                        .then(function(token) {
-                            document.getElementById('recaptcha-token-hidden').value = token;
-                            // 更新状态为验证完成
-                            if (statusEl) {
-                                statusEl.innerHTML = '<span class="status-icon">✓</span> 人机验证完成';
-                                statusEl.classList.add('status-success');
-                            }
-                        })
-                        .catch(function(error) {
-                            console.error('reCAPTCHA v3 执行失败:', error);
-                            if (statusEl) {
-                                statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证加载失败，请刷新页面';
-                                statusEl.classList.add('status-error');
-                            }
-                        });
-                });
-            } else {
-                if (statusEl) {
-                    statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证服务未加载，请检查网络';
-                    statusEl.classList.add('status-error');
-                }
-            }
-        } else if (config.captchaProvider === 'cloudflare') {
-            const initTurnstile = () => {
-                if (typeof turnstile !== 'undefined') {
-                    console.log('Turnstile 库已加载，开始渲染登录页 widget');
-                    turnstileWidgetId = turnstile.render('#login-turnstile', {
-                        sitekey: config.turnstileSiteKey,
-                        callback: function(token) {
-                            console.log('登录页 Turnstile 验证成功');
-                            document.getElementById('cf-token-hidden').value = token;
-                        },
-                        'error-callback': function() {
-                            console.error('登录页 Turnstile 验证失败');
-                        }
-                    });
-                } else {
-                    setTimeout(initTurnstile, 100);
-                }
-            };
-            initTurnstile();
-        } else if (config.captchaProvider === 'altcha') {
-            initAltcha('login-altcha-widget', 'altcha-payload');
-        } else if (config.captchaProvider === 'cha') {
-            // CHA 验证码 - 支持刷新
-            const chaQuestionEl = document.getElementById('cha-question');
-            if (chaQuestionEl) {
-                const refreshBtn = document.createElement('button');
-                refreshBtn.type = 'button';
-                refreshBtn.className = 'refresh-captcha-btn';
-                refreshBtn.textContent = '🔄 刷新验证';
-                refreshBtn.onclick = async () => {
-                    try {
-                        const response = await fetch('/api/cha/question');
-                        const data = await response.json();
-                        if (response.ok && data.question) {
-                            chaQuestionEl.textContent = data.question;
-                        } else {
-                            chaQuestionEl.textContent = '加载失败，请重试';
-                        }
-                    } catch (error) {
-                        console.error('刷新 CHA 失败:', error);
-                        chaQuestionEl.textContent = '加载失败，请重试';
-                    }
-                };
-                chaQuestionEl.parentNode.appendChild(refreshBtn);
-            }
-        }
-    } catch (captchaError) {
-        console.error('CAPTCHA 初始化失败:', captchaError);
-    }
 
     // showError 函数定义（移到事件监听器之前）
     function showError(message) {
@@ -209,33 +119,8 @@ function initLoginPage(config) {
 
         const email = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
-        let captchaResponse = '';
 
         console.log('表单数据 - email:', email, 'password长度:', password?.length);
-
-        // none 模式跳过验证
-        if (config.captchaProvider !== 'none') {
-            // 获取 CAPTCHA 响应
-            if (config.captchaProvider === 'cloudflare') {
-                captchaResponse = document.getElementById('cf-token-hidden').value;
-            } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
-                captchaResponse = document.getElementById('recaptcha-token-hidden').value;
-            } else if (config.captchaProvider === 'cha') {
-                captchaResponse = document.getElementById('cha-answer').value;
-            } else if (config.captchaProvider === 'altcha') {
-                captchaResponse = document.getElementById('altcha-payload').value;
-            } else {
-                // 其他情况
-                captchaResponse = document.getElementById('cha-answer')?.value || '';
-            }
-
-            console.log('captchaResponse:', captchaResponse ? '有值' : '空');
-
-            if (!captchaResponse) {
-                showError('请完成人机验证');
-                return;
-            }
-        }
 
         if (!email || !password) {
             showError('请填写所有必填项');
@@ -252,11 +137,7 @@ function initLoginPage(config) {
                 },
                 body: JSON.stringify({
                     email: email,
-                    password: password,
-                    ...(config.captchaProvider === 'cloudflare' ? { cf_token: captchaResponse } :
-                        config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3' ? { recaptcha_token: captchaResponse } :
-                        config.captchaProvider === 'cha' ? { cha_answer: captchaResponse } :
-                        { altcha_payload: captchaResponse })
+                    password: password
                 })
             });
 
@@ -274,8 +155,6 @@ function initLoginPage(config) {
                 if (data.warning) {
                     showWarning(data.warning);
                 }
-                // 验证码一次性，失败后刷新为新题
-                refreshChaQuestion(data.cha_question);
             }
         } catch (error) {
             console.error('登录错误:', error);
@@ -287,8 +166,8 @@ function initLoginPage(config) {
 }
 
 // 初始化注册页面
-function initRegisterPage(config) {
-    console.log('initRegisterPage 被调用, config:', config);
+function initRegisterPage() {
+    console.log('initRegisterPage 被调用');
 
     const form = document.getElementById('register-form');
     const errorMessage = document.getElementById('error-message');
@@ -327,86 +206,6 @@ function initRegisterPage(config) {
         });
     }
 
-    // 初始化 CAPTCHA
-    try {
-        if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
-            // reCAPTCHA v3 - 无形验证
-            const statusEl = document.getElementById('recaptcha-v3-status');
-            if (typeof grecaptcha !== 'undefined') {
-                grecaptcha.ready(function() {
-                    grecaptcha.execute(config.recaptchaSiteKey, {action: 'register'})
-                        .then(function(token) {
-                            document.getElementById('recaptcha-token-hidden').value = token;
-                            // 更新状态为验证完成
-                            if (statusEl) {
-                                statusEl.innerHTML = '<span class="status-icon">✓</span> 人机验证完成';
-                                statusEl.classList.add('status-success');
-                            }
-                        })
-                        .catch(function(error) {
-                            console.error('reCAPTCHA v3 执行失败:', error);
-                            if (statusEl) {
-                                statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证加载失败，请刷新页面';
-                                statusEl.classList.add('status-error');
-                            }
-                        });
-                });
-            } else {
-                if (statusEl) {
-                    statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证服务未加载，请检查网络';
-                    statusEl.classList.add('status-error');
-                }
-            }
-        } else if (config.captchaProvider === 'cloudflare') {
-            const initTurnstile = () => {
-                if (typeof turnstile !== 'undefined') {
-                    console.log('Turnstile 库已加载，开始渲染注册页 widget');
-                    turnstileWidgetId = turnstile.render('#register-turnstile', {
-                        sitekey: config.turnstileSiteKey,
-                        callback: function(token) {
-                            console.log('注册页 Turnstile 验证成功');
-                            document.getElementById('cf-token-hidden').value = token;
-                        },
-                        'error-callback': function() {
-                            console.error('注册页 Turnstile 验证失败');
-                        }
-                    });
-                } else {
-                    setTimeout(initTurnstile, 100);
-                }
-            };
-            initTurnstile();
-        } else if (config.captchaProvider === 'altcha') {
-            initAltcha('register-altcha-widget', 'altcha-payload');
-        } else if (config.captchaProvider === 'cha') {
-            // CHA 验证码 - 支持刷新
-            const chaQuestionEl = document.getElementById('cha-question');
-            if (chaQuestionEl) {
-                const refreshBtn = document.createElement('button');
-                refreshBtn.type = 'button';
-                refreshBtn.className = 'refresh-captcha-btn';
-                refreshBtn.textContent = '🔄 刷新验证';
-                refreshBtn.onclick = async () => {
-                    try {
-                        const response = await fetch('/api/cha/question');
-                        const data = await response.json();
-                        if (response.ok && data.question) {
-                            chaQuestionEl.textContent = data.question;
-                        } else {
-                            chaQuestionEl.textContent = '加载失败，请重试';
-                        }
-                    } catch (error) {
-                        console.error('刷新 CHA 失败:', error);
-                        chaQuestionEl.textContent = '加载失败，请重试';
-                    }
-                };
-                chaQuestionEl.parentNode.appendChild(refreshBtn);
-            }
-        }
-    } catch (captchaError) {
-        console.error('CAPTCHA 初始化失败:', captchaError);
-    }
-
     // showError 和 showSuccess 函数定义（移到事件监听器之前）
     function showError(message) {
         console.log('showError 被调用:', message);
@@ -435,33 +234,8 @@ function initRegisterPage(config) {
         const username = document.getElementById('username').value.trim();
         const password = document.getElementById('password').value;
         const confirmPassword = document.getElementById('confirm-password').value;
-        let captchaResponse = '';
 
         console.log('表单数据 - email:', email, 'username:', username, 'password长度:', password?.length);
-
-        // none 模式跳过验证
-        if (config.captchaProvider !== 'none') {
-            // 获取 CAPTCHA 响应
-            if (config.captchaProvider === 'cloudflare') {
-                captchaResponse = document.getElementById('cf-token-hidden').value;
-            } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
-                captchaResponse = document.getElementById('recaptcha-token-hidden').value;
-            } else if (config.captchaProvider === 'cha') {
-                captchaResponse = document.getElementById('cha-answer').value;
-            } else if (config.captchaProvider === 'altcha') {
-                captchaResponse = document.getElementById('altcha-payload').value;
-            } else {
-                // 其他情况
-                captchaResponse = document.getElementById('cha-answer')?.value || '';
-            }
-
-            console.log('captchaResponse:', captchaResponse ? '有值' : '空');
-
-            if (!captchaResponse) {
-                showError('请完成人机验证');
-                return;
-            }
-        }
 
         // 验证
         if (!email || !password || !confirmPassword) {
@@ -490,11 +264,7 @@ function initRegisterPage(config) {
                 body: JSON.stringify({
                     email: email,
                     password: password,
-                    username: username,
-                    ...(config.captchaProvider === 'cloudflare' ? { cf_token: captchaResponse } :
-                        config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3' ? { recaptcha_token: captchaResponse } :
-                        config.captchaProvider === 'cha' ? { cha_answer: captchaResponse } :
-                        { altcha_payload: captchaResponse })
+                    username: username
                 })
             });
 
@@ -508,8 +278,6 @@ function initRegisterPage(config) {
                 showEmailVerificationModal(email);
             } else {
                 showError(data.error || '注册失败');
-                // 验证码一次性，失败后刷新为新题
-                refreshChaQuestion(data.cha_question);
             }
         } catch (error) {
             console.error('注册错误:', error);
@@ -518,92 +286,6 @@ function initRegisterPage(config) {
     });
 
     console.log('注册表单事件监听器已绑定');
-}
-
-// Altcha 初始化（加载并求解挑战）
-function initAltcha(widgetId, payloadInputId) {
-    // 加载 Altcha 挑战并自动求解，填入隐藏输入框
-    // widgetId: the div where the challenge UI will be rendered
-    // payloadInputId: the hidden input to store the solved payload JSON
-    fetch('/api/altcha/challenge')
-        .then(r => {
-            if (!r.ok) {
-                throw new Error(`HTTP ${r.status}: ${r.statusText}`);
-            }
-            return r.json();
-        })
-        .then(data => {
-            const widget = document.getElementById(widgetId);
-            if (!widget) {
-                console.error(`Widget element not found: ${widgetId}`);
-                return;
-            }
-            if (!data.challenge || !data.salt || !data.signature || !data.target_prefix) {
-                throw new Error('Invalid challenge data');
-            }
-            widget.innerHTML = `
-                <div class="altcha-info">
-                    <p>🔐 人机验证</p>
-                    <p style="font-size: 12px; color: #666;">正在计算工作量证明...</p>
-                    <div class="altcha-progress"><div id="${widgetId}-progress" style="width: 0%;"></div></div>
-                    <p id="${widgetId}-status" style="font-size: 12px; color: #666;">初始化中...</p>
-                </div>`;
-            // 开始求解挑战
-            solveAltchaChallenge(data.challenge, data.salt, data.signature, data.target_prefix, data.max_number, widgetId, payloadInputId)
-                .catch(err => console.error('求解 Altcha 挑战失败:', err));
-        })
-        .catch(err => {
-            console.error('加载 Altcha 挑战失败', err);
-            const widget = document.getElementById(widgetId);
-            if (widget) {
-                widget.innerHTML = `<div class="altcha-error">❌ 验证加载失败，请刷新页面</div>`;
-            }
-        });
-}
-
-// 求解 Altcha 挑战的通用实现（从 verify.js 中抽取）
-async function solveAltchaChallenge(challenge, salt, signature, targetPrefix, maxNumber, widgetId, payloadInputId) {
-    const startTime = Date.now();
-    const progressEl = document.getElementById(`${widgetId}-progress`);
-    const statusEl = document.getElementById(`${widgetId}-status`);
-    const chunkSize = 500;
-    const simpleSha256 = async (msg) => {
-        const msgBuffer = new TextEncoder().encode(msg);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    };
-
-    for (let i = 0; i < maxNumber; i++) {
-        const testString = challenge + i;
-        const hash = await simpleSha256(testString);
-
-        if (i % chunkSize === 0) {
-            const progress = Math.min((i / maxNumber) * 100, 100);
-            progressEl.style.width = progress + '%';
-            statusEl.textContent = `计算中... ${Math.floor(progress)}%`;
-            await new Promise(r => setTimeout(r, 0));
-        }
-
-        if (hash.startsWith(targetPrefix)) {
-            const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-            const widget = document.getElementById(widgetId);
-            widget.innerHTML = `<div class="altcha-success">✓ 验证完成 (${elapsed}s)</div>`;
-            const payload = JSON.stringify({
-                challenge: challenge,
-                number: i,
-                salt: salt,
-                signature: signature,
-                hash_result: hash
-            });
-            const payloadInput = document.getElementById(payloadInputId);
-            if (payloadInput) payloadInput.value = payload;
-            return;
-        }
-    }
-
-    statusEl.textContent = '验证失败，请刷新页面重试';
-    progressEl.style.background = '#f44336';
 }
 
 // 检查登录状态
@@ -632,11 +314,10 @@ async function logout() {
 }
 
 // 初始化管理员登录页面
-function initAdminLoginPage(config) {
-    console.log('initAdminLoginPage 被调用, config:', config);
+function initAdminLoginPage() {
+    console.log('initAdminLoginPage 被调用');
 
     const form = document.getElementById('admin-login-form');
-    const errorMessage = document.getElementById('error-message');
 
     if (!form) {
         console.error('管理员登录表单元素未找到');
@@ -645,120 +326,6 @@ function initAdminLoginPage(config) {
 
     console.log('管理员登录表单元素已找到，准备绑定事件');
 
-    // 初始化 CAPTCHA
-    try {
-        if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
-            // reCAPTCHA v3 - 无形验证
-            const statusEl = document.getElementById('recaptcha-v3-status');
-            if (typeof grecaptcha !== 'undefined') {
-                grecaptcha.ready(function() {
-                    grecaptcha.execute(config.recaptchaSiteKey, {action: 'admin_login'})
-                        .then(function(token) {
-                            document.getElementById('recaptcha-token-hidden').value = token;
-                            // 更新状态为验证完成
-                            if (statusEl) {
-                                statusEl.innerHTML = '<span class="status-icon">✓</span> 人机验证完成';
-                                statusEl.classList.add('status-success');
-                            }
-                        })
-                        .catch(function(error) {
-                            console.error('reCAPTCHA v3 执行失败:', error);
-                            if (statusEl) {
-                                statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证加载失败，请刷新页面';
-                                statusEl.classList.add('status-error');
-                            }
-                        });
-                });
-            } else {
-                if (statusEl) {
-                    statusEl.innerHTML = '<span class="status-icon">⚠</span> 验证服务未加载，请检查网络';
-                    statusEl.classList.add('status-error');
-                }
-            }
-        } else if (config.captchaProvider === 'cloudflare') {
-            // 使用 window.onload 确保 Turnstile 库已完全加载
-            const initTurnstile = () => {
-                if (typeof turnstile !== 'undefined') {
-                    console.log('Turnstile 库已加载，开始渲染');
-                    const container = document.getElementById('admin-turnstile');
-                    if (!container) {
-                        console.error('Turnstile 容器元素未找到');
-                        return;
-                    }
-                    turnstileWidgetId = turnstile.render('#admin-turnstile', {
-                        sitekey: config.turnstileSiteKey,
-                        callback: function(token) {
-                            console.log('Turnstile 验证成功，token 已获取');
-                            document.getElementById('cf-turnstile-response').value = token;
-                        },
-                        'error-callback': function() {
-                            console.error('Turnstile 验证失败');
-                            showError('人机验证失败，请刷新页面');
-                        }
-                    });
-                } else {
-                    console.warn('Turnstile 库未加载，将延迟初始化');
-                    // 延迟初始化，等待库加载
-                    setTimeout(initTurnstile, 200);
-                }
-            };
-            // 使用 window.onload 确保 script 标签加载完成
-            if (document.readyState === 'complete') {
-                initTurnstile();
-            } else {
-                window.addEventListener('load', initTurnstile);
-            }
-        } else if (config.captchaProvider === 'altcha') {
-            initAltcha('admin-altcha-widget', 'altcha-payload');
-        }
-    } catch (captchaError) {
-        console.error('CAPTCHA 初始化失败:', captchaError);
-    }
-
-    // showError 函数定义
-    function showError(message) {
-        console.log('showError 被调用:', message);
-        if (errorMessage) {
-            errorMessage.textContent = message;
-            errorMessage.style.display = 'block';
-            setTimeout(() => {
-                errorMessage.style.display = 'none';
-            }, 5000);
-        }
-    }
-
-    // 表单提交拦截 - 验证 CAPTCHA 是否完成
-    form.addEventListener('submit', function(e) {
-        // none 模式跳过验证检查
-        if (config.captchaProvider === 'none') {
-            console.log('CAPTCHA 配置为 none，跳过验证');
-            return true;
-        }
-
-        let captchaResponse = '';
-
-        // 获取 CAPTCHA 响应
-        if (config.captchaProvider === 'cloudflare') {
-            captchaResponse = document.getElementById('cf-turnstile-response').value;
-        } else if (config.captchaProvider === 'recaptcha' || config.captchaProvider === 'recaptcha_v3') {
-            captchaResponse = document.getElementById('recaptcha-token-hidden').value;
-        } else if (config.captchaProvider === 'cha') {
-            captchaResponse = document.getElementById('cha-answer').value;
-        } else if (config.captchaProvider === 'altcha') {
-            captchaResponse = document.getElementById('altcha-payload').value;
-        }
-
-        // 如果 CAPTCHA 未完成，阻止提交并显示错误
-        if (!captchaResponse) {
-            e.preventDefault();
-            showError('请完成人机验证');
-            return false;
-        }
-
-        // CAPTCHA 已完成，允许表单正常提交
-        console.log('CAPTCHA 验证通过，提交表单');
-    });
-
     console.log('管理员登录表单初始化完成');
 }
 
@@ -766,25 +333,6 @@ function initAdminLoginPage(config) {
 // 自动初始化 - 页面加载时自动执行
 // ========================================
 document.addEventListener('DOMContentLoaded', function() {
-    // 从 body data 属性获取配置
-    const body = document.body;
-    const captchaProvider = body.getAttribute('data-captcha-provider');
-    const turnstileSiteKey = body.getAttribute('data-turnstile-site-key');
-    const recaptchaSiteKey = body.getAttribute('data-recaptcha-site-key');
-
-    if (!captchaProvider) {
-        console.warn('未找到 captcha-provider 配置');
-        return;
-    }
-
-    const config = {
-        captchaProvider: captchaProvider,
-        turnstileSiteKey: turnstileSiteKey || '',
-        recaptchaSiteKey: recaptchaSiteKey || ''
-    };
-
-    console.log('自动初始化, config:', config);
-
     // 根据页面元素判断是哪个页面
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
@@ -792,7 +340,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (loginForm && typeof initLoginPage === 'function') {
         console.log('检测到登录页面，执行 initLoginPage');
-        initLoginPage(config);
+        initLoginPage();
 
         // 检查URL参数
         const urlParams = new URLSearchParams(window.location.search);
@@ -818,10 +366,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     } else if (registerForm && typeof initRegisterPage === 'function') {
         console.log('检测到注册页面，执行 initRegisterPage');
-        initRegisterPage(config);
+        initRegisterPage();
     } else if (adminForm && typeof initAdminLoginPage === 'function') {
         console.log('检测到管理员登录页面，执行 initAdminLoginPage');
-        initAdminLoginPage(config);
+        initAdminLoginPage();
     }
 
     // 初始化登出按钮（所有页面通用）

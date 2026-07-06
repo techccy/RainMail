@@ -13,7 +13,7 @@ import Letter from '@/pages/Letter';
 import Settings from '@/pages/Settings';
 
 export default function App() {
-  // 启动期拉取前端配置（验证码 provider、站点 key 等）
+  // 启动期拉取前端配置（应用名等）
   useEffect(() => {
     void loadBootstrap();
   }, []);

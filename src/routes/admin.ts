@@ -10,11 +10,6 @@ import { getConfig } from '../config.js';
 import { render, flash, DateTime } from '../views/nunjucks.js';
 import { getClientIp, checkHoneypot } from '../lib/security.js';
 import { getFormBody, getJsonBody } from '../lib/request.js';
-import {
-  getCaptchaProvider,
-  validateCaptcha,
-  prepareChaQuestion,
-} from '../lib/captcha.js';
 import { csrfProtect } from '../lib/csrf.js';
 import { sessionGet, sessionSet } from '../lib/session.js';
 import { verifyPassword, hashPassword } from '../lib/password.js';
@@ -40,41 +35,6 @@ function adminRequired(c: any): Response | null {
   return null;
 }
 
-function captchaTemplateVars() {
-  const provider = getCaptchaProvider();
-  return {
-    captcha_provider: provider,
-    turnstile_site_key: provider === 'cloudflare' ? String(cfg.TURNSTILE_SITE_KEY ?? '') : '',
-    recaptcha_site_key: provider === 'recaptcha' || provider === 'recaptcha_v3' ? String(cfg.RECAPTCHA_V3_SITE_KEY ?? '') : '',
-  };
-}
-
-function extractAdminCaptcha(provider: string, form: Record<string, any>): unknown {
-  switch (provider) {
-    case 'cloudflare':
-      return form['cf-turnstile-response'];
-    case 'recaptcha':
-    case 'recaptcha_v3':
-      return form.recaptcha_token;
-    case 'cha':
-      return form.cha_answer;
-    case 'altcha':
-      return form.cha_answer ?? form.altcha_payload;
-    case 'none':
-      return 'skip';
-    default:
-      return undefined;
-  }
-}
-
-/**
- * 提交失败后生成一道新 CHA 题目（仅 cha 模式）。验证码一次性，
- * 上一次答案已在 validateCha 中销毁，必须换新题，否则重试必失败。
- */
-function freshCha(c: any): string | undefined {
-  return getCaptchaProvider() === 'cha' ? prepareChaQuestion(c).question : undefined;
-}
-
 // ----------------------------- 裸前缀尾斜杠归一化 -----------------------------
 // /techccyadmin → /techccyadmin/  （prefix('') 注册的登录路由带尾斜杠，
 // 裸前缀无匹配会落到路由器尽头返回 404，这里补一条 301 重定向）
@@ -83,45 +43,34 @@ app.get(`/${ADMIN_PREFIX}`, (c) => c.redirect(prefix(''), 301));
 // ----------------------------- 管理员登录 -----------------------------
 // 登录速率限制已移除：由 Cloudflare（WAF / Rate Limiting Rules）在边缘层防护
 app.get(prefix(''), (c) => {
-  const provider = getCaptchaProvider();
-  const cha = provider === 'cha' || provider === 'altcha' ? prepareChaQuestion(c).question : undefined;
-  return c.html(render('admin_login.html', { ...captchaTemplateVars(), cha_question: cha }, c));
+  return c.html(render('admin_login.html', {}, c));
 });
 
 app.post(prefix(''), csrfProtect, async (c) => {
-  const provider = getCaptchaProvider();
   const form = await getFormBody(c);
 
   // 蜜罐
   if (checkHoneypot(c, form)) {
     console.warn(`[admin] 蜜罐被触发，IP: ${getClientIp(c)}`);
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '用户名或密码错误', cha_question: freshCha(c) }, c));
+    return c.html(render('admin_login.html', { error: '用户名或密码错误' }, c));
   }
 
-  const captchaResponse = extractAdminCaptcha(provider, form);
   const userIp = getClientIp(c);
   const username = String(form.username ?? '');
   const password = String(form.password ?? '');
-
-  if (provider !== 'none' && !captchaResponse) {
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '请完成人机验证', cha_question: freshCha(c) }, c));
-  }
-  if (!(await validateCaptcha(captchaResponse, userIp, c))) {
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '人机验证失败，请刷新网页', cha_question: freshCha(c) }, c));
-  }
 
   // 账户/IP 锁定检查
   const [emailLocked, emailLockedUntil] = checkLoginLocked(username, 'email');
   if (emailLocked) {
     const t = emailLockedUntil ? formatHM(emailLockedUntil) : '';
     flash(c, 'error', `账户已被临时锁定，请 ${t}后再试`);
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '账户已锁定', warning: getFlashesForTemplate(c), cha_question: freshCha(c) }, c));
+    return c.html(render('admin_login.html', { error: '账户已锁定', warning: getFlashesForTemplate(c) }, c));
   }
   const [ipLocked, ipLockedUntil] = checkLoginLocked(userIp, 'ip');
   if (ipLocked) {
     const t = ipLockedUntil ? formatHM(ipLockedUntil) : '';
     flash(c, 'error', `IP 地址已被临时锁定，请 ${t}后再试`);
-    return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: 'IP 已锁定', warning: getFlashesForTemplate(c), cha_question: freshCha(c) }, c));
+    return c.html(render('admin_login.html', { error: 'IP 已锁定', warning: getFlashesForTemplate(c) }, c));
   }
 
   // 验证凭据
@@ -138,7 +87,7 @@ app.post(prefix(''), csrfProtect, async (c) => {
   if (shouldLockIp) flash(c, 'error', '登录失败次数过多，IP 地址已被临时锁定30分钟');
   else if (!shouldLockEmail) flash(c, 'error', '用户名或密码错误');
 
-  return c.html(render('admin_login.html', { ...captchaTemplateVars(), error: '登录失败', warning: getFlashesForTemplate(c), cha_question: freshCha(c) }, c));
+  return c.html(render('admin_login.html', { error: '登录失败', warning: getFlashesForTemplate(c) }, c));
 });
 
 function formatHM(d: Date): string {

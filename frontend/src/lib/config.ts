@@ -1,15 +1,12 @@
 // =============================================================================
 // 启动配置 —— GET /api/bootstrap，全局单例
 // =============================================================================
-import type { BootstrapConfig, CaptchaProvider } from '@/types/api';
+import type { BootstrapConfig } from '@/types/api';
 
 let bootstrapCache: BootstrapConfig | null = null;
 let bootstrapPromise: Promise<BootstrapConfig> | null = null;
 
 const FALLBACK: BootstrapConfig = {
-  captcha_provider: 'none',
-  turnstile_site_key: '',
-  recaptcha_site_key: '',
   app_name: 'RainMail',
   app_name_cn: '雨天信箱',
 };
@@ -30,12 +27,4 @@ export async function loadBootstrap(force = false): Promise<BootstrapConfig> {
       return FALLBACK;
     });
   return bootstrapPromise;
-}
-
-export function getBootstrap(): BootstrapConfig | null {
-  return bootstrapCache;
-}
-
-export function getCaptchaProvider(): CaptchaProvider {
-  return bootstrapCache?.captcha_provider ?? 'none';
 }

@@ -1,16 +1,15 @@
 // =============================================================================
 // Login —— POST /api/auth/login（rate 10/min）
-// email/password + Captcha；成功 navigate('/')
-// 错误：401 邮箱或密码错误（+remaining_attempts）；429 锁定（locked_until）；400 验证码失败
+// email/password；成功 navigate('/')
+// 错误：401 邮箱或密码错误（+remaining_attempts）；429 锁定（locked_until）
 // 读 URL ?verified=1 / ?error= 展示邮箱验证结果（来自 /verify-email 重定向）
 // =============================================================================
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthShell from '@/components/layout/AuthShell';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Captcha, type CaptchaHandle } from '@/components/Captcha';
 import { api } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import type { ApiError, UserProfile } from '@/types/api';
@@ -28,7 +27,6 @@ export default function Login() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { refresh } = useAuth();
-  const captchaRef = useRef<CaptchaHandle>(null);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,23 +48,12 @@ export default function Login() {
     setError('');
     setSubmitting(true);
 
-    let captchaField: { field: string; value: string } | null = null;
-    try {
-      captchaField = await captchaRef.current?.getToken() ?? null;
-    } catch {
-      setError('验证码获取失败，请重试');
-      setSubmitting(false);
-      return;
-    }
-
     const body: Record<string, unknown> = {
       email: email.trim().toLowerCase(),
       password,
     };
-    if (captchaField?.value) body[captchaField.field] = captchaField.value;
 
     const res = await api<LoginOk & LoginErr>('/api/auth/login', { method: 'POST', json: body });
-    void captchaRef.current?.refresh();
 
     if (res.ok) {
       await refresh();
@@ -128,8 +115,6 @@ export default function Login() {
             placeholder="请输入密码"
           />
         </div>
-
-        <Captcha ref={captchaRef} action="login" />
 
         {error && (
           <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

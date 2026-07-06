@@ -1,16 +1,15 @@
 // =============================================================================
 // MessageForm —— 消息投递表单
 // 字段：content(≤500) + 投递方式(public/private) + private 选项（回复通知/邮箱/被回复后公开）
-//       + 蜜罐(website,必须空) + Captcha + 行为字段
+//       + 蜜罐(website,必须空) + 行为字段
 // 提交 → POST /api/messages（CSRF，rate 10/min）
 // 成功 → onSubmitted(share_data)；require_login → onRequireLogin；blocked/其他 → 错误提示
 // =============================================================================
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Captcha, type CaptchaHandle } from '@/components/Captcha';
 import { ProcessingOverlay } from '@/components/ProcessingOverlay';
 import { api } from '@/lib/api';
 import { useBehavior } from '@/hooks/useBehavior';
@@ -28,7 +27,6 @@ interface Props {
 export default function MessageForm({ variant, onSubmitted, onRequireLogin }: Props) {
   const { validate, getBehaviorData, handleFocus, handleInput } = useBehavior();
   const { user } = useAuth();
-  const captchaRef = useRef<CaptchaHandle>(null);
 
   const [content, setContent] = useState('');
   const [deliveryType, setDeliveryType] = useState<'public' | 'private'>('public');
@@ -67,16 +65,7 @@ export default function MessageForm({ variant, onSubmitted, onRequireLogin }: Pr
       return;
     }
 
-    // 4. 验证码 token
-    let captchaField: { field: string; value: string } | null = null;
-    try {
-      captchaField = await captchaRef.current?.getToken() ?? null;
-    } catch {
-      setError('验证码获取失败，请重试');
-      return;
-    }
-
-    // 5. 行为数据
+    // 4. 行为数据
     const behaviorData = getBehaviorData();
     if (!behaviorData) {
       setError('会话未就绪，请刷新页面重试');
@@ -99,9 +88,6 @@ export default function MessageForm({ variant, onSubmitted, onRequireLogin }: Pr
       website: '', // 蜜罐字段，必须空
       ...behaviorData,
     };
-    if (captchaField && captchaField.value) {
-      body[captchaField.field] = captchaField.value;
-    }
 
     const res = await api<{ success: boolean; share_data: ShareData } & ApiError>('/api/messages', {
       method: 'POST',
@@ -109,8 +95,6 @@ export default function MessageForm({ variant, onSubmitted, onRequireLogin }: Pr
     });
 
     setProcessing(false);
-    // 提交后刷新一次性验证码（成功或失败都刷新）
-    void captchaRef.current?.refresh();
 
     if (res.ok) {
       setContent('');
@@ -244,11 +228,6 @@ export default function MessageForm({ variant, onSubmitted, onRequireLogin }: Pr
             </label>
           </div>
         )}
-
-        {/* 验证码 */}
-        <div>
-          <Captcha ref={captchaRef} action="submit" />
-        </div>
 
         <p className="text-xs text-muted-foreground">
           提交即表示同意我们的

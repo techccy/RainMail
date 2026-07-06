@@ -7,7 +7,6 @@ RainMail（雨天信箱）是一个基于 Flask 的匿名社交信箱应用，�
 **主要技术栈：**
 - 后端：Python Flask + SQLite
 - 前端：Vanilla JavaScript + Jinja2 模板
-- 验证码：Cloudflare Turnstile / Google reCAPTCHA v3 / Altcha / 自定义
 - 部署：Docker + Docker Compose
 
 **应用端口：** 5024
@@ -77,8 +76,6 @@ RainMail（雨天信箱）是一个基于 Flask 的匿名社交信箱应用，�
 | `/api/weather` | GET | 60/分钟 | 天气查询，应用已有 120/小时限制 |
 | `/api/weather/meta` | GET | 60/分钟 | 天气元数据 |
 | `/api/csrf_token` | GET | 60/分钟 | CSRF Token 获取 |
-| `/api/cha/question` | GET | 30/分钟 | 验证码问题 |
-| `/api/altcha/challenge` | GET | 30/分钟 | Altcha 质询 |
 | `/api/user/profile` | GET | 60/分钟 | 用户资料 |
 | `/api/user/inbox` | GET | 60/分钟 | 收件箱 |
 | `/api/user/sent` | GET | 60/分钟 | 已发送 |
@@ -103,7 +100,7 @@ RainMail（雨天信箱）是一个基于 Flask 的匿名社交信箱应用，�
 
 ### 🟢 低优先级 - 跳过或轻量保护
 
-这些端点风险较低，可以跳过验证码或使用轻量保护。
+这些端点风险较低，可使用轻量保护。
 
 | URI | HTTP 方法 | 保护措施 | 说明 |
 |-----|----------|---------|------|
@@ -206,7 +203,6 @@ RainMail 应用已实现以下安全措施，Cloudflare 防护与之互补：
 | Session 安全 | `app.py:75-79` | HttpOnly + SameSite=Lax |
 | 内容审核 | AI + 关键词过滤 | 敏感内容检测 |
 | Honeypot | `app.py:1312-1323` | Bot 检测 |
-| 验证码 | Turnstile/reCAPTCHA/Altcha | 多种验证方式 |
 
 ---
 

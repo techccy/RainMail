@@ -26,7 +26,7 @@
 - **二维码 / 截图卡片**：前端使用 `qrcode` + `html-to-image` 生成分享卡片，便于移动端传播
 
 ### 管理后台
-- **登录防护**：人机验证、蜜罐、账户/IP 爆破锁定（30 分钟）
+- **登录防护**：蜜罐、账户/IP 爆破锁定（30 分钟）
 - **系统概览**：消息总数、降雨概率、CPU 温度等
 - **消息管理**：查看 / 单条删除 / **批量删除**消息（单次上限 1000）
 - **用户管理**：分页搜索、查看 / 编辑用户、重置密码、手动通过验证、单条删除 / **批量删除**（单次上限 1000）
@@ -43,7 +43,6 @@
 - **XSS 防护**：输入内容过滤和转义
 - **SQL 注入防护**：Drizzle ORM 参数化查询
 - **AI 内容审查**：OpenAI 兼容接口（默认 NVIDIA / deepseek-r1-distill-llama-8b）
-- **多种人机验证**：Altcha（推荐，工作量证明）、Cloudflare Turnstile、reCAPTCHA v3、CHA（数学题），可禁用
 - **密码安全**：scrypt 哈希存储，格式与 Werkzeug 兼容
 - **CSRF / 会话**：签名的会话 Cookie、CSRF Token（SPA 命中 403 自动刷新）
 - **安全文档**：详细的 Cloudflare WAF 防护配置（参见 [Cloudflare.md](Cloudflare.md)）
@@ -56,7 +55,7 @@
 | 后端 | TypeScript、[Hono](https://hono.dev/) + `@hono/node-server`、[Drizzle ORM](https://orm.drizzle.team/)、`better-sqlite3`、Nunjucks、Nodemailer、Zod |
 | 前端 | React 19、React Router 7、Vite 7、Tailwind CSS 4、Radix UI、`lucide-react`、`html-to-image` / `qrcode` |
 | 模板 | Nunjucks（兼容 Jinja2 语法，仅用于管理后台 SSR + 隐私政策页） |
-| 外部服务 | 和风天气 API（最多 4 组 Key 轮换）、Altcha / Turnstile / reCAPTCHA v3 / CHA、AI 内容审核（OpenAI 兼容） |
+| 外部服务 | 和风天气 API（最多 4 组 Key 轮换）、AI 内容审核（OpenAI 兼容） |
 | 数据库 | SQLite（持久化在 `instance/rainmail.db`） |
 
 前端为独立的 `frontend/` 包，Vite 构建产物输出到 `static/spa/`，由同一个 Hono 服务在 5024 端口统一托管（**单端口部署**）。
@@ -86,29 +85,7 @@ iptables -I DOCKER-USER -i br-rainmail -d 192.168.1.0/24 -j DROP
 3. 在[项目管理](https://console.qweather.com/project)创建项目并新建凭据，**选择 API_KEY**，填入 `HEFENG_KEY1`
 4. 支持配置多组密钥轮换（最多 4 组 `HEFENG_HOST2..4` / `HEFENG_KEY2..4`），提高请求额度
 
-### 第三步：配置人机验证
-
-项目支持多种验证方式（由 `CAPTCHA_PROVIDER` 控制）：
-
-1. **Altcha**（推荐，无第三方依赖）
-   - 完全客户端的工作量证明（SHA-256）
-   - 设置 `CAPTCHA_PROVIDER=altcha`
-   - 配置 `ALTCHA_HMAC_KEY`（建议 `openssl rand -base64 32`）与 `ALTCHA_DIFFICULTY`（默认 3，越大越难）
-
-2. **Cloudflare Turnstile**
-   - 在 [Cloudflare Dashboard](https://dash.cloudflare.com/) 创建 Widget，拿到 Site Key / Secret Key
-   - 填入 `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`
-   - 设置 `CAPTCHA_PROVIDER=cloudflare`
-
-3. **Google reCAPTCHA v3**
-   - 填入 `RECAPTCHA_V3_SITE_KEY` / `RECAPTCHA_V3_SECRET_KEY`（可调 `RECAPTCHA_V3_THRESHOLD`）
-   - 设置 `CAPTCHA_PROVIDER=recaptcha`
-
-4. **CHA（自定义数学题）**：无需额外配置，`CAPTCHA_PROVIDER=cha`
-
-5. **禁用**：`CAPTCHA_PROVIDER=none`（仅测试环境建议）
-
-### 第四步：环境变量配置
+### 第三步：环境变量配置
 
 ```bash
 cp .env.example .env
@@ -134,16 +111,8 @@ MAIL_PASSWORD=your-app-password           # Gmail 需用应用专用密码
 MAIL_DEFAULT_SENDER=RainMail <noreply@rainmail.dev>
 MAIL_ENABLED=true                         # 设为 false 可禁用邮件发送
 
-# 人机验证配置
-CAPTCHA_PROVIDER=altcha                   # altcha | cloudflare | recaptcha | cha | none
-TURNSTILE_SITE_KEY=your-site-key          # cloudflare 时需要
-TURNSTILE_SECRET_KEY=your-secret-key
-RECAPTCHA_V3_SITE_KEY=                    # recaptcha 时需要
-RECAPTCHA_V3_SECRET_KEY=
-RECAPTCHA_V3_THRESHOLD=0.5
-ALTCHA_HMAC_KEY=your-hmac-key             # altcha 时需要
-ALTCHA_DIFFICULTY=3                       # 1-5
-VERIFY_DURATION_MINUTES=15                # 邮箱验证码有效期（分钟）
+# 邮箱验证配置
+VERIFY_DURATION_MINUTES=15                # 邮箱验证有效期（分钟）
 
 # 和风天气 API 配置（支持多组轮换，至少配一组）
 HEFENG_HOST1=your-hefeng-host1
@@ -244,7 +213,7 @@ RainMail/
 │   │   ├── schema.ts          # Drizzle 表定义
 │   │   ├── index.ts           # better-sqlite3 连接 + 工具函数
 │   │   └── migrate.ts         # 启动期建表
-│   ├── lib/                   # 业务库（密码 / 会话 / CSRF / 验证码 / 天气 / 邮件 / 审核 / 爆破锁定 / IP 定位 …）
+│   ├── lib/                   # 业务库（密码 / 会话 / CSRF / 天气 / 邮件 / 审核 / 爆破锁定 / IP 定位 …）
 │   ├── routes/                # 路由（pages / api / auth / user / letters / admin）
 │   ├── views/nunjucks.ts      # Nunjucks 模板渲染（兼容 Jinja2）
 │   ├── workers/               # 后台任务（天气解锁 / 邮件队列 / 僵尸用户清理 / AI 审核队列）
@@ -255,7 +224,7 @@ RainMail/
 │   └── src/
 │       ├── App.tsx
 │       ├── pages/             # Home / PublicMessage / Login / Register / VerifyEmail / Inbox / Letter / Settings …
-│       ├── components/        # MessageForm / MessageWall / ShareCardModal / WeatherBackground / Captcha / RequireAuth …
+│       ├── components/        # MessageForm / MessageWall / ShareCardModal / WeatherBackground / RequireAuth …
 │       └── hooks/             # useAuth / useWeather / useBehavior
 ├── instance/                  # 数据库目录（SQLite 持久化）
 │   └── rainmail.db
@@ -351,12 +320,6 @@ GET /privacy-policy             # 隐私条款（英文）
 GET /privacy-policy-cn          # 隐私条款（中文）
 ```
 
-### 验证码
-```
-GET /api/cha/question           # CHA 数学题（CAPTCHA_PROVIDER=cha 时）
-GET /api/altcha/challenge       # Altcha 挑战（CAPTCHA_PROVIDER=altcha 时）
-```
-
 ### 用户认证
 ```
 POST /api/auth/register               # 注册（限流 3/h）
@@ -381,7 +344,7 @@ PUT  /api/user/notifications/:id # 更新通知（如标记已读）
 ### 管理员 API（前缀为 `/<ADMIN_PATH_PREFIX>`，默认 `/admin`）
 ```
 GET  /admin/                              # 管理员登录页
-POST /admin/                              # 登录提交（验证码 + 蜜罐 + 爆破锁定）
+POST /admin/                              # 登录提交（蜜罐 + 爆破锁定）
 GET  /admin/dashboard                     # 仪表盘
 POST /admin/logout                        # 登出
 POST /admin/delete_message/:id            # 单条删除消息
@@ -431,7 +394,6 @@ GET /api/health
 ### 认证安全
 - 密码哈希存储（scrypt，兼容 Werkzeug 格式）
 - 邮箱验证机制
-- 人机验证（Altcha / Cloudflare Turnstile / reCAPTCHA v3 / CHA）
 - 会话 Cookie 签名、CSRF Token 保护
 - 账户 / IP 爆破锁定（30 分钟）
 
@@ -448,7 +410,7 @@ GET /api/health
 
 ## 许可证
 
-MIT License
+[MIT License](LICENSE)
 
 ## 可以请我喝杯咖啡～
 ![donate_qr_code](static/donate.png)

@@ -1,16 +1,15 @@
 // =============================================================================
 // Register —— POST /api/auth/register（rate 3/hour）
-// email/username(可选)/password/confirm-password + Captcha
+// email/username(可选)/password/confirm-password
 // 客户端 gate：密码≥6、两次一致
 // 成功 → 拉取 /api/email-providers 找邮箱域名 → 显示验证 modal（含登录链接）
 // =============================================================================
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import AuthShell from '@/components/layout/AuthShell';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Captcha, type CaptchaHandle } from '@/components/Captcha';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
 import type { ApiError } from '@/types/api';
@@ -21,7 +20,6 @@ interface RegisterOk {
 
 export default function Register() {
   const navigate = useNavigate();
-  const captchaRef = useRef<CaptchaHandle>(null);
 
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -47,24 +45,13 @@ export default function Register() {
 
     setSubmitting(true);
 
-    let captchaField: { field: string; value: string } | null = null;
-    try {
-      captchaField = await captchaRef.current?.getToken() ?? null;
-    } catch {
-      setError('验证码获取失败，请重试');
-      setSubmitting(false);
-      return;
-    }
-
     const body: Record<string, unknown> = {
       email: email.trim().toLowerCase(),
       password,
       username: username.trim(),
     };
-    if (captchaField?.value) body[captchaField.field] = captchaField.value;
 
     const res = await api<RegisterOk & ApiError>('/api/auth/register', { method: 'POST', json: body });
-    void captchaRef.current?.refresh();
 
     if (res.ok) {
       // 拉取邮箱服务商
@@ -135,8 +122,6 @@ export default function Register() {
             placeholder="再次输入密码"
           />
         </div>
-
-        <Captcha ref={captchaRef} action="register" />
 
         {error && (
           <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

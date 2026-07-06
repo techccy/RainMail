@@ -7,20 +7,9 @@ export type WeatherStatus = 'sunny' | 'rainy';
 
 /** GET /api/bootstrap —— 前端启动配置 */
 export interface BootstrapConfig {
-  captcha_provider: CaptchaProvider;
-  turnstile_site_key: string;
-  recaptcha_site_key: string;
   app_name: string;
   app_name_cn: string;
 }
-
-export type CaptchaProvider =
-  | 'none'
-  | 'cloudflare'
-  | 'recaptcha'
-  | 'recaptcha_v3'
-  | 'cha'
-  | 'altcha';
 
 /** GET /api/weather —— DashboardData */
 export interface DashboardData {
@@ -78,21 +67,6 @@ export interface ShareData {
   security_code: string;
 }
 
-/** GET /api/cha/question */
-export interface ChaQuestion {
-  question: string;
-  timestamp: number;
-}
-
-/** GET /api/altcha/challenge */
-export interface AltchaChallenge {
-  challenge: string;
-  salt: string;
-  signature: string;
-  target_prefix: string;
-  max_number: number;
-}
-
 /** POST /api/messages 提交体 */
 export interface SubmitMessageBody {
   content: string;
@@ -102,11 +76,6 @@ export interface SubmitMessageBody {
   is_anonymous: boolean;
   public_after_reply: boolean;
   sender_email: string;
-  // 验证码字段（按 provider 二选一）
-  cf_token?: string;
-  recaptcha_token?: string;
-  cha_answer?: string;
-  altcha_payload?: string;
   // 行为验证
   form_token: string;
   page_stay_time: number;

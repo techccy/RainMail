@@ -9,12 +9,12 @@ import { getConfig } from '../config.js';
 // ----------------------------- 安全响应头 -----------------------------
 export const DEFAULT_CSP = [
   "default-src 'self'",
-  "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://www.google.com https://www.gstatic.com https://recaptcha.net",
+  "script-src 'self' https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
-  "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://www.google.com https://recaptcha.net",
+  "connect-src 'self' https://static.cloudflareinsights.com",
   "font-src 'self'",
-  "frame-src 'self' https://challenges.cloudflare.com https://www.google.com",
+  "frame-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

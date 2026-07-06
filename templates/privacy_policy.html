@@ -155,7 +155,6 @@
 
             <h3>1.3 Information Collected or Processed by Third-Party Services</h3>
             <ul>
-                <li><strong>Cloudflare Turnstile</strong>: Used for bot verification to prevent robot abuse. Verification data is processed by Cloudflare, see <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare Privacy Policy</a>.</li>
                 <li><strong>QWeather API</strong>: Only transmits city ID (e.g., 101280101, Guangzhou) to obtain weather status, <strong>no personal user information is transmitted</strong>.</li>
                 <li><strong>ip-api.com</strong>: Resolves your IP address into a city name (for weather display and localization). This is a plaintext HTTP request that transmits your IP. See <a href="https://ip-api.com/docs">ip-api.com docs</a>.</li>
                 <li><strong>AI Content Moderation Service</strong>: The <strong>full text</strong> of the messages and replies you submit is sent to a third-party AI service we configure for content safety review. This service is located overseas.</li>
@@ -215,7 +214,6 @@
                 <li>Write operations are protected by CSRF tokens</li>
                 <li>Login failure lockout on both email and IP dimensions to defend against brute force</li>
                 <li>Honeypot fields and behavioral verification (page dwell time, input interactions) to defend against automated bots</li>
-                <li>Sensitive operations (such as content submission, login) enable Cloudflare Turnstile bot verification</li>
                 <li>Periodic cleanup of unverified accounts (deleted if the email is not verified within 60 minutes of registration)</li>
                 <li>Servers deployed in a firewall-protected network environment with security response headers (CSP, etc.)</li>
             </ul>
@@ -299,7 +297,7 @@
             </ul>
 
             <h2>11. Cookie and Tracking Technologies</h2>
-            <p>This service uses a cookie named <code>session</code> to maintain your login session and basic functionality (such as captcha verification state). This cookie:</p>
+            <p>This service uses a cookie named <code>session</code> to maintain your login session and basic functionality. This cookie:</p>
             <ul>
                 <li>is protected by HttpOnly and SameSite attributes; Secure is optionally enabled in production;</li>
                 <li>has a validity period of 24 hours and is used only for identification and session maintenance, <strong>not for behavior tracking or advertising</strong>;</li>
