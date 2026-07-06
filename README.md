@@ -450,6 +450,9 @@ GET /api/health
 
 MIT License
 
+## 可以请我喝杯咖啡～
+![donate_qr_code](static/donate.png)
+
 ---
 
 *让雨水滋润秘密的生长，让阳光守护内心的宁静。*

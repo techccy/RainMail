@@ -18,6 +18,7 @@ import { validateUserBehavior } from '../lib/behavior.js';
 import { basicKeywordCheck } from '../lib/moderation.js';
 import { csrfProtect } from '../lib/csrf.js';
 import { sessionGet, sessionSet } from '../lib/session.js';
+import { generateDeleteCode, formatDeleteCode, hashDeleteCode, verifyDeleteCode } from '../lib/delete-code.js';
 import { sendNewLetterNotification, sendReplyNotification } from '../lib/mail.js';
 
 const app = new Hono();
@@ -217,10 +218,15 @@ app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async 
       }
     }
 
-    const senderId = !isAnonymous ? sessionGet(c, 'user_id') ?? null : null;
+    // 静默绑定：登录用户无论是否勾选匿名都写入 sender_id（用于登录后免安全码删除）；
+    // is_anonymous 仍单独控制对外显示，二者解耦。
+    const senderId = sessionGet(c, 'user_id') ?? null;
     const senderCity = await getCityByIp(userIp);
     const now = nowIso();
     const uniqueIdentifier = randomId(16);
+    // 删除安全码：仅在 share_data 中明文返回一次；后台只落 HMAC 哈希。
+    const securityCode = generateDeleteCode();
+    const deleteCodeHash = hashDeleteCode(securityCode);
 
     // 配置了 AI 审核时以 pending 落库（由 worker 审核通过后再触发投递/通知）；
     // 未配置 AI 时直接 approved，保持"即写即发"的现状语义。
@@ -241,6 +247,7 @@ app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async 
         public_after_reply: publicAfterReply,
         created_at: now,
         review_status: reviewStatus,
+        delete_code_hash: deleteCodeHash,
       })
       .run();
 
@@ -268,6 +275,7 @@ app.post('/api/messages', rateLimit('10 per minute', 'msg'), csrfProtect, async 
         weather_status: 'sunny',
         delivery_type: deliveryType,
         review_status: reviewStatus,
+        security_code: formatDeleteCode(securityCode),
       },
     });
   } catch (e) {
@@ -474,6 +482,41 @@ app.post('/api/messages/:id/hug', csrfProtect, (c) => {
   } catch (e) {
     console.error('[letters] 拥抱错误:', e);
     return c.json({ error: '操作失败' }, 500);
+  }
+});
+
+// ----------------------------- 删除消息 /api/messages/:unique_id/delete -----------------------------
+// 二选一鉴权：
+//   ① 账号路径：登录用户且为该消息归属者（sender_id 命中）→ 免安全码；
+//   ② 安全码路径：通过 verifyDeleteCode 校验（后台仅存哈希）。
+// 两条路径均失败时返回统一错误（不泄露走的是哪条），并配合速率限制抗爆破。
+app.post('/api/messages/:unique_id/delete', rateLimit('10 per minute', 'del'), csrfProtect, async (c) => {
+  try {
+    const uniqueId = c.req.param('unique_id');
+    const message = db.select().from(messages).where(eq(messages.unique_identifier, uniqueId)).limit(1).all()[0];
+    if (!message) return c.json({ error: '消息不存在' }, 404);
+
+    // 路径①：账号归属
+    const userId = sessionGet(c, 'user_id');
+    const isOwner = !!userId && message.sender_id != null && userId === message.sender_id;
+
+    // 路径②：安全码
+    const data = await getJsonBody(c);
+    const codeOk = verifyDeleteCode(String(data.security_code ?? ''), message.delete_code_hash);
+
+    if (!isOwner && !codeOk) {
+      return c.json({ error: '安全码不正确或无权删除' }, 403);
+    }
+
+    // 关联清理（与 admin 删除逻辑一致；外键约束开启）
+    db.delete(messageReplies).where(eq(messageReplies.original_message_id, message.id)).run();
+    db.delete(letterDeliveries).where(eq(letterDeliveries.message_id, message.id)).run();
+    db.delete(messages).where(eq(messages.id, message.id)).run();
+
+    return c.json({ success: true, message: '消息已删除' });
+  } catch (e) {
+    console.error('[letters] 删除消息错误:', e);
+    return c.json({ error: '删除失败' }, 500);
   }
 });
 

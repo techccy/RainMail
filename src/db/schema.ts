@@ -29,6 +29,9 @@ export const messages = sqliteTable('message', {
   hugs_count: integer('hugs_count').default(0),
   sender_email: text('sender_email'),
   public_after_reply: integer('public_after_reply', { mode: 'boolean' }).default(false),
+  // 删除安全码的 HMAC-SHA-256 哈希（绝不存明文）；用于未登录场景凭码删除。
+  // 密钥复用 getConfig().SECRET_KEY；历史行 NULL = 无法凭码删除。
+  delete_code_hash: text('delete_code_hash'),
   // AI 审核队列字段
   // 'pending' = 等待 AI 审核；'approved' = 已通过（默认，未配置 AI 时即写即发）；'rejected' = 已拦截/重试耗尽
   review_status: text('review_status').default('approved'),

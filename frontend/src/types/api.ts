@@ -53,6 +53,8 @@ export interface PublicMessage {
   delivery_type: 'public' | 'private';
   is_anonymous: boolean;
   hugs_count: number;
+  /** 详情接口下发：登录账号是否为归属消息（true 时允许免安全码删除）。列表项无此字段。 */
+  can_delete_by_account?: boolean;
 }
 
 export interface MessagesResponse {
@@ -72,6 +74,8 @@ export interface ShareData {
   weather_status: WeatherStatus;
   delivery_type: 'public' | 'private';
   review_status?: 'pending' | 'approved' | 'rejected';
+  /** 删除安全码（16 位，4 位一段空格隔开）—— 仅在发布响应中明文返回一次 */
+  security_code: string;
 }
 
 /** GET /api/cha/question */

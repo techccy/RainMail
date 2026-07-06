@@ -4,11 +4,12 @@
 // 展示：消息正文 + 类型标签 + 拥抱数 + 回复列表（text / 发送了一个拥抱）
 // =============================================================================
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { MapPin } from 'lucide-react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { MapPin, Trash2 } from 'lucide-react';
 import AppShell from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
 import type { MessageReply, PublicMessage } from '@/types/api';
@@ -29,9 +30,13 @@ function fmt(iso?: string | null): string {
 
 export default function PublicMessage() {
   const { unique_id } = useParams<{ unique_id: string }>();
+  const navigate = useNavigate();
   const [data, setData] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [securityCode, setSecurityCode] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (!unique_id) return;
@@ -47,6 +52,32 @@ export default function PublicMessage() {
       cancelled = true;
     };
   }, [unique_id]);
+
+  const handleDelete = async () => {
+    if (!unique_id || !data) return;
+    const byAccount = !!data.message.can_delete_by_account;
+    const confirmMsg = byAccount
+      ? '确定要删除这条消息吗？此操作不可撤销。'
+      : '确定要凭安全码删除这条消息吗？此操作不可撤销。';
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeleting(true);
+    setDeleteError('');
+    const body: Record<string, unknown> = {};
+    if (!byAccount) body.security_code = securityCode.trim();
+
+    const res = await api<{ success: boolean }>(`/api/messages/${unique_id}/delete`, {
+      method: 'POST',
+      json: body,
+    });
+    setDeleting(false);
+
+    if (res.ok) {
+      navigate('/');
+      return;
+    }
+    setDeleteError(res.data.error || '删除失败');
+  };
 
   return (
     <AppShell>
@@ -98,6 +129,41 @@ export default function PublicMessage() {
                   ))}
                 </div>
               )}
+            </section>
+
+            {/* 删除消息区块 */}
+            <section className="space-y-2">
+              {data.message.can_delete_by_account ? (
+                // 归属账号：免安全码直接删
+                <Button variant="destructive" onClick={handleDelete} disabled={deleting} className="w-full sm:w-auto">
+                  <Trash2 className="size-4" />
+                  <span className="ml-1">{deleting ? '删除中…' : '删除这条消息'}</span>
+                </Button>
+              ) : (
+                // 非归属：凭安全码删除
+                <>
+                  <p className="text-sm text-muted-foreground">凭删除安全码删除此消息</p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      value={securityCode}
+                      onChange={(e) => setSecurityCode(e.target.value)}
+                      placeholder="删除安全码"
+                      className="font-mono tracking-wider sm:max-w-xs"
+                      autoComplete="off"
+                    />
+                    <Button
+                      variant="destructive"
+                      onClick={handleDelete}
+                      disabled={deleting || securityCode.trim().length === 0}
+                      className="shrink-0"
+                    >
+                      <Trash2 className="size-4" />
+                      <span className="ml-1">{deleting ? '删除中…' : '删除'}</span>
+                    </Button>
+                  </div>
+                </>
+              )}
+              {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
             </section>
           </>
         )}

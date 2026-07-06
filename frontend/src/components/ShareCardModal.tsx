@@ -6,6 +6,7 @@
 // 卡片配色由 weatherStatus 显式决定，不依赖全局 .dark 主题
 // =============================================================================
 import { useEffect, useRef, useState } from 'react';
+import { Copy, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +25,7 @@ export default function ShareCardModal({ share, weatherOverride, open, onOpenCha
   const cardRef = useRef<HTMLDivElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const weatherStatus = weatherOverride ?? share?.weather_status ?? 'sunny';
   const weatherLabel = weatherStatus === 'rainy' ? '雨天模式' : '晴天模式';
@@ -103,6 +105,18 @@ export default function ShareCardModal({ share, weatherOverride, open, onOpenCha
     }
   };
 
+  // 复制安全码到剪贴板（独立保存，避免印入存票图片）
+  const handleCopyCode = async () => {
+    if (!share?.security_code) return;
+    try {
+      await navigator.clipboard.writeText(share.security_code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error('复制安全码失败', e);
+    }
+  };
+
   if (!share) return null;
 
   return (
@@ -168,6 +182,28 @@ export default function ShareCardModal({ share, weatherOverride, open, onOpenCha
             {share.full_share_url}
           </a>
         </div>
+
+        {/* 删除安全码 —— 刻意置于 cardRef 截图源之外，避免被印入导出的存票图片 */}
+        {share.security_code && (
+          <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+              🔐 删除安全码（请妥善保管）
+            </p>
+            <p className="text-xs leading-relaxed text-amber-700/80 dark:text-amber-400/80">
+              这是匿名删除本消息的<strong>唯一凭证</strong>，丢失后无法找回（登录账号发布者可直接用账号删除）。
+              <strong>请勿将此码截图保存在存票图片中</strong>，建议用下方按钮复制后单独保存。
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 select-all rounded bg-white/60 px-3 py-2 font-mono text-sm tracking-[0.2em] dark:bg-black/30">
+                {share.security_code}
+              </code>
+              <Button variant="outline" size="sm" onClick={handleCopyCode} className="shrink-0">
+                {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                <span className="ml-1">{copied ? '已复制' : '复制'}</span>
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-2">
           <Button onClick={handleSave} disabled={saving} className="flex-1">

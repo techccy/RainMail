@@ -21,6 +21,7 @@ const DDL_STATEMENTS: string[] = [
     hugs_count INTEGER DEFAULT 0,
     sender_email TEXT,
     public_after_reply BOOLEAN DEFAULT 0,
+    delete_code_hash TEXT,
     review_status TEXT DEFAULT 'approved',
     review_attempts INTEGER DEFAULT 0
   )`,
@@ -143,11 +144,23 @@ function ensureReviewColumns(): void {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS ix_message_reply_review_status ON message_reply (review_status)`);
 }
 
+/**
+ * 为旧库幂等补 delete_code_hash 列。
+ * 历史行为 NULL，删除接口对其统一返回 403（不可凭码删除）。
+ */
+function ensureDeleteCodeColumn(): void {
+  const messageCols = existingColumns('message');
+  if (!messageCols.has('delete_code_hash')) {
+    sqlite.exec(`ALTER TABLE message ADD COLUMN delete_code_hash TEXT`);
+  }
+}
+
 /** 创建所有表（幂等） */
 export function ensureSchema(): void {
   const tx = sqlite.transaction(() => {
     for (const stmt of DDL_STATEMENTS) sqlite.exec(stmt);
     ensureReviewColumns();
+    ensureDeleteCodeColumn();
   });
   tx();
   console.log('[INFO] 数据库表已就绪');

@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { messages, messageReplies } from '../db/schema.js';
 import { render } from '../views/nunjucks.js';
+import { sessionGet } from '../lib/session.js';
 
 const app = new Hono();
 
@@ -47,6 +48,12 @@ app.get('/api/messages/:unique_id', (c) => {
       delivery_type: message.delivery_type,
       is_anonymous: !!message.is_anonymous,
       hugs_count: message.hugs_count ?? 0,
+      // 是否为当前登录账号的归属消息：是则前端允许免安全码删除。
+      // 仅暴露布尔，不泄露 sender_id 本身。
+      can_delete_by_account: (() => {
+        const uid = sessionGet(c, 'user_id');
+        return !!uid && message.sender_id != null && uid === message.sender_id;
+      })(),
     },
     replies: replies.map((r) => ({
       id: r.id,
