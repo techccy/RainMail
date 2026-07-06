@@ -157,6 +157,10 @@ function getFlashesForTemplate(c: any): string | undefined {
 app.get(prefix('dashboard'), async (c) => {
   const guard = adminRequired(c);
   if (guard) return guard;
+  // dashboard 模板大量使用内联 onclick（行内事件处理器），
+  // 默认 CSP 不含 'unsafe-inline' 会被浏览器拦截（按钮点了没反应），
+  // 故在此响应放宽 script-src。该页面受管理员登录保护。
+  (c as any).set('cspAllowInline', true);
   const rows = db.select().from(messages).all().sort((a, b) => (a.created_at! < b.created_at! ? 1 : -1));
   const dashboard = await getDashboardData('广州');
   return c.html(render('admin_dashboard.html', { messages: rows.map((m) => ({ ...m, created_at: new DateTime(m.created_at) })), ...dashboard }, c));
@@ -307,7 +311,13 @@ app.post(prefix('api/delete_user/:id'), csrfProtect, (c) => {
   const user = db.select().from(users).where(eq(users.id, id)).limit(1).all()[0];
   if (!user) return c.json({ success: false, error: '用户不存在' }, 404);
 
-  // 关联清理
+  // 关联清理（与批量删除一致，外键约束开启）
+  // 1) 该用户作为作者发表过的回复
+  db.delete(messageReplies).where(eq(messageReplies.replier_user_id, id)).run();
+  // 2) 该用户名下消息被别人回复过的回复（删消息前先清，避免 message_reply.original_message_id 外键报错）
+  db.delete(messageReplies)
+    .where(inArray(messageReplies.original_message_id, db.select({ id: messages.id }).from(messages).where(eq(messages.sender_id, id))))
+    .run();
   db.delete(messages).where(eq(messages.sender_id, id)).run();
   db.delete(letterDeliveries).where(eq(letterDeliveries.recipient_user_id, id)).run();
   db.delete(notifications).where(eq(notifications.user_id, id)).run();

@@ -22,6 +22,17 @@ export const DEFAULT_CSP = [
   'upgrade-insecure-requests',
 ].join('; ');
 
+/**
+ * 给 CSP 的 script-src 指令追加 'unsafe-inline'。
+ * 后台 dashboard 大量依赖内联 onclick（行内事件处理器），而 CSP 默认不含
+ * 'unsafe-inline' 会被浏览器静默拦截（连确认框都不弹）。公共站点 / SPA 仍保持严格策略。
+ * 只对 handler 显式 c.set('cspAllowInline', true) 的响应放宽，影响面最小。
+ */
+function withInlineScriptsAllowed(csp: string): string {
+  // 命中 script-src 这一段并在其末尾（遇到下一个 ';' 或字符串结尾前）插入 'unsafe-inline'
+  return csp.replace(/script-src[^;]*/i, (m) => (m.includes("'unsafe-inline'") ? m : `${m} 'unsafe-inline'`));
+}
+
 export function securityHeadersMiddleware(): MiddlewareHandler {
   return async (c, next) => {
     await next();
@@ -34,7 +45,9 @@ export function securityHeadersMiddleware(): MiddlewareHandler {
       c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
       c.header('Pragma', 'no-cache');
     }
-    c.header('Content-Security-Policy', (cfg.CSP_POLICY as string) || DEFAULT_CSP);
+    const baseCsp = (cfg.CSP_POLICY as string) || DEFAULT_CSP;
+    const csp = c.get('cspAllowInline') ? withInlineScriptsAllowed(baseCsp) : baseCsp;
+    c.header('Content-Security-Policy', csp);
     c.header('X-Frame-Options', 'DENY');
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('X-XSS-Protection', '1; mode=block');
