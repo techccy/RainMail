@@ -92,7 +92,7 @@
     <div class="container">
         <div class="policy-container">
             <div class="text-end mb-3">
-                <a href="https://dropbox.techccy.dpdns.org/privacy-policy" class="btn btn-outline-primary btn-sm">
+                <a href="https://rainmail.techccy.dpdns.org/privacy-policy" class="btn btn-outline-primary btn-sm">
                     <i class="bi bi-globe"></i> ENGLISH VERSION
                 </a>
             </div>
@@ -100,22 +100,23 @@
             <h1 class="policy-title">隐私政策</h1>
 
             <div class="effective-date">
-                <div><strong>生效日期：2026年5月29日</strong></div>
+                <div><strong>生效日期：2026年7月6日</strong></div>
                 <div><strong>服务名称：雨天信箱（RainMail）</strong></div>
-                <div><strong>服务地址：<a href="https://rainmail.techccy.dpdns.org" style="color: white;">https://dropbox.techccy.dpdns.org</a></strong></div>
+                <div><strong>服务地址：<a href="https://rainmail.techccy.dpdns.org" style="color: white;">https://rainmail.techccy.dpdns.org</a></strong></div>
             </div>
 
-            <p>雨天信箱（RainMail）是由TechCCY运营的匿名情绪交互平台。我们深知隐私的重要性，本政策说明我们如何收集、使用、存储和保护您的信息。请仔细阅读，使用本服务即表示您同意本政策。</p>
+            <p>雨天信箱（RainMail）是由TechCCY运营的匿名情绪交互平台。我们深知隐私的重要性，本政策说明我们如何收集、使用、存储和保护您的信息。除匿名投递外，本服务还提供可选的注册账号、情感信件投递、回复通知等功能。请仔细阅读，使用本服务即表示您同意本政策。</p>
 
             <h2>一、我们收集的信息</h2>
-            <p>尽管本服务采用匿名设计，为保障服务正常运行和安全，我们会收集以下信息：</p>
+            <p>为保障服务正常运行和安全，我们会收集以下信息：</p>
 
             <h3>1.1 您主动提交的内容</h3>
             <ul>
-                <li><strong>消息内容</strong>：您在晴天投递的文字消息（最多500字）</li>
-                <li><strong>使用目的</strong>：在目标城市降雨时向其他用户展示</li>
-                <li><strong>存储位置</strong>：境外服务器数据库</li>
-                <li><strong>保留期限</strong>：无固定期限</li>
+                <li><strong>账号信息（注册用户）</strong>：电子邮箱（用于登录与邮件通知）、用户名（可选，缺省时取邮箱前缀）、密码（仅以单向哈希存储，我们不存储明文密码）、由 IP 反查得到的所在城市。</li>
+                <li><strong>消息内容</strong>：您在晴天投递的文字消息（最多500字），存储于境外服务器数据库，用于在目标城市降雨时向其他用户展示，保留期限无固定期限。</li>
+                <li><strong>情感信件</strong>：投递类型（公开 / 指定收件人 / 随机已验证用户）、收件人邮箱（可选）、投递选项等。</li>
+                <li><strong>回复内容</strong>：您对他人的文字回复（最多500字）。</li>
+                <li><strong>联系邮箱（可选）</strong>：匿名投递时您可选择填写的回复通知邮箱。</li>
             </ul>
 
             <h3>1.2 自动收集的技术信息</h3>
@@ -133,7 +134,7 @@
                         <tr>
                             <td>IP地址</td>
                             <td>服务器自动记录</td>
-                            <td>防止滥用、安全审计</td>
+                            <td>防止滥用、安全审计、所在城市反查</td>
                             <td>30天后自动删除</td>
                         </tr>
                         <tr>
@@ -152,18 +153,21 @@
                 </table>
             </div>
 
-            <h3>1.3 第三方服务收集的信息</h3>
+            <h3>1.3 第三方服务收集或处理的信息</h3>
             <ul>
-                <li><strong>Cloudflare Turnstile</strong>：用于人机验证，防止机器人滥用。验证数据由Cloudflare处理，详见 <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare隐私政策</a></li>
-                <li><strong>和风天气API</strong>：仅传输城市ID（101280101，广州）用于获取天气状态，<strong>不传输任何用户个人信息</strong></li>
+                <li><strong>Cloudflare Turnstile</strong>：用于人机验证，防止机器人滥用。验证数据由 Cloudflare 处理，详见 <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare隐私政策</a>。</li>
+                <li><strong>和风天气 API</strong>：仅传输城市ID（如101280101，广州）用于获取天气状态，<strong>不传输任何用户个人信息</strong>。</li>
+                <li><strong>ip-api.com</strong>：将您的 IP 地址反查为城市名称（用于天气展示与本地化）。该查询为明文 HTTP 请求，会传输您的 IP。详见 <a href="https://ip-api.com/docs">ip-api.com 文档</a>。</li>
+                <li><strong>AI 内容审核服务</strong>：您提交的消息与回复<strong>全文</strong>将发送至我们配置的第三方 AI 服务进行内容安全审核。该服务位于境外。</li>
+                <li><strong>SMTP 邮件服务</strong>：通过第三方 SMTP 服务发送邮箱验证、信件投递与回复通知邮件，邮件内容含收件人邮箱及消息摘要。</li>
             </ul>
 
             <h2>二、我们不会收集的信息</h2>
             <ul>
-                <li>不要求手机号、电子邮箱、姓名等个人身份信息</li>
-                <li>不追踪用户行为轨迹或建立用户画像</li>
+                <li>不强制要求真实姓名、手机号、身份证号等真实身份信息（注册账号仅需电子邮箱）</li>
+                <li>不做跨网站行为追踪，不建立商业用户画像</li>
                 <li>不收集设备唯一标识符（如IMEI、MAC地址）</li>
-                <li>不将数据用于广告推送或商业营销</li>
+                <li>不将数据用于广告推送或商业营销，不接入任何第三方分析或统计脚本</li>
             </ul>
 
             <div class="compliance-notice">
@@ -174,8 +178,12 @@
             <h2>三、信息使用目的</h2>
             <p>我们仅将收集的信息用于以下目的：</p>
             <ol>
-                <li>提供核心服务：在雨天向用户展示匿名消息</li>
-                <li>保障服务安全：识别并阻止滥用行为（如垃圾信息、攻击）</li>
+                <li>提供核心服务：在雨天向用户展示匿名消息、提供情感信件投递与回复功能</li>
+                <li>账号识别与会话保持：登录认证、维持登录状态</li>
+                <li>邮件通知：邮箱验证、信件投递通知、回复提醒</li>
+                <li>本地化展示：通过 IP 反查所在城市，提供对应天气状态与本地化内容</li>
+                <li>AI 辅助内容安全审核：对消息与回复正文进行违规内容识别</li>
+                <li>保障服务安全：识别并阻止滥用行为（如垃圾信息、攻击、暴力破解）</li>
                 <li>服务优化：根据设备信息调整页面兼容性</li>
                 <li>法律合规：配合司法机关依法调取数据（如收到有效法律文书）</li>
             </ol>
@@ -189,6 +197,9 @@
                     <ul>
                         <li>Cloudflare（人机验证）</li>
                         <li>和风天气（天气数据查询）</li>
+                        <li>ip-api.com（IP 地理定位）</li>
+                        <li>第三方 AI 内容审核服务（审核消息/回复正文）</li>
+                        <li>第三方 SMTP 邮件服务（发送通知邮件）</li>
                     </ul>
                 </li>
                 <li><strong>业务转让</strong>：如发生合并、收购或资产出售，用户信息可能作为转让资产的一部分</li>
@@ -197,11 +208,16 @@
             <h2>五、数据安全措施</h2>
             <p>我们采取以下措施保护您的数据：</p>
             <ul>
-                <li>采用参数化查询防止SQL注入攻击</li>
-                <li>对用户输入进行XSS过滤</li>
-                <li>服务器部署于受防火墙保护的网络环境</li>
-                <li>定期自动清理过期数据（消息180天、日志30天）</li>
-                <li>敏感操作（如内容提交）启用Cloudflare Turnstile人机验证</li>
+                <li>采用参数化查询（Drizzle ORM）防止 SQL 注入攻击</li>
+                <li>对用户输入进行 XSS 过滤与 SQL 注入特征检测</li>
+                <li>密码以 scrypt 单向哈希存储，不保存明文</li>
+                <li>会话 Cookie 设置 HttpOnly 与 SameSite 属性，生产环境可选启用 Secure</li>
+                <li>写操作启用 CSRF token 保护</li>
+                <li>登录失败按邮箱与 IP 双维度锁定，防御暴力破解</li>
+                <li>蜜罐字段与行为验证（页面停留、输入交互）防御自动化机器人</li>
+                <li>敏感操作（如内容提交、登录）启用 Cloudflare Turnstile 人机验证</li>
+                <li>未验证账号定时清理（注册后 60 分钟未验证邮箱即删除）</li>
+                <li>服务器部署于受防火墙保护的网络环境，并设置安全响应头（CSP 等）</li>
             </ul>
 
             <h2>六、数据泄露应对</h2>
@@ -221,11 +237,13 @@
             <ul>
                 <li>所有数据存储于<strong>境外服务器</strong></li>
                 <li>由于服务部署于境外，您的信息可能被传输至您所在国家/地区以外的地点进行处理</li>
+                <li>消息与回复正文在 AI 内容审核阶段会被传输至境外的 AI 审核服务端点</li>
+                <li>您的 IP 地址会经 ip-api.com 进行地理定位查询</li>
                 <li>我们将采取合理措施确保跨境数据传输符合相关法律要求</li>
             </ul>
 
             <h2>八、您的权利</h2>
-            <p>由于本服务采用完全匿名设计（无账号体系、无用户标识），我们无法识别特定用户身份，因此部分权利无法自动化行使。您可通过以下方式行使权利：</p>
+            <p>已注册用户可登录账号直接行使下列权利；匿名投递的用户可通过提供消息标识符（<code>/m/&lt;id&gt;</code>）或消息内容与提交时间定位后行使权利。您可通过以下方式行使权利：</p>
             <div class="table-responsive">
                 <table class="table table-hover rights-table">
                     <thead>
@@ -281,7 +299,13 @@
             </ul>
 
             <h2>十一、Cookie与追踪技术</h2>
-            <p>本服务<strong>不使用Cookie</strong>存储用户偏好或追踪行为。仅使用会话级临时存储保障基础功能。</p>
+            <p>本服务使用名为 <code>session</code> 的 Cookie 维持您的登录会话与基础功能（如验证码校验状态）。该 Cookie：</p>
+            <ul>
+                <li>采用 HttpOnly 与 SameSite 属性保护，生产环境可选启用 Secure；</li>
+                <li>有效期为 24 小时，仅用于身份识别与会话保持，<strong>不用于行为追踪或广告</strong>；</li>
+                <li>内容由服务端 HMAC 签名，不存储明文敏感信息。</li>
+            </ul>
+            <p>本服务<strong>不接入</strong> Google Analytics、百度统计等任何第三方分析或统计脚本。若您在浏览器中禁用 Cookie，登录等需要会话保持的功能可能无法正常使用，匿名浏览功能不受影响。</p>
 
             <h2>十二、第三方链接</h2>
             <p>本服务可能包含指向第三方网站的链接（如天气数据来源）。我们不对第三方网站的隐私实践负责，请查阅其独立隐私政策。</p>
