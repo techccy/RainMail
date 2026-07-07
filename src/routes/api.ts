@@ -99,5 +99,15 @@ app.get('/api/email-providers', (c) => {
   return c.json(providers);
 });
 
+// ----------------------------- 关于页 Markdown -----------------------------
+// 启动时一次性读入 about.md 到内存（缺失不阻断启动，仅告警）。
+let ABOUT_MARKDOWN = '';
+try {
+  ABOUT_MARKDOWN = fs.readFileSync(path.join(PROJECT_ROOT, 'about.md'), 'utf-8');
+} catch {
+  console.warn('[api] 未找到 about.md，/api/about 将返回空内容');
+}
+app.get('/api/about', (c) => c.json({ content: ABOUT_MARKDOWN }));
+
 export { createPrivateDelivery };
 export default app;

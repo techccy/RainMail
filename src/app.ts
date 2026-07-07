@@ -18,6 +18,7 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import letterRoutes from './routes/letters.js';
 import adminRoutes from './routes/admin.js';
+import dataRoutes from './routes/data.js';
 
 export function createApp(): Hono {
   const cfg = getConfig();
@@ -50,6 +51,7 @@ export function createApp(): Hono {
   app.route('/', userRoutes);
   app.route('/', letterRoutes);
   app.route('/', adminRoutes); // 内部使用 admin 前缀
+  app.route('/', dataRoutes); // /data/:name 图片白名单路由
 
   // 6. SPA fallback —— React 前端接管页面路由
   //    仅对「未匹配到后端路由 + GET + Accept:text/html + 非静态/非 API/非 admin」的请求

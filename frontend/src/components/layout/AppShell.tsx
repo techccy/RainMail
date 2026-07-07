@@ -39,15 +39,21 @@ export default function AppShell({ children, footer = true }: Props) {
       {footer && (
         <footer className="mx-auto max-w-3xl px-6 pb-10 pt-6">
           <div className="flex items-center justify-between border-t border-border pt-6 text-xs text-muted-foreground">
-            <a
-              href="https://github.com/techccy/RainMail"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 hover:text-foreground"
-            >
-              <Github className="size-3.5" />
-              GitHub
-            </a>
+            <div className="flex items-center gap-3">
+              <a
+                href="https://github.com/techccy/RainMail"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 hover:text-foreground"
+              >
+                <Github className="size-3.5" />
+                GitHub
+              </a>
+              <span aria-hidden className="text-border">·</span>
+              <Link to="/about" className="hover:text-foreground">
+                关于
+              </Link>
+            </div>
             <p className="font-mono">© {new Date().getFullYear()} TechCCY</p>
           </div>
         </footer>

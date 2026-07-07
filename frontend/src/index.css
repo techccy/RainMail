@@ -203,3 +203,74 @@
     }
   }
 }
+
+/*
+  About 页 Markdown 排版。
+  复用 shadcn 设计 token（muted-foreground / border / card / primary），
+  保持与全站 Refined Utility 风格一致，无需引入 typography 插件。
+*/
+@layer components {
+  .about-markdown {
+    @apply text-sm leading-relaxed text-foreground;
+  }
+  .about-markdown > :first-child {
+    @apply mt-0;
+  }
+  .about-markdown > :last-child {
+    @apply mb-0;
+  }
+  .about-markdown h1 {
+    @apply text-3xl font-semibold tracking-tight;
+  }
+  .about-markdown h2 {
+    @apply mt-8 mb-3 text-xl font-semibold tracking-tight;
+  }
+  .about-markdown h3 {
+    @apply mt-6 mb-2 text-base font-semibold tracking-tight;
+  }
+  .about-markdown p {
+    @apply my-3 text-muted-foreground;
+  }
+  .about-markdown blockquote {
+    @apply my-4 border-l-2 border-border pl-4 italic text-muted-foreground;
+  }
+  .about-markdown ul {
+    @apply my-3 space-y-1.5 pl-5 text-muted-foreground marker:text-border;
+    list-style: disc;
+  }
+  .about-markdown ol {
+    @apply my-3 space-y-1.5 pl-5 text-muted-foreground marker:text-border;
+    list-style: decimal;
+  }
+  .about-markdown li {
+    @apply leading-relaxed;
+  }
+  .about-markdown strong {
+    @apply font-medium text-foreground;
+  }
+  .about-markdown a {
+    @apply text-foreground underline underline-offset-2 hover:text-primary;
+  }
+  .about-markdown hr {
+    @apply my-6 border-border;
+  }
+  .about-markdown code {
+    @apply rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground;
+  }
+  .about-markdown pre {
+    @apply overflow-x-auto rounded-lg border border-border bg-muted p-4;
+  }
+  .about-markdown pre code {
+    @apply bg-transparent p-0;
+  }
+  .about-markdown table {
+    @apply w-full border-collapse text-left;
+  }
+  .about-markdown th,
+  .about-markdown td {
+    @apply border border-border px-3 py-1.5;
+  }
+  .about-markdown img {
+    @apply mt-2 rounded-lg border border-border bg-white;
+  }
+}

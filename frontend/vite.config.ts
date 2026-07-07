@@ -29,6 +29,7 @@ export default defineConfig({
       '/m': 'http://localhost:5024',
       '/verify-email': 'http://localhost:5024',
       '/static': 'http://localhost:5024',
+      '/data': 'http://localhost:5024',
     },
   },
 });

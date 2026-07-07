@@ -6,6 +6,7 @@
 // 成功 → onSubmitted(share_data)；require_login → onRequireLogin；blocked/其他 → 错误提示
 // =============================================================================
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -131,8 +132,13 @@ export default function MessageForm({ variant, onSubmitted, onRequireLogin }: Pr
         />
 
         <div className="space-y-2">
-          <div className="flex items-baseline justify-between">
-            <Label htmlFor={`${variant}-content`}>你的想法（最多 {MAX_CHARS} 字）</Label>
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="flex items-baseline gap-2">
+              <Label htmlFor={`${variant}-content`}>你的想法（最多 {MAX_CHARS} 字）</Label>
+              <Link to="/about" className="text-xs text-muted-foreground underline hover:text-foreground">
+                关于本站
+              </Link>
+            </div>
             <span className="font-mono text-xs text-muted-foreground">
               {content.length}/{MAX_CHARS}
             </span>

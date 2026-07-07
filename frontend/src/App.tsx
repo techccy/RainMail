@@ -11,6 +11,7 @@ import VerifyEmail from '@/pages/VerifyEmail';
 import Inbox from '@/pages/Inbox';
 import Letter from '@/pages/Letter';
 import Settings from '@/pages/Settings';
+import About from '@/pages/About';
 
 export default function App() {
   // 启动期拉取前端配置（应用名等）
@@ -23,6 +24,7 @@ export default function App() {
       <WeatherProvider>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
           <Route path="/m/:unique_id" element={<PublicMessage />} />
           {/* /privacy-policy 与 /privacy-policy-cn 由后端 SSR 提供（静态法律文本） */}
           <Route path="/auth/login" element={<Login />} />
