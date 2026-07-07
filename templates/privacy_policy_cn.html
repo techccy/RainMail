@@ -100,7 +100,7 @@
             <h1 class="policy-title">隐私政策</h1>
 
             <div class="effective-date">
-                <div><strong>生效日期：2026年7月6日</strong></div>
+                <div><strong>生效日期：2026年7月7日</strong></div>
                 <div><strong>服务名称：雨天信箱（RainMail）</strong></div>
                 <div><strong>服务地址：<a href="https://rm.techccy.com" style="color: white;">https://rm.techccy.com</a></strong></div>
             </div>
@@ -156,7 +156,7 @@
             <h3>1.3 第三方服务收集或处理的信息</h3>
             <ul>
                 <li><strong>和风天气 API</strong>：仅传输城市ID（如101280101，广州）用于获取天气状态，<strong>不传输任何用户个人信息</strong>。</li>
-                <li><strong>ip-api.com</strong>：将您的 IP 地址反查为城市名称（用于天气展示与本地化）。该查询为明文 HTTP 请求，会传输您的 IP。详见 <a href="https://ip-api.com/docs">ip-api.com 文档</a>。</li>
+                <li><strong>腾讯位置服务（Tencent Location Service）</strong>：将您的 IP 地址反查为城市名称（用于天气展示与本地化）。查询通过 HTTPS 加密传输，请求内容仅含目标 IP 与 API Key，<strong>不含任何其他用户信息</strong>。详见 <a href="https://lbs.qq.com/service/webService/webServiceGuide/position/webServiceIp">腾讯位置服务文档</a>。查询结果在本地缓存 30 天，期间不会再次请求该 IP。</li>
                 <li><strong>AI 内容审核服务</strong>：您提交的消息与回复<strong>全文</strong>将发送至我们配置的第三方 AI 服务进行内容安全审核。该服务位于境外。</li>
                 <li><strong>SMTP 邮件服务</strong>：通过第三方 SMTP 服务发送邮箱验证、信件投递与回复通知邮件，邮件内容含收件人邮箱及消息摘要。</li>
             </ul>
@@ -195,7 +195,7 @@
                 <li><strong>服务必需</strong>：向以下第三方服务提供商传输必要数据：
                     <ul>
                         <li>和风天气（天气数据查询）</li>
-                        <li>ip-api.com（IP 地理定位）</li>
+                        <li>腾讯位置服务（IP 地理定位）</li>
                         <li>第三方 AI 内容审核服务（审核消息/回复正文）</li>
                         <li>第三方 SMTP 邮件服务（发送通知邮件）</li>
                     </ul>
@@ -235,7 +235,7 @@
                 <li>所有数据存储于<strong>境外服务器</strong></li>
                 <li>由于服务部署于境外，您的信息可能被传输至您所在国家/地区以外的地点进行处理</li>
                 <li>消息与回复正文在 AI 内容审核阶段会被传输至境外的 AI 审核服务端点</li>
-                <li>您的 IP 地址会经 ip-api.com 进行地理定位查询</li>
+                <li>您的 IP 地址会经腾讯位置服务（境内服务）进行地理定位查询，查询通过 HTTPS 加密传输</li>
                 <li>我们将采取合理措施确保跨境数据传输符合相关法律要求</li>
             </ul>
 

@@ -55,7 +55,7 @@
 | 后端 | TypeScript、[Hono](https://hono.dev/) + `@hono/node-server`、[Drizzle ORM](https://orm.drizzle.team/)、`better-sqlite3`、Nunjucks、Nodemailer、Zod |
 | 前端 | React 19、React Router 7、Vite 7、Tailwind CSS 4、Radix UI、`lucide-react`、`html-to-image` / `qrcode` |
 | 模板 | Nunjucks（兼容 Jinja2 语法，仅用于管理后台 SSR + 隐私政策页） |
-| 外部服务 | 和风天气 API（最多 4 组 Key 轮换）、AI 内容审核（OpenAI 兼容） |
+| 外部服务 | 和风天气 API（最多 4 组 Key 轮换）、[腾讯位置服务](https://lbs.qq.com/) IP 定位（多 Key 轮换，主）、MaxMind GeoLite2 离线库 / ipip.net（兜底）、AI 内容审核（OpenAI 兼容） |
 | 数据库 | SQLite（持久化在 `instance/rainmail.db`） |
 
 前端为独立的 `frontend/` 包，Vite 构建产物输出到 `static/spa/`，由同一个 Hono 服务在 5024 端口统一托管（**单端口部署**）。
@@ -85,7 +85,22 @@ iptables -I DOCKER-USER -i br-rainmail -d 192.168.1.0/24 -j DROP
 3. 在[项目管理](https://console.qweather.com/project)创建项目并新建凭据，**选择 API_KEY**，填入 `HEFENG_KEY1`
 4. 支持配置多组密钥轮换（最多 4 组 `HEFENG_HOST2..4` / `HEFENG_KEY2..4`），提高请求额度
 
-### 第三步：环境变量配置
+### 第三步：获取腾讯位置服务 IP 定位密钥（必需）
+
+IP 城市查询使用腾讯位置服务 LBS 接口（[文档](https://lbs.qq.com/service/webService/webServiceGuide/position/webServiceIp)），用于把访问者 IP 反查为城市名以匹配天气。
+
+1. 访问[腾讯位置服务控制台](https://lbs.qq.com/dev/console/key/manage)注册并创建 **WebServiceAPI** 类型的 Key（每个 Key 每日 6000 次免费配额）
+2. 将 Key 填入 `TENCENT_IP_KEYS`，多个 Key 用英文逗号分隔以叠加配额并自动轮询：
+   ```bash
+   TENCENT_IP_KEYS=your-key1,your-key2
+   ```
+3. **若 Key 开启了「SN 签名校验」**，需用 `key:sk` 格式填入对应的 SK（在控制台 Key 详情页可见）：
+   ```bash
+   TENCENT_IP_KEYS=带签名的Key:对应的SK,未开启签名的Key
+   ```
+4. 未配置 Key 时自动降级到 MaxMind 离线库（`data/GeoLite2-City.mmdb`）→ ipip.net → `LOCATION_NAME` 兜底
+
+### 第四步：环境变量配置
 
 ```bash
 cp .env.example .env
@@ -143,19 +158,20 @@ AI_MODERATION_QUEUE_INTERVAL_MS=2000      # 审核队列轮询周期（毫秒）
 TIMES=3600                                # 天气缓存时间（秒）
 FORCE_RAIN_DURATION=10                    # 强制降雨持续时间（分钟，仅内部 helper 使用）
 PRIVATE_DELIVERY_REQUIRE_LOGIN=false      # 私密投递是否需要登录
-IPINFO_TOKEN=your-ipinfo-token            # IPInfo.io 令牌（可选，用于 IP 定位）
+TENCENT_IP_KEYS=your-key1,your-key2       # 腾讯位置服务 IP 定位 Key（必需，多个用逗号分隔；开启 SN 校验的 Key 用 key:sk 格式）
+MAXMIND_DB_PATH=                          # MaxMind 离线库路径（可选兜底，缺省为 data/GeoLite2-City.mmdb）
 SESSION_COOKIE_SECURE=false               # 生产环境建议 true
 CSP_POLICY=default-src 'self'; ...        # 内容安全策略
 UNVERIFIED_USER_CLEANUP_MINUTES=60        # 僵尸用户清理阈值（分钟）
 ```
 
-### 第五步：启动应用
+### 第六步：启动应用
 
 ```bash
 docker compose up -d --build
 ```
 
-### 第六步：访问应用
+### 第七步：访问应用
 
 打开浏览器访问：http://localhost:5024
 

@@ -100,7 +100,7 @@
             <h1 class="policy-title">Privacy Policy</h1>
 
             <div class="effective-date">
-                <div><strong>Effective Date: July 6, 2026</strong></div>
+                <div><strong>Effective Date: July 7, 2026</strong></div>
                 <div><strong>Service Name: RainMail (雨天信箱)</strong></div>
                 <div><strong>Service Address: <a href="https://rm.techccy.com" style="color: white;">https://rm.techccy.com</a></strong></div>
             </div>
@@ -156,7 +156,7 @@
             <h3>1.3 Information Collected or Processed by Third-Party Services</h3>
             <ul>
                 <li><strong>QWeather API</strong>: Only transmits city ID (e.g., 101280101, Guangzhou) to obtain weather status, <strong>no personal user information is transmitted</strong>.</li>
-                <li><strong>ip-api.com</strong>: Resolves your IP address into a city name (for weather display and localization). This is a plaintext HTTP request that transmits your IP. See <a href="https://ip-api.com/docs">ip-api.com docs</a>.</li>
+                <li><strong>Tencent Location Service</strong>: Resolves your IP address into a city name (for weather display and localization). The query is transmitted over HTTPS and contains only the target IP and API Key, <strong>no other user information</strong>. See <a href="https://lbs.qq.com/service/webService/webServiceGuide/position/webServiceIp">Tencent Location Service docs</a>. Results are cached locally for 30 days, during which no further request is made for that IP.</li>
                 <li><strong>AI Content Moderation Service</strong>: The <strong>full text</strong> of the messages and replies you submit is sent to a third-party AI service we configure for content safety review. This service is located overseas.</li>
                 <li><strong>SMTP Email Service</strong>: Sends email verification, letter delivery, and reply notification emails via a third-party SMTP service. Email content includes the recipient email and a message digest.</li>
             </ul>
@@ -196,7 +196,7 @@
                     <ul>
                         <li>Cloudflare (bot verification)</li>
                         <li>QWeather (weather data query)</li>
-                        <li>ip-api.com (IP geolocation)</li>
+                        <li>Tencent Location Service (IP geolocation)</li>
                         <li>Third-party AI content moderation service (reviewing message/reply text)</li>
                         <li>Third-party SMTP email service (sending notification emails)</li>
                     </ul>
@@ -236,7 +236,7 @@
                 <li>All data stored on <strong>overseas servers</strong></li>
                 <li>Due to service deployment overseas, your information may be transmitted to locations outside your country/region for processing</li>
                 <li>Message and reply text is transmitted to an overseas AI moderation service endpoint during the content review phase</li>
-                <li>Your IP address is queried via ip-api.com for geolocation</li>
+                <li>Your IP address is queried via Tencent Location Service (a domestic service) for geolocation, transmitted over HTTPS</li>
                 <li>We will take reasonable measures to ensure cross-border data transmission complies with relevant legal requirements</li>
             </ul>
 
