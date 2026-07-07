@@ -1,5 +1,5 @@
 // =============================================================================
-// IP 城市查询 —— MaxMind 离线库为主，ipip.net / 腾讯接口兜底
+// IP 城市查询 —— 腾讯位置服务 LBS 为主（多 Key 轮询），MaxMind 离线库 / ipip.net 兜底
 // 对齐 Python get_city_by_ip：保留 30 天 SQLite 缓存、本地 IP 短路、LOCATION_NAME 兜底
 // =============================================================================
 import path from 'node:path';
@@ -109,47 +109,119 @@ async function lookupByIpip(ip: string): Promise<IpInfo | null> {
 }
 
 // ----------------------------------------------------------------------------
-// 腾讯 ip2city 接口兜底（免费免 Key）
-// 实测响应为扁平结构：{ ret:0, country, province, city, district, isp, ... }
-// 兼容部分版本可能返回的嵌套结构 result.ad_info.{nation,province,city}
+// 腾讯位置服务 LBS IP 定位（官方接口，主数据源）
+// 文档：https://lbs.qq.com/service/webService/webServiceGuide/position/webServiceIp
+// 每个 Key 每日 6000 次配额，支持填入多个 Key（逗号分隔）轮询叠加。
 // ----------------------------------------------------------------------------
-interface TencentIpResponse {
-  ret?: number;
-  country?: string;
-  province?: string;
-  city?: string;
+interface TencentLbsResponse {
+  status: number;
+  message?: string;
   result?: {
     ad_info?: {
       nation?: string;
       province?: string;
       city?: string;
+      district?: string;
+      adcode?: string;
     };
   };
 }
 
-async function lookupByTencent(ip: string): Promise<IpInfo | null> {
-  try {
-    const url = `https://r.inews.qq.com/api/ip2city?ip=${encodeURIComponent(ip)}`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!resp.ok) {
-      console.warn(`[ipgeo] 腾讯 ip2city 请求失败 status=${resp.status}`);
-      return null;
+// 腾讯返回 status 码：0 成功；120 通常为每日配额耗尽；130/311 鉴权失败 / 无权限
+const TENCENT_STATUS_DAILY_LIMIT = 120;
+const TENCENT_STATUS_AUTH_FAIL = new Set([130, 311]);
+
+// 单进程内存态轮询：跨所有 IP 共享，无需 Redis
+let tencentIpKeys: string[] | null = null;
+let tencentNextKeyIndex = 0;
+let tencentKeyCooldownUntil: number[] = [];
+// 每日配额耗尽冷却 24h；鉴权异常冷却 1h
+const COOLDOWN_DAILY_MS = 24 * 60 * 60 * 1000;
+const COOLDOWN_AUTH_MS = 60 * 60 * 1000;
+
+/** 读取 config.TENCENT_IP_KEYS（逗号分隔），trim、去空、去重，懒加载且仅加载一次 */
+function loadTencentIpKeys(): string[] {
+  if (tencentIpKeys !== null) return tencentIpKeys;
+  const raw = getConfig().TENCENT_IP_KEYS;
+  const value = typeof raw === 'string' ? raw : '';
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  for (const k of value.split(',')) {
+    const trimmed = k.trim();
+    if (trimmed && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      keys.push(trimmed);
     }
-    const data = (await resp.json()) as TencentIpResponse;
-    // 优先扁平字段，回退嵌套 ad_info
-    const country = data.country?.trim() || data.result?.ad_info?.nation?.trim();
-    const province = data.province?.trim() || data.result?.ad_info?.province?.trim();
-    const city = data.city?.trim() || data.result?.ad_info?.city?.trim();
-    if (!country && !province && !city) return null;
-    const info: IpInfo = {};
-    if (country) info.country = country;
-    if (province) info.province = province;
-    if (city) info.city = city;
-    return info;
-  } catch (e) {
-    console.warn('[ipgeo] 腾讯 ip2city 查询失败:', (e as Error).message);
-    return null;
   }
+  tencentIpKeys = keys;
+  tencentKeyCooldownUntil = new Array(keys.length).fill(0);
+  if (keys.length === 0) {
+    console.warn('[ipgeo] 未配置 TENCENT_IP_KEYS，IP 查询将仅使用 MaxMind / ipip.net 兜底');
+  } else {
+    console.log(`[ipgeo] 腾讯 LBS 已加载 ${keys.length} 个 Key（每日配额 ${keys.length * 6000} 次）`);
+  }
+  return keys;
+}
+
+async function lookupByTencentLbs(ip: string): Promise<IpInfo | null> {
+  const keys = loadTencentIpKeys();
+  if (keys.length === 0) return null;
+
+  const now = Date.now();
+  // 从上一次成功的下一个 Key 开始轮询，最多遍历一圈
+  for (let step = 0; step < keys.length; step++) {
+    const i = (tencentNextKeyIndex + step) % keys.length;
+    // 跳过仍在冷却中的 Key
+    if (tencentKeyCooldownUntil[i] > now) continue;
+
+    const key = keys[i]!;
+    try {
+      const url = `https://apis.map.qq.com/ws/location/v1/ip?ip=${encodeURIComponent(ip)}&key=${encodeURIComponent(key)}`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) {
+        console.warn(`[ipgeo] 腾讯 LBS Key${i + 1} 请求失败 status=${resp.status}`);
+        continue;
+      }
+      const data = (await resp.json()) as TencentLbsResponse;
+      if (data.status === 0) {
+        const ad = data.result?.ad_info ?? {};
+        const country = ad.nation?.trim();
+        const province = ad.province?.trim();
+        const city = ad.city?.trim();
+        if (!country && !province && !city) {
+          // 接口成功但无地理信息，视为有效空结果：推进指针并返回 null 走兜底
+          tencentNextKeyIndex = (i + 1) % keys.length;
+          return null;
+        }
+        const info: IpInfo = {};
+        if (country) info.country = country;
+        if (province) info.province = province;
+        if (city) info.city = city;
+        // 成功：推进 round-robin 指针，下次从下一个 Key 开始均衡负载
+        tencentNextKeyIndex = (i + 1) % keys.length;
+        return info;
+      }
+
+      // 业务错误：根据 status 决定冷却策略
+      const msg = data.message ?? '';
+      if (data.status === TENCENT_STATUS_DAILY_LIMIT || msg.includes('每日') || msg.includes('每天') || msg.includes('上限')) {
+        tencentKeyCooldownUntil[i] = now + COOLDOWN_DAILY_MS;
+        console.warn(`[ipgeo] 腾讯 LBS Key${i + 1} 当日配额耗尽，冷却 24h：${msg}`);
+      } else if (TENCENT_STATUS_AUTH_FAIL.has(data.status)) {
+        tencentKeyCooldownUntil[i] = now + COOLDOWN_AUTH_MS;
+        console.warn(`[ipgeo] 腾讯 LBS Key${i + 1} 鉴权失败 (${data.status})，冷却 1h：${msg}`);
+      } else {
+        console.warn(`[ipgeo] 腾讯 LBS Key${i + 1} 业务错误 status=${data.status}：${msg}`);
+      }
+      // 继续尝试下一个 Key
+    } catch (e) {
+      // 网络/超时等瞬时错误：不标记冷却，下次仍可尝试该 Key
+      console.warn(`[ipgeo] 腾讯 LBS Key${i + 1} 查询异常:`, (e as Error).message);
+    }
+  }
+
+  // 一圈内所有 Key 均不可用
+  return null;
 }
 
 /** 按 city → province → country → 'Unknown' 优先级挑选结果 */
@@ -177,7 +249,7 @@ function isLocalIp(ip: string): boolean {
 }
 
 /**
- * 根据 IP 查询城市名称。查询链：MaxMind 离线 → ipip.net → 腾讯 → 'Unknown'
+ * 根据 IP 查询城市名称。查询链：腾讯 LBS（多 Key 轮询）→ MaxMind 离线 → ipip.net → 'Unknown'
  * 本地/内网 IP 直接返回 LOCATION_NAME；结果缓存 30 天。
  */
 export async function getCityByIp(ipAddress: string): Promise<string> {
@@ -198,9 +270,9 @@ export async function getCityByIp(ipAddress: string): Promise<string> {
 
   // 三段式查询链：任一成功即返回
   let info: IpInfo | null =
+    (await lookupByTencentLbs(ipAddress)) ??
     (await lookupByMaxmind(ipAddress)) ??
-    (await lookupByIpip(ipAddress)) ??
-    (await lookupByTencent(ipAddress));
+    (await lookupByIpip(ipAddress));
 
   const city = info ? pickCity(info) : 'Unknown';
   console.log(`[ipgeo] ${ipAddress} -> ${city}`);

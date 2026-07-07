@@ -112,6 +112,9 @@ const ENV_MAPPINGS: Record<string, string> = {
 
   // IP 地理位置离线库（MaxMind GeoLite2-City.mmdb 路径，缺省为 data/GeoLite2-City.mmdb）
   MAXMIND_DB_PATH: 'MAXMIND_DB_PATH',
+
+  // 腾讯位置服务 IP 查询 Key（多 Key 逗号分隔，主数据源，每日 6000 次/Key）
+  TENCENT_IP_KEYS: 'TENCENT_IP_KEYS',
 };
 
 export type AppConfig = Record<string, any>;
@@ -164,4 +167,5 @@ export const READ_ONLY_CONFIG_KEYS = new Set<string>([
   'MAIL_PASSWORD',
   'AI_MODERATION.API.KEY',
   'IPINFO_TOKEN',
+  'TENCENT_IP_KEYS',
 ]);
