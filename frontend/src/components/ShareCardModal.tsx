@@ -186,12 +186,8 @@ export default function ShareCardModal({ share, weatherOverride, open, onOpenCha
         {/* 删除安全码 —— 刻意置于 cardRef 截图源之外，避免被印入导出的存票图片 */}
         {share.security_code && (
           <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
-            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
-              🔐 删除安全码（请妥善保管）
-            </p>
             <p className="text-xs leading-relaxed text-amber-700/80 dark:text-amber-400/80">
-              这是匿名删除本消息的<strong>唯一凭证</strong>，丢失后无法找回（登录账号发布者可直接用账号删除）。
-              <strong>请勿将此码截图保存在存票图片中</strong>，建议用下方按钮复制后单独保存。
+              删除信件必须凭下方安全码，仅显示一次，请妥善保管。
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 select-all rounded bg-white/60 px-3 py-2 font-mono text-sm tracking-[0.2em] dark:bg-black/30">

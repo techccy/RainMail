@@ -458,26 +458,19 @@ app.post('/api/messages/:id/hug', csrfProtect, (c) => {
 });
 
 // ----------------------------- 删除消息 /api/messages/:unique_id/delete -----------------------------
-// 二选一鉴权：
-//   ① 账号路径：登录用户且为该消息归属者（sender_id 命中）→ 免安全码；
-//   ② 安全码路径：通过 verifyDeleteCode 校验（后台仅存哈希）。
-// 两条路径均失败时返回统一错误（不泄露走的是哪条），并配合速率限制抗爆破。
+// 鉴权：一律凭安全码（verifyDeleteCode 常量时间比较，后台仅存哈希）。
+// 配合速率限制抗爆破；失败返回统一错误，不泄露消息存在与否以外的信息。
 app.post('/api/messages/:unique_id/delete', rateLimit('10 per minute', 'del'), csrfProtect, async (c) => {
   try {
     const uniqueId = c.req.param('unique_id');
     const message = db.select().from(messages).where(eq(messages.unique_identifier, uniqueId)).limit(1).all()[0];
     if (!message) return c.json({ error: '消息不存在' }, 404);
 
-    // 路径①：账号归属
-    const userId = sessionGet(c, 'user_id');
-    const isOwner = !!userId && message.sender_id != null && userId === message.sender_id;
-
-    // 路径②：安全码
     const data = await getJsonBody(c);
     const codeOk = verifyDeleteCode(String(data.security_code ?? ''), message.delete_code_hash);
 
-    if (!isOwner && !codeOk) {
-      return c.json({ error: '安全码不正确或无权删除' }, 403);
+    if (!codeOk) {
+      return c.json({ error: '安全码不正确' }, 403);
     }
 
     // 关联清理（与 admin 删除逻辑一致；外键约束开启）
