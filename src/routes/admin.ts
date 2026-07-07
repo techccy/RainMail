@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { and, eq, ne, like, or, sql, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { messages, users, letterDeliveries, notifications, messageReplies } from '../db/schema.js';
+import { messages, users, letterDeliveries, notifications, messageReplies, ipLocationCache, locationWeatherCache } from '../db/schema.js';
 import { getConfig } from '../config.js';
 import { render, flash, DateTime } from '../views/nunjucks.js';
 import { getClientIp, checkHoneypot } from '../lib/security.js';
@@ -333,6 +333,21 @@ app.post(prefix('api/delete_users'), csrfProtect, async (c) => {
   db.delete(notifications).where(inArray(notifications.user_id, ids)).run();
   const result = db.delete(users).where(inArray(users.id, ids)).run();
   return c.json({ success: true, message: `已删除 ${result.changes} 个用户`, deleted: result.changes });
+});
+
+// ----------------------------- 清除 IP 和天气缓存 -----------------------------
+// 清空 ip_location_cache 与 location_weather_cache 整张表，下次访问时强制重新查询。
+app.post(prefix('api/clear_caches'), csrfProtect, (c) => {
+  const guard = adminRequired(c);
+  if (guard) return guard;
+  const ipResult = db.delete(ipLocationCache).run();
+  const weatherResult = db.delete(locationWeatherCache).run();
+  console.log(`[admin] 管理员清除缓存：IP ${ipResult.changes} 条，天气 ${weatherResult.changes} 条`);
+  return c.json({
+    success: true,
+    message: `已清除 ${ipResult.changes} 条 IP 缓存、${weatherResult.changes} 条天气缓存`,
+    deleted: { ip: ipResult.changes, weather: weatherResult.changes },
+  });
 });
 
 void and;

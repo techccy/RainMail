@@ -295,6 +295,13 @@
             </div>
         </div>
 
+        <!-- 管理操作 -->
+        <div class="admin-actions">
+            <div class="action-buttons">
+                <button class="delete-btn" onclick="clearCaches()">清除 IP 和天气缓存</button>
+            </div>
+        </div>
+
         <!-- 用户管理 -->
         <div class="users-list">
             <h3>用户管理</h3>
@@ -803,6 +810,25 @@
                     location.reload();
                 } else {
                     alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                alert('操作失败');
+            }
+        }
+
+        async function clearCaches() {
+            if (!confirm('确定要清除所有 IP 和天气缓存吗？\n\n清除后下次访问将重新查询定位与天气数据。')) return;
+            try {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/clear_caches`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('清除失败: ' + (data.error || '未知错误'));
                 }
             } catch (error) {
                 alert('操作失败');
