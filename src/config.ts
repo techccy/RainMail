@@ -109,6 +109,9 @@ const ENV_MAPPINGS: Record<string, string> = {
   IPINFO_TOKEN: 'IPINFO_TOKEN',
   SESSION_COOKIE_SECURE: 'SESSION_COOKIE_SECURE',
   CSP_POLICY: 'CSP_POLICY',
+
+  // IP 地理位置离线库（MaxMind GeoLite2-City.mmdb 路径，缺省为 data/GeoLite2-City.mmdb）
+  MAXMIND_DB_PATH: 'MAXMIND_DB_PATH',
 };
 
 export type AppConfig = Record<string, any>;

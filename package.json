@@ -20,6 +20,7 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.4",
     "hono": "^4.6.16",
+    "maxmind": "^5.0.6",
     "nodemailer": "^6.9.16",
     "nunjucks": "^3.2.4",
     "zod": "^3.24.1"
