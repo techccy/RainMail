@@ -13,9 +13,11 @@ interface Props {
   children: ReactNode;
   /** 是否展示页脚，默认 true */
   footer?: boolean;
+  /** 内容区缩放倍数（同时放大容器宽度与字体），默认 1 */
+  zoom?: number;
 }
 
-export default function AppShell({ children, footer = true }: Props) {
+export default function AppShell({ children, footer = true, zoom = 1 }: Props) {
   const { status } = useWeather();
 
   return (
@@ -34,7 +36,12 @@ export default function AppShell({ children, footer = true }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-6 py-10 animate-fade-in">{children}</main>
+      <main
+        className="mx-auto max-w-3xl px-6 py-10 animate-fade-in"
+        style={zoom !== 1 ? { zoom } : undefined}
+      >
+        {children}
+      </main>
 
       {footer && (
         <footer className="mx-auto max-w-3xl px-6 pb-10 pt-6">

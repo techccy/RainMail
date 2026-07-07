@@ -32,7 +32,7 @@ export default function About() {
   }, []);
 
   return (
-    <AppShell>
+    <AppShell zoom={1.25}>
       {loading ? (
         <p className="text-sm text-muted-foreground">加载中…</p>
       ) : error ? (
