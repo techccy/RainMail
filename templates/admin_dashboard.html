@@ -69,6 +69,13 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        .message-link {
+            color: #93c5fd;
+            text-decoration: none;
+        }
+        .message-link:hover {
+            text-decoration: underline;
+        }
         .review-badge {
             display: inline-block;
             padding: 2px 8px;
@@ -344,7 +351,7 @@
                             <th>ID</th>
                             <th>内容</th>
                             <th>时间</th>
-                            <th>UID</th>
+                            <th>发信地点</th>
                             <th>审核</th>
                             <th>操作</th>
                         </tr>
@@ -355,9 +362,15 @@
                         <tr data-status="{{ rs }}">
                             <td><input type="checkbox" class="message-check" value="{{ message.id }}"></td>
                             <td>#{{ message.id }}</td>
-                            <td class="message-content" title="{{ message.content }}">{{ message.content }}</td>
+                            <td class="message-content" title="{{ message.content }}">
+                                {% if message.unique_identifier %}
+                                <a href="/m/{{ message.unique_identifier }}" target="_blank" rel="noopener" class="message-link">{{ message.content }}</a>
+                                {% else %}
+                                {{ message.content }}
+                                {% endif %}
+                            </td>
                             <td>{{ message.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                            <td>{{ message.unique_identifier or 'N/A' }}</td>
+                            <td>{{ message.location or 'N/A' }}</td>
                             <td>
                                 {% if rs == 'pending' %}
                                 <span class="review-badge review-pending">审核中</span>
