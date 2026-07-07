@@ -12,7 +12,9 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
+import { formatDateTime } from '@/lib/datetime';
 import DeleteMessageDialog from '@/components/DeleteMessageDialog';
+import { useWeather } from '@/hooks/useWeather';
 import type { MessageReply, PublicMessage } from '@/types/api';
 
 interface DetailResponse {
@@ -20,22 +22,17 @@ interface DetailResponse {
   replies: MessageReply[];
 }
 
-function fmt(iso?: string | null): string {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' });
-  } catch {
-    return iso;
-  }
-}
-
 export default function PublicMessage() {
   const { unique_id } = useParams<{ unique_id: string }>();
   const navigate = useNavigate();
+  const { effectiveTimezone } = useWeather();
   const [data, setData] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // 按访问者位置时区格式化时间（IP 定位失败时回退浏览器本地时区）
+  const fmt = (iso?: string | null): string => (iso ? formatDateTime(iso, effectiveTimezone) : '');
 
   useEffect(() => {
     if (!unique_id) return;

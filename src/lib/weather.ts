@@ -206,10 +206,12 @@ export interface DashboardData {
   cpu_temp: number;
   message_count: number;
   city: string;
+  /** 访问者位置的 IANA 时区（MaxMind 命中时下发）；未定位时省略，前端回退浏览器本地时区 */
+  timezone?: string | null;
 }
 
 /** 获取仪表盘数据 */
-export async function getDashboardData(city = '广州'): Promise<DashboardData> {
+export async function getDashboardData(city = '广州', timezone: string | null = null): Promise<DashboardData> {
   const weatherStatus = await getWeatherStatus(city);
   const cache = db.select().from(locationWeatherCache).where(eq(locationWeatherCache.city, city)).limit(1).all()[0];
   let precipProb = '0';
@@ -230,6 +232,7 @@ export async function getDashboardData(city = '广州'): Promise<DashboardData> 
     cpu_temp: Math.round(getCpuTemperature() * 10) / 10,
     message_count: messageCount,
     city,
+    timezone: timezone || undefined,
   };
 }
 
@@ -239,7 +242,7 @@ function getCpuTemperature(): number {
 }
 
 /** 天气元信息（/api/weather/meta） */
-export async function getWeatherMeta(city: string): Promise<Record<string, any>> {
+export async function getWeatherMeta(city: string, timezone: string | null = null): Promise<Record<string, any>> {
   const askTimes = Number(getConfig().times ?? 3600);
   const cache = db.select().from(locationWeatherCache).where(eq(locationWeatherCache.city, city)).limit(1).all()[0];
   if (cache) {
@@ -255,6 +258,7 @@ export async function getWeatherMeta(city: string): Promise<Record<string, any>>
       next_refresh_desc: `最快 ${Math.round(askTimes / 60)} 分钟后刷新`,
       current_state: cache.weather_status,
       city_specific: true,
+      timezone: timezone || undefined,
     };
   }
   return {
@@ -265,5 +269,6 @@ export async function getWeatherMeta(city: string): Promise<Record<string, any>>
     next_refresh_desc: `最快 ${Math.round(askTimes / 60)} 分钟后刷新`,
     current_state: 'sunny',
     city_specific: true,
+    timezone: timezone || undefined,
   };
 }

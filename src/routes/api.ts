@@ -13,7 +13,7 @@ import { generateCsrfToken } from '../lib/csrf.js';
 import { generateFormToken, validateUserBehavior } from '../lib/behavior.js';
 import { detectSqlInjection, sanitizeInput, getClientIp, rateLimit } from '../lib/security.js';
 import { getJsonBody } from '../lib/request.js';
-import { getCityByIp } from '../lib/ipgeo.js';
+import { getGeoByIp } from '../lib/ipgeo.js';
 import { getWeatherStatus, getDashboardData, getWeatherMeta } from '../lib/weather.js';
 import { createPrivateDelivery } from './letters.js';
 
@@ -41,20 +41,20 @@ app.get('/api/form_token', (c) => c.json(generateFormToken()));
 // ----------------------------- 天气 -----------------------------
 app.get('/api/weather', async (c) => {
   const clientIp = getClientIp(c);
-  const city = await getCityByIp(clientIp);
-  return c.json(await getDashboardData(city));
+  const { city, timezone } = await getGeoByIp(clientIp);
+  return c.json(await getDashboardData(city, timezone));
 });
 
 app.get('/api/weather/meta', rateLimit('120 per hour', 'weather-meta'), async (c) => {
   const clientIp = getClientIp(c);
-  const city = await getCityByIp(clientIp);
-  return c.json(await getWeatherMeta(city));
+  const { city, timezone } = await getGeoByIp(clientIp);
+  return c.json(await getWeatherMeta(city, timezone));
 });
 
 // ----------------------------- 消息列表 (GET) -----------------------------
 app.get('/api/messages', async (c) => {
   const clientIp = getClientIp(c);
-  const city = await getCityByIp(clientIp);
+  const { city, timezone } = await getGeoByIp(clientIp);
   const weatherStatus = await getWeatherStatus(city);
   if (weatherStatus === 'sunny') {
     return c.json({ error: `${city} 模式下无法查看消息` }, 403);
@@ -76,6 +76,7 @@ app.get('/api/messages', async (c) => {
     })),
     weather_status: weatherStatus,
     city,
+    timezone: timezone || undefined,
   });
 });
 

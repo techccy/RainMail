@@ -17,16 +17,31 @@ interface WeatherState {
   meta: WeatherMeta | null;
   messageCount: number;
   loading: boolean;
+  /**
+   * 公开信息时间展示所用时区：优先访问者位置时区（MaxMind 命中），
+   * 否则回退访问者浏览器本地时区。永不为空（浏览器兜底保证有值）。
+   */
+  effectiveTimezone: string;
   refresh: () => Promise<void>;
 }
 
 const WeatherContext = createContext<WeatherState | null>(null);
+
+/** 浏览器本地时区（IANA），作为 IP 定位失败时的兜底 */
+function browserTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
 
 export function WeatherProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<WeatherStatus>('sunny');
   const [city, setCity] = useState('');
   const [messageCount, setMessageCount] = useState(0);
   const [meta, setMeta] = useState<WeatherMeta | null>(null);
+  const [timezone, setTimezone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const appliedTheme = useRef<WeatherStatus | null>(null);
 
@@ -44,6 +59,7 @@ export function WeatherProvider({ children }: { children: ReactNode }) {
       setStatus(res.data.weather_status);
       setCity(res.data.city);
       setMessageCount(res.data.message_count);
+      setTimezone(res.data.timezone ?? null);
       applyTheme(res.data.weather_status);
     }
     setLoading(false);
@@ -65,9 +81,12 @@ export function WeatherProvider({ children }: { children: ReactNode }) {
     };
   }, [fetchStatus, fetchMeta]);
 
+  // 生效时区：访问者位置优先，缺失则回退浏览器本地时区
+  const effectiveTimezone = useMemo(() => timezone || browserTimezone(), [timezone]);
+
   const value = useMemo<WeatherState>(
-    () => ({ status, city, meta, messageCount, loading, refresh: fetchStatus }),
-    [status, city, meta, messageCount, loading, fetchStatus],
+    () => ({ status, city, meta, messageCount, loading, effectiveTimezone, refresh: fetchStatus }),
+    [status, city, meta, messageCount, loading, effectiveTimezone, fetchStatus],
   );
 
   return <WeatherContext.Provider value={value}>{children}</WeatherContext.Provider>;

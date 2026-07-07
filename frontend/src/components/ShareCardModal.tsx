@@ -10,6 +10,8 @@ import { Copy, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
+import { useWeather } from '@/hooks/useWeather';
+import { formatDateTime } from '@/lib/datetime';
 import type { ShareData, WeatherStatus } from '@/types/api';
 
 interface Props {
@@ -22,6 +24,7 @@ interface Props {
 
 export default function ShareCardModal({ share, weatherOverride, open, onOpenChange }: Props) {
   const { user } = useAuth();
+  const { effectiveTimezone } = useWeather();
   const cardRef = useRef<HTMLDivElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [saving, setSaving] = useState(false);
@@ -154,7 +157,7 @@ export default function ShareCardModal({ share, weatherOverride, open, onOpenCha
             <span className={theme.label}>唯一 ID</span>
             <span className="font-mono text-xs">{share.unique_identifier}</span>
             <span className={theme.label}>存入时间</span>
-            <span className="font-mono text-xs">{new Date(share.created_at).toLocaleString('zh-CN')}</span>
+            <span className="font-mono text-xs">{formatDateTime(share.created_at, effectiveTimezone)}</span>
             <span className={theme.label}>总消息数</span>
             <span className="font-mono">{share.total_messages}</span>
           </div>

@@ -60,6 +60,8 @@ export const ipLocationCache = sqliteTable(
     id: integer('id').primaryKey({ autoIncrement: true }),
     ip_address: text('ip_address').notNull().unique(),
     city: text('city').notNull(),
+    // IANA 时区串（如 Asia/Shanghai），由 MaxMind 离线库填充；腾讯/ipip 不返回时区
+    timezone: text('timezone'),
     created_at: text('created_at').default(nowIso()),
     updated_at: text('updated_at').default(nowIso()),
   },

@@ -8,19 +8,12 @@ import { MapPin } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
+import { formatDateTime } from '@/lib/datetime';
 import { useWeather } from '@/hooks/useWeather';
 import type { MessagesResponse, PublicMessage } from '@/types/api';
 
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' });
-  } catch {
-    return iso;
-  }
-}
-
 export default function MessageWall() {
-  const { status } = useWeather();
+  const { status, effectiveTimezone } = useWeather();
   const [messages, setMessages] = useState<PublicMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,7 +58,7 @@ export default function MessageWall() {
             <Card key={m.id} className="gap-2 p-4">
               <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
                 <MapPin className="size-3" />
-                {m.location || '未知地点'} · {formatDate(m.created_at)}
+                {m.location || '未知地点'} · {formatDateTime(m.created_at, effectiveTimezone)}
               </div>
               <Link to={`/m/${m.unique_identifier}`} className="block whitespace-pre-wrap text-sm leading-relaxed hover:underline">
                 {m.content}

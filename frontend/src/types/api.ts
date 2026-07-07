@@ -18,6 +18,8 @@ export interface DashboardData {
   cpu_temp: number;
   message_count: number;
   city: string;
+  /** 访问者位置的 IANA 时区（MaxMind 命中时下发）；未定位时不存在，前端回退浏览器本地时区 */
+  timezone?: string;
 }
 
 /** GET /api/weather/meta */
@@ -30,6 +32,7 @@ export interface WeatherMeta {
   next_refresh_desc?: string;
   current_state?: string;
   city_specific?: string;
+  timezone?: string;
 }
 
 /** GET /api/messages 列表项 / GET /api/user/sent 列表项 */
@@ -48,6 +51,7 @@ export interface MessagesResponse {
   messages: PublicMessage[];
   weather_status: WeatherStatus;
   city: string;
+  timezone?: string;
 }
 
 /** POST /api/messages 响应的 share_data */

@@ -1,6 +1,7 @@
 // =============================================================================
 // IP 城市查询 —— 腾讯位置服务 LBS 为主（多 Key 轮询），MaxMind 离线库 / ipip.net 兜底
 // 对齐 Python get_city_by_ip：保留 30 天 SQLite 缓存、本地 IP 短路、LOCATION_NAME 兜底
+// 时区仅 MaxMind 离线库提供（location.time_zone）；腾讯/ipip 不返回时区
 // =============================================================================
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -24,6 +25,14 @@ interface IpInfo {
   country?: string;
   province?: string;
   city?: string;
+  /** IANA 时区串（如 Asia/Shanghai），仅 MaxMind 离线库可提供 */
+  timezone?: string;
+}
+
+/** 对外返回的地理位置结果：城市 + 时区（时区缺失时为 null） */
+export interface IpGeoResult {
+  city: string;
+  timezone: string | null;
 }
 
 // ----------------------------------------------------------------------------
@@ -70,9 +79,11 @@ async function lookupByMaxmind(ip: string): Promise<IpInfo | null> {
     const country = pickName(resp.country?.names);
     const province = pickName(resp.subdivisions?.[0]?.names);
     const city = pickName(resp.city?.names);
+    const timezone = resp.location?.time_zone?.trim();
     if (country) info.country = country;
     if (province) info.province = province;
     if (city) info.city = city;
+    if (timezone) info.timezone = timezone;
     return Object.keys(info).length ? info : null;
   } catch (e) {
     console.warn('[ipgeo] MaxMind 查询失败:', (e as Error).message);
@@ -302,33 +313,38 @@ function isLocalIp(ip: string): boolean {
 }
 
 /**
- * 根据 IP 查询城市名称。查询链：腾讯 LBS（多 Key 轮询）→ MaxMind 离线 → ipip.net → 'Unknown'
- * 本地/内网 IP 直接返回 LOCATION_NAME；结果缓存 30 天。
+ * 根据 IP 查询地理位置（城市 + 时区）。
+ * 查询链：腾讯 LBS（多 Key 轮询）→ MaxMind 离线 → ipip.net → 'Unknown'
+ * 本地/内网 IP 直接返回 LOCATION_NAME（无时区）；结果缓存 30 天。
+ *
+ * 注：时区仅 MaxMind 离线库可提供，腾讯/ipip 不返回时区。
+ *     MaxMind 未命中或本地 IP 时 timezone 为 null，交由前端回退到访问者浏览器本地时区。
  */
-export async function getCityByIp(ipAddress: string): Promise<string> {
-  // 本地 IP 短路
+export async function getGeoByIp(ipAddress: string): Promise<IpGeoResult> {
+  // 本地 IP 短路：仅有默认城市，无时区
   if (isLocalIp(ipAddress)) {
-    return String(getConfig().LOCATION_NAME ?? '广州');
+    return { city: String(getConfig().LOCATION_NAME ?? '广州'), timezone: null };
   }
 
   // 命中缓存（30 天内）则直接返回
   const cache = db.select().from(ipLocationCache).where(eq(ipLocationCache.ip_address, ipAddress)).limit(1).all()[0];
   const updatedAt = parseIso(cache?.updated_at);
   if (cache && updatedAt && Date.now() - updatedAt.getTime() < CACHE_EXPIRY_MS) {
-    return cache.city;
+    return { city: cache.city, timezone: cache.timezone ?? null };
   }
   if (cache) {
     console.log(`[ipgeo] 缓存已过期，重新查询 ${ipAddress}`);
   }
 
   // 三段式查询链：任一成功即返回
-  let info: IpInfo | null =
+  const info: IpInfo | null =
     (await lookupByTencentLbs(ipAddress)) ??
     (await lookupByMaxmind(ipAddress)) ??
     (await lookupByIpip(ipAddress));
 
   const city = info ? pickCity(info) : 'Unknown';
-  console.log(`[ipgeo] ${ipAddress} -> ${city}`);
+  const timezone = info?.timezone?.trim() || null;
+  console.log(`[ipgeo] ${ipAddress} -> ${city}${timezone ? ` (${timezone})` : ''}`);
 
   // 兜底失败时使用默认城市
   const finalCity = city === 'Unknown' ? String(getConfig().LOCATION_NAME ?? '广州') : city;
@@ -336,10 +352,18 @@ export async function getCityByIp(ipAddress: string): Promise<string> {
   // 写回缓存
   const now = nowIso();
   if (cache) {
-    db.update(ipLocationCache).set({ city: finalCity, updated_at: now }).where(eq(ipLocationCache.id, cache.id)).run();
+    db.update(ipLocationCache).set({ city: finalCity, timezone, updated_at: now }).where(eq(ipLocationCache.id, cache.id)).run();
   } else {
-    db.insert(ipLocationCache).values({ ip_address: ipAddress, city: finalCity, created_at: now, updated_at: now }).run();
+    db.insert(ipLocationCache).values({ ip_address: ipAddress, city: finalCity, timezone, created_at: now, updated_at: now }).run();
   }
 
-  return finalCity;
+  return { city: finalCity, timezone };
+}
+
+/**
+ * 根据 IP 查询城市名称（仅城市，向后兼容旧调用点）。
+ * 时区请改用 getGeoByIp。
+ */
+export async function getCityByIp(ipAddress: string): Promise<string> {
+  return (await getGeoByIp(ipAddress)).city;
 }

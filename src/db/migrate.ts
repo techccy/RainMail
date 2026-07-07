@@ -39,6 +39,7 @@ const DDL_STATEMENTS: string[] = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ip_address TEXT NOT NULL UNIQUE,
     city TEXT NOT NULL,
+    timezone TEXT,
     created_at DATETIME DEFAULT (datetime('now')),
     updated_at DATETIME DEFAULT (datetime('now'))
   )`,
@@ -155,12 +156,24 @@ function ensureDeleteCodeColumn(): void {
   }
 }
 
+/**
+ * 为旧库幂等补 ip_location_cache.timezone 列。
+ * 历史行为 NULL：缓存命中时旧记录无时区，前端回退到访问者浏览器本地时区。
+ */
+function ensureTimezoneColumn(): void {
+  const cols = existingColumns('ip_location_cache');
+  if (!cols.has('timezone')) {
+    sqlite.exec(`ALTER TABLE ip_location_cache ADD COLUMN timezone TEXT`);
+  }
+}
+
 /** 创建所有表（幂等） */
 export function ensureSchema(): void {
   const tx = sqlite.transaction(() => {
     for (const stmt of DDL_STATEMENTS) sqlite.exec(stmt);
     ensureReviewColumns();
     ensureDeleteCodeColumn();
+    ensureTimezoneColumn();
   });
   tx();
   console.log('[INFO] 数据库表已就绪');
