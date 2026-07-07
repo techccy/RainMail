@@ -45,7 +45,4 @@ docs/
 .claude/
 impeccable/
 .wrangler/
-/gsap/
-design-os/
-pixel2motion/
-lazy-line-painter/
+ccy-ui-design/
