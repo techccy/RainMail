@@ -272,5 +272,7 @@
   }
   .about-markdown img {
     @apply mt-2 rounded-lg border border-border bg-white;
+    width: 363px; /* 捐赠二维码（原图 484px）缩小到 75% */
+    height: auto;
   }
 }
