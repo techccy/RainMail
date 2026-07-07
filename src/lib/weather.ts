@@ -252,7 +252,7 @@ export async function getWeatherMeta(city: string): Promise<Record<string, any>>
       last_update: lastUpdated.toISOString().replace('T', ' ').substring(0, 19),
       next_refresh_in_seconds: Math.floor(remaining),
       next_refresh_in_minutes: Math.floor(remaining / 60),
-      next_refresh_desc: `最快 ${Math.round(askTimes / 3600)} 小时后刷新`,
+      next_refresh_desc: `最快 ${Math.round(askTimes / 60)} 分钟后刷新`,
       current_state: cache.weather_status,
       city_specific: true,
     };
@@ -262,7 +262,7 @@ export async function getWeatherMeta(city: string): Promise<Record<string, any>>
     weather_text: '未知',
     last_update: null,
     next_refresh_in_seconds: 0,
-    next_refresh_desc: `最快 ${Math.round(askTimes / 3600)} 小时后刷新`,
+    next_refresh_desc: `最快 ${Math.round(askTimes / 60)} 分钟后刷新`,
     current_state: 'sunny',
     city_specific: true,
   };

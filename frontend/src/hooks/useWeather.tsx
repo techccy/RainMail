@@ -1,7 +1,7 @@
 // =============================================================================
 // 天气上下文 —— 双轮询 + 主题驱动
 //   GET /api/weather       每 5min（DashboardData，驱动 weather_status）
-//   GET /api/weather/meta  每 30s（weather_text/location/refresh，仅文本展示）
+//   GET /api/weather/meta  每 1min（weather_text/location/refresh，仅文本展示）
 // 主题映射：rainy → document.documentElement 加 .dark，sunny → 去掉
 // =============================================================================
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import type { DashboardData, WeatherMeta, WeatherStatus } from '@/types/api';
 
 const STATUS_INTERVAL = 5 * 60 * 1000; // 5min
-const META_INTERVAL = 30 * 1000; // 30s
+const META_INTERVAL = 60 * 1000; // 1min
 
 interface WeatherState {
   status: WeatherStatus;
