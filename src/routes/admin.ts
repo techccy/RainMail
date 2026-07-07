@@ -15,6 +15,8 @@ import { sessionGet, sessionSet } from '../lib/session.js';
 import { verifyPassword, hashPassword } from '../lib/password.js';
 import { checkLoginLocked, trackFailedLogin, resetFailedLogin } from '../lib/authLockout.js';
 import { getDashboardData } from '../lib/weather.js';
+import { createPrivateDelivery } from './letters.js';
+import { pseudoContext } from '../lib/pseudoContext.js';
 
 const app = new Hono();
 
@@ -133,6 +135,47 @@ app.post(prefix('delete_message/:id'), csrfProtect, (c) => {
   db.delete(letterDeliveries).where(eq(letterDeliveries.message_id, id)).run();
   db.delete(messages).where(eq(messages.id, id)).run();
   return c.json({ success: true, message: '消息已删除' });
+});
+
+// ----------------------------- 人工复审：放行 -----------------------------
+// 把 pending/rejected 置为 approved；幂等。
+// 关键：放行一条 pending 的私信时，必须补跑原本被延迟到审核通过才执行的
+// createPrivateDelivery，否则会出现"放行了但私信永远不投递"。仅在尚无
+// letter_delivery 记录时创建，避免重复投递。
+app.post(prefix('api/approve_message/:id'), csrfProtect, async (c) => {
+  const guard = adminRequired(c);
+  if (guard) return guard;
+  const id = Number(c.req.param('id'));
+  const message = db.select().from(messages).where(eq(messages.id, id)).limit(1).all()[0];
+  if (!message) return c.json({ success: false, error: '消息不存在' }, 404);
+
+  db.update(messages).set({ review_status: 'approved' }).where(eq(messages.id, id)).run();
+
+  if (message.delivery_type === 'private') {
+    const existing = db.select().from(letterDeliveries).where(eq(letterDeliveries.message_id, id)).limit(1).all()[0];
+    if (!existing) {
+      createPrivateDelivery(pseudoContext(), message, message.location ?? '广州');
+    }
+  }
+
+  console.log(`[admin] 管理员放行消息 #${id}`);
+  return c.json({ success: true, message: '消息已放行' });
+});
+
+// ----------------------------- 人工复审：拉黑 -----------------------------
+// 把 approved/pending 置为 rejected；幂等。
+// 注：已发出的投递/邮件无法撤回，拉黑只影响公开可见性（/m/<uid> 返回 404）。
+app.post(prefix('api/reject_message/:id'), csrfProtect, (c) => {
+  const guard = adminRequired(c);
+  if (guard) return guard;
+  const id = Number(c.req.param('id'));
+  const message = db.select().from(messages).where(eq(messages.id, id)).limit(1).all()[0];
+  if (!message) return c.json({ success: false, error: '消息不存在' }, 404);
+
+  db.update(messages).set({ review_status: 'rejected' }).where(eq(messages.id, id)).run();
+
+  console.warn(`[admin] 管理员拉黑消息 #${id}`);
+  return c.json({ success: true, message: '消息已拉黑，公开页将显示404（已发出的投递/邮件无法撤回）' });
 });
 
 // ----------------------------- 批量删除消息 -----------------------------

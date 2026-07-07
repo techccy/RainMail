@@ -9,7 +9,7 @@
 // 结构对齐 workers/email-queue.ts：SQLite 行作为任务 + setInterval 轮询。
 // 单进程模型，内存中维护 RPM 滑动窗口即可（无需 Redis）。
 // =============================================================================
-import { eq, asc } from 'drizzle-orm';
+import { eq, and, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { messages, messageReplies } from '../db/schema.js';
 import type { Message, MessageReply } from '../db/schema.js';
@@ -49,11 +49,16 @@ function recordCall(): void {
 }
 
 // ----------------------------- 单条消息审核 -----------------------------
+// 注意：所有写回均带 and(review_status = 'pending') 条件——这是为了与人工复审
+// 避免竞争。从 AI 调用发起到此处写回之间存在窗口：管理员可能已把该行手工放行
+// (approved) 或拉黑 (rejected)。条件更新确保 worker 只对"仍处于 pending"的行下
+// 结论，人工裁定不会被 AI 覆盖。
 async function reviewMessage(message: Message, maxRetries: number): Promise<void> {
   const verdict = await aiModerationReview(message.content);
 
   if (verdict === 'pass') {
-    db.update(messages).set({ review_status: 'approved' }).where(eq(messages.id, message.id)).run();
+    const res = db.update(messages).set({ review_status: 'approved' }).where(and(eq(messages.id, message.id), eq(messages.review_status, 'pending'))).run();
+    if (res.changes === 0) return; // 已被人工裁定，放弃自动结论
     console.log(`[ModerationQueue] 消息 ${message.id} 审核通过`);
     // 审核通过 → 触发被延迟的副作用：私密投递（创建 letter_delivery + 新信件邮件）
     if (message.delivery_type === 'private') {
@@ -63,7 +68,7 @@ async function reviewMessage(message: Message, maxRetries: number): Promise<void
   }
 
   if (verdict === 'reject') {
-    db.update(messages).set({ review_status: 'rejected' }).where(eq(messages.id, message.id)).run();
+    db.update(messages).set({ review_status: 'rejected' }).where(and(eq(messages.id, message.id), eq(messages.review_status, 'pending'))).run();
     console.warn(`[ModerationQueue] 消息 ${message.id} 审核拦截(REJECT)`);
     return;
   }
@@ -71,10 +76,10 @@ async function reviewMessage(message: Message, maxRetries: number): Promise<void
   // verdict === 'error'：网络/超时 → 重试，耗尽则隐藏
   const attempts = (message.review_attempts ?? 0) + 1;
   if (attempts >= maxRetries) {
-    db.update(messages).set({ review_attempts: attempts, review_status: 'rejected' }).where(eq(messages.id, message.id)).run();
+    db.update(messages).set({ review_attempts: attempts, review_status: 'rejected' }).where(and(eq(messages.id, message.id), eq(messages.review_status, 'pending'))).run();
     console.warn(`[ModerationQueue] 消息 ${message.id} 审核 ${attempts} 次仍失败，标记 rejected`);
   } else {
-    db.update(messages).set({ review_attempts: attempts }).where(eq(messages.id, message.id)).run();
+    db.update(messages).set({ review_attempts: attempts }).where(and(eq(messages.id, message.id), eq(messages.review_status, 'pending'))).run();
     console.warn(`[ModerationQueue] 消息 ${message.id} 审核失败(error)，第 ${attempts}/${maxRetries} 次，待重试`);
   }
 }
@@ -85,7 +90,8 @@ async function reviewReply(reply: MessageReply, maxRetries: number): Promise<voi
   const verdict = await aiModerationReview(reply.reply_content ?? '');
 
   if (verdict === 'pass') {
-    db.update(messageReplies).set({ review_status: 'approved' }).where(eq(messageReplies.id, reply.id)).run();
+    const res = db.update(messageReplies).set({ review_status: 'approved' }).where(and(eq(messageReplies.id, reply.id), eq(messageReplies.review_status, 'pending'))).run();
+    if (res.changes === 0) return; // 已被人工裁定，放弃自动结论与副作用
     console.log(`[ModerationQueue] 回复 ${reply.id} 审核通过`);
     // 审核通过 → 触发被延迟的副作用（通知/邮件/被回复后公开翻转）
     const message = db.select().from(messages).where(eq(messages.id, reply.original_message_id!)).limit(1).all()[0];
@@ -96,7 +102,7 @@ async function reviewReply(reply: MessageReply, maxRetries: number): Promise<voi
   }
 
   if (verdict === 'reject') {
-    db.update(messageReplies).set({ review_status: 'rejected' }).where(eq(messageReplies.id, reply.id)).run();
+    db.update(messageReplies).set({ review_status: 'rejected' }).where(and(eq(messageReplies.id, reply.id), eq(messageReplies.review_status, 'pending'))).run();
     console.warn(`[ModerationQueue] 回复 ${reply.id} 审核拦截(REJECT)`);
     return;
   }
@@ -106,11 +112,11 @@ async function reviewReply(reply: MessageReply, maxRetries: number): Promise<voi
   if (attempts >= maxRetries) {
     db.update(messageReplies)
       .set({ review_attempts: attempts, review_status: 'rejected' })
-      .where(eq(messageReplies.id, reply.id))
+      .where(and(eq(messageReplies.id, reply.id), eq(messageReplies.review_status, 'pending')))
       .run();
     console.warn(`[ModerationQueue] 回复 ${reply.id} 审核 ${attempts} 次仍失败，标记 rejected`);
   } else {
-    db.update(messageReplies).set({ review_attempts: attempts }).where(eq(messageReplies.id, reply.id)).run();
+    db.update(messageReplies).set({ review_attempts: attempts }).where(and(eq(messageReplies.id, reply.id), eq(messageReplies.review_status, 'pending'))).run();
     console.warn(`[ModerationQueue] 回复 ${reply.id} 审核失败(error)，第 ${attempts}/${maxRetries} 次，待重试`);
   }
 }

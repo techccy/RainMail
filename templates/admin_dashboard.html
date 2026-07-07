@@ -108,6 +108,20 @@
         .verify-btn:hover {
             background: #229954;
         }
+        .approve-btn {
+            background: #27ae60;
+            color: white;
+        }
+        .approve-btn:hover {
+            background: #229954;
+        }
+        .reject-btn {
+            background: #e67e22;
+            color: white;
+        }
+        .reject-btn:hover {
+            background: #d35400;
+        }
         .users-list {
             margin-bottom: 30px;
         }
@@ -354,7 +368,14 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <button class="delete-btn" onclick="deleteMessage({{ message.id }})">删除</button>
+                                <div class="action-btns">
+                                    {% if rs == 'pending' or rs == 'rejected' %}
+                                    <button class="action-btn approve-btn" onclick="approveMessage({{ message.id }})">放行</button>
+                                    {% else %}
+                                    <button class="action-btn reject-btn" onclick="rejectMessage({{ message.id }})">拉黑</button>
+                                    {% endif %}
+                                    <button class="action-btn delete-btn" onclick="deleteMessage({{ message.id }})">删除</button>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -624,6 +645,46 @@
                 }
             } catch (error) {
                 alert('删除失败');
+            }
+        }
+
+        async function approveMessage(messageId) {
+            if (!confirm('确定放行该消息？\n\n放行后将出现在公开列表；若是私信会创建投递记录。')) return;
+
+            try {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/approve_message/${messageId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('操作失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                alert('操作失败');
+            }
+        }
+
+        async function rejectMessage(messageId) {
+            if (!confirm('确定拉黑该消息？\n\n公开页将显示 404，但已发出的投递/邮件无法撤回。')) return;
+
+            try {
+                const response = await fetchWithCSRF(`/${window.ADMIN_PATH_PREFIX}/api/reject_message/${messageId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('操作失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                alert('操作失败');
             }
         }
 
