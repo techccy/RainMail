@@ -24,6 +24,7 @@ COPY src/ ./src/
 COPY templates/ ./templates/
 COPY static/ ./static/
 COPY resources/ ./resources/
+COPY about.md ./
 COPY .env.example ./
 
 # 构建前端 SPA（产物输出到 static/spa/，随 static/ 一并由 Hono 服务）
