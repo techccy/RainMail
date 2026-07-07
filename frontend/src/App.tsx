@@ -30,7 +30,7 @@ export default function App() {
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/user/inbox" element={<Inbox />} />
           <Route path="/user/settings" element={<Settings />} />
-          <Route path="/letters/:token" element={<Letter />} />
+          <Route path="/letters/:id" element={<Letter />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </WeatherProvider>
