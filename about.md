@@ -37,7 +37,7 @@ RainMail是一个**随雨而生的匿名情感交互应用**
 
 ## 关于建站
 
-* **关于作者**：本项目由广州市初中生[TechCCY](techccy.com)一手搭建
+* **关于作者**：本项目由广州市初中生[TechCCY](https://techccy.com)一手搭建
 
 * **开源共建**：RainMail 坚信开源的力量。本项目源码完全公开 [GitHub:techccy/RainMail](https://github.com/techccy/RainMail)
 
